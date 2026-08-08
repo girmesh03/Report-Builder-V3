@@ -193,8 +193,9 @@ Docs).
   slot — single-undo, no revision history);
   Mode 3 — voice correction (record → STT → fills the instruction field →
   Mode 2).
-- **Generate.** The AI transforms the reviewed transcription into the
-  structured Amharic report (§6, §34) and rules §8.
+- **Generate.** The AI turns the captured form metadata (header values) and
+  the reviewed transcription (body content; fallback for missing metadata)
+  into the structured Amharic report (§6, §34) and rules §8.
 - **Review and correct.** After generation, the supervisor reviews the report
   and may request corrections; correction updates only the relevant parts of
   the report and never rewrites correct unrelated sections (§35, §54).
@@ -353,8 +354,9 @@ The system must deliver the following verifiable capabilities:
   edit it directly, request AI correction (typed or voice instruction), or
   re-transcribe to verify accuracy (§54; modes per §1.4).
 - **Generate.** Generate the structured Amharic report — single-branch (Type 1)
-  or multi-branch (Type 2) — from the reviewed transcription only, following
-  §6 and the §8 rules.
+  or multi-branch (Type 2) — from the captured form metadata (header values)
+  and the reviewed transcription (body content; also the fallback for missing
+  metadata), following §6 and the §8 rules.
 - **Review and correct after generation.** Review the report and apply
   corrections to the relevant part only; correct unrelated content must
   remain unchanged (§35, §54).
@@ -749,8 +751,9 @@ day-level invariants above.
   table lives in §31 and is reused identically by §51/§52 UI actions
   (status–guard consistency).
 - **BR-07 — Transcription is raw material only.** The transcription is never
-  the final report; the AI-generated report is produced from the reviewed
-  transcription (§1.4, §2.3, §33).
+  the final report; the AI-generated report is produced from the captured
+  form metadata (header values) and the reviewed transcription (body content;
+  fallback for missing metadata) (§1.4, §2.3, §6.1, §33).
 - **BR-08 — Review-then-accept.** A report becomes `completed` only after the
   supervisor reviews and accepts the generated report (per the three
   correction modes of §1.4; accept model BR-11). Acceptance is the
@@ -950,7 +953,7 @@ from the requirements:
 - Conversational audio becomes report language. Example: the spoken
   `እኔ ዛሬ መድኃኒዓለም ሄጄ ቼክሊስቱን አይቼ ነበር` is written as
   `በቼክሊስቱ መሰረት በመድኃኒዓለም ቅርንጫፍ የሚከናወኑ መደበኛ የአሰራር ሂደቶችን አረጋግጫለሁ።` —
-  the report never repeats the narration verbatim (see §8 rule 3).
+  the report never repeats the narration verbatim (see §8.4).
 
 ### 6.7 Content routing
 
@@ -1101,18 +1104,23 @@ parts.*
 
 ---
 
-## 7. Language & Tone Requirements (Transliteration)
+## 7. Language & Tone Requirements (Transliteration, UI vs Content Language)
 
 ### 7.1 Purpose & relationship
 
-This section is the canonical home of the Amharic-transliteration rule
-for English and technical workplace words, plus the term dictionary
-derived from the verbatim samples. It implements §5 BR-17 (language
-contract) at the language level: audio and transcription are Amharic,
-the UI is English, and English/technical words in the report use
-Amharic workplace transliteration — never literal translation. The
-generation pipeline (§34), validation (§31), and correction (§35) all
-apply this section.
+This section is the canonical home of the language and tone rules, in
+four parts: (a) the Amharic-transliteration rule for English and
+technical workplace words, plus the term dictionary derived from the
+verbatim samples (§7.2–§7.5); (b) the UI-versus-content language
+boundary (§7.6); (c) the pipeline language policy and language codes
+(§7.7); and (d) tone ownership (§7.8). It implements §5 BR-17 (language
+contract) at the language level: the conversation and transcription are
+Amharic, the UI is English, and English/technical words in the report
+use Amharic workplace transliteration — never literal translation, never
+forced translation. The §1.7 statement is the executive summary of the
+boundary rules; this section is the canonical owner. The generation
+pipeline (§34), validation (§31), correction (§35), UI implementation
+(§41–§59), and export (§37, §58) all apply this section.
 
 ### 7.2 The transliteration rule (verbatim)
 
@@ -1141,11 +1149,17 @@ The following examples are given in the requirements:
 - `store` → `ስቶር`
 - `deep fryer` → `ዲፕ ፍራየር` (never `ጥልቅ መጥበሻ`, never raw English)
 
+These six pairs are the requirement-provided example set. Terms outside
+them follow the rule of §7.2; the dictionary in §7.4 is derived from the
+§6.8 samples only.
+
 ### 7.4 Term dictionary derived from the §6.8 samples
 
 Terms observed inside the verbatim sample reports (§6.8). This list is
 derived from the samples and is not exhaustive; terms not listed follow
-the rule of §7.2 (common Amharic workplace pronunciation).
+the rule of §7.2 (common Amharic workplace pronunciation). The
+dictionary is frozen to the samples — no entry is invented or imported
+from any other source.
 
 | English term | Amharic transliteration | Provenance |
 | ------------ | ----------------------- | ---------- |
@@ -1162,22 +1176,122 @@ the rule of §7.2 (common Amharic workplace pronunciation).
 
 ### 7.5 Application rules
 
-- The rule applies to **all** English or technical words, without
-  exception list (§7.2).
-- Literal translation is forbidden (`ጥልቅ መጥበሻ` for `deep fryer`).
-- Raw English spelling is kept only if no Amharic phonetic form is in
-  common workplace use; the dictionary above documents the known cases.
-- The sample branch and person names are excluded from this
-  specification entirely (§6.1, §1.6, §3.5) and are never transliterated
-  or reused.
+The transliteration decision matrix is canonical:
 
-### 7.6 Verification usage
+| Input in the audio / transcription | Required output |
+| ---------------------------------- | --------------- |
+| English or technical workplace word with a common Amharic phonetic form | Amharic workplace transliteration (e.g. `deep fryer` → `ዲፕ ፍራየር`) |
+| English or technical workplace word with no Amharic phonetic form in common workplace use | Raw English spelling (explicit exception; the dictionary documents the known cases) |
+| Any English or technical word | Literal translation is forbidden (`ጥልቅ መጥበሻ` for `deep fryer` is never written) |
+
+Additional rules:
+
+- The rule applies to **all** English or technical words, with no
+  exception list beyond the matrix (§7.2).
+- The decision is per word, not per sentence: a mixed-language utterance
+  keeps each word independently — transliterate what has a common
+  Amharic form, keep the remainder raw English, never literal-translate.
+- Header labels (`ቀን`, `ስም`, `ብራንች`, `ስራ የገባሁበት ሰዓት`, `የተሰሩ ስራዎች`,
+  `መፍትሄ የሚፈሉ ጉዳዮች`, `አጠቃላይ አስተያየት`, `ከስራ የወጣሁበት ሰዓት`) are
+  fixed Amharic strings owned by §6.3 and are never transliterated or
+  translated.
+- Names and captured values (branch names, person names, dates, times)
+  are never transliterated or translated. Sample branch and person
+  names appear only in the verbatim example content of
+  §6.4/§6.6/§6.8 and the §8.5.3 transcript; they are excluded from
+  every other part of this specification (§6.1, §1.6, §3.5) and are
+  never reused.
+
+### 7.6 UI vs content language boundary (canonical)
+
+The boundary rules are preserved verbatim from the requirements:
+
+> App shell, navigation, labels, buttons, validation messages, helper
+> text, and everything else in the application interface must be English.
+>
+> Audio, transcription, AI chat, and report content can be Amharic,
+> English, or mixed.
+>
+> Do not force translation unless the user explicitly chooses it.
+>
+> The conversation language in recorded audio is always Amharic.
+
+Canonical elaboration:
+
+**English chrome surfaces — UI copy is English.** App shell and
+navigation (§47); page headings and section titles (§48–§59); buttons,
+labels, helper text, validation messages (§29, §60); toasts and
+empty/error/success states (§60); dialogs and confirmations (§46);
+table and grid headers (§46, §50, §51); filters and controls; date
+pickers (§46; Ethiopian calendar with English day/month names —
+ADR-011); and the editor toolbar (§46). No Amharic copy is authored for
+these surfaces.
+
+**Content surfaces — the language is the user's own, Amharic by
+default.** Recorded audio (§53), transcription text and its review
+editor (§54), AI chat messages (§36, §55), the generated report body and
+its editor (§51), and exported document content (§37, §58). These
+surfaces may be Amharic, English, or mixed, and are never
+machine-translated.
+
+**Amharic inside the UI is allowed only on content surfaces.** The only
+Amharic strings in the application are (a) the fixed report-label
+strings of §6.2/§6.3 rendered inside report preview, edit, and export
+views, and (b) user-entered or AI-produced content itself.
+
+**Display conventions (English UI, numeric notation).** Ethiopian dates
+are always displayed in numeric notation (`DD-MM-YY`) with English
+day/month names — never Ethiopian month names, never Latin-letter
+Amharic words (ADR-011, ADR-032; implementation §43, §46).
+
+### 7.7 Pipeline language policy & codes (canonical)
+
+- **Primary language:** Amharic (`am`) for all conversation-facing
+  stages; English-aware (`en`) prompting is first-class where a provider
+  requires or benefits from it. Language codes are named constants
+  (home §11); provider capability details live in §16.
+- **Extensibility only:** Afan Oromo (`om`) and Tigrinya (`ti`) are
+  reserved language codes, not activated features — they appear as
+  constants with no active UI, speech-to-text, or generation path
+  (§11, §16).
+- **Speech-to-text is always Amharic.** The recorded conversation is
+  always Amharic (§7.6), so transcription runs with the Amharic language
+  parameter on every clip (Addis AI; ADR-001, §33). Accuracy is the
+  blocking requirement (§2.4 SC-1).
+- **Content language is preserved end-to-end.** Speech-to-text (§33) →
+  transcription review (§54) → generation (§34) → correction (§35) →
+  export (§37, §58) never converts the content language implicitly.
+- **No automatic translation anywhere.** Translation capability that a
+  provider exposes is never invoked by the transcription, generation,
+  correction, chat, or export paths (§16, §34, §35, §36, §37). Reports
+  remain in their original language; a user-chosen target-language
+  control is a deferred feature, not part of this version (§4 D5, §66).
+
+### 7.8 Tone ownership & boundary
+
+- The report tone is defined canonically in §6.6; the
+  conversation-to-report transformation rules (including "never repeat
+  the narration verbatim") are defined canonically in §8.4. This section
+  holds no tone lists and does not duplicate them.
+- Tone rules apply regardless of the content language: Amharic-only and
+  mixed-language content both meet §6.6 and §8.4.
+- The §2.4 SC-2 gate scores tone against §6.6 and §8.4 (enforced in §31,
+  §34, §35).
+
+### 7.9 Verification usage
 
 - §2.4 SC-2 and §2.6 DoD item 3: generated output is checked for
-  transliteration violations (raw English, literal translation) against
-  §7.2–§7.4.
-- §2.4 SC-2: transliteration violations (raw English, literal translation)
-  fail the report format/tone gate.
+  transliteration violations (raw English outside the §7.5 exception,
+  literal translation) against §7.2–§7.5.
+- §2.4 SC-2: transliteration violations fail the report format/tone
+  gate.
+- §7.5 matrix tests: the six §7.3 example pairs are exercised as
+  positive/negative cases in §31 validation fixtures.
+- UI-language sweep: the chrome surfaces enumerated in §7.6 carry no
+  Amharic copy; checked in the page audits of §48–§59 and the universal
+  UX states of §60. Content surfaces are exempt by design.
+- Mock data and fixtures (§25, §40) supply Amharic content on the
+  content surfaces and English copy on the chrome surfaces.
 - Implemented and validated in §31 (validation), §34 (generation), §35
   (correction); prompt construction per §8.
 
@@ -1225,7 +1339,7 @@ The AI must follow these rules when generating the report:
 | 1 | All report text is Amharic; §7 transliteration for English/technical words | §34, §31 |
 | 2 | The §6.2 skeleton with §6.3 fields; Type 1/Type 2 per §6.4 | §6, §34 |
 | 3 | Tone per §6.6 and the §6.8 samples | §6.6, §31 |
-| 4 | Source of truth is the transcription **after** review (§1.4, §30) | §30, §34 |
+| 4 | Source of truth is the transcription **after** review for body content; header metadata (to date, branch names, visit times) comes from the capture form (§6.1, §6.3) | §6.1, §6.3, §30, §34 |
 | 5 | Same as §5 BR-19; no invented facts, blanks allowed | §6.1, §7.2 |
 | 6 | Missing values render as blank or "not specified"; the chosen prompt rule is this default (locked decision) | §6.1, §34 |
 | 7 | Completed activities vs unresolved issues are separate content classes (§6.7 routing) | §6.7 |
@@ -1238,6 +1352,13 @@ The AI must follow these rules when generating the report:
 | 14 | Off-topic audio content is dropped (applies to both voices) | §34, §31 |
 | 15 | Person 2 (e.g. the boss) content is excluded unless an answer carries report information | §34, §31 |
 | 16 | Surgical correction — only the addressed part changes | §8.5, §35 |
+
+**Rule-4 reconciliation (canonical).** In keeping with §6.1/§6.3, rule 4
+applies to body content: activities, unresolved issues, urgent problems,
+opinions, actions, and time ranges. Header values (to date, branch names,
+visit times) originate from the capture form, with the reviewed
+transcription as fallback when a value is missing — and a missing value is
+left blank, never invented (rules 5–6).
 
 ### 8.4 Tone & conversation-to-report transformation (verbatim)
 
@@ -1293,6 +1414,12 @@ The AI is responsible for:
 - Matching the tone of the provided report samples.
 - Correcting or updating the generated report when the user asks after review.
 
+The metadata-extraction bullets above apply only as the documented fallback:
+when the capture form lacks a value, the AI may read it from the reviewed
+transcription; otherwise the value is left blank or marked not specified.
+Header values are never invented and never override the form (§6.1, §6.3,
+§8.3 rule-4 reconciliation).
+
 ### 8.5 Correction & review behavior (canonical)
 
 This subsection is the canonical home of the review-and-correct behavior:
@@ -1338,8 +1465,8 @@ below; its extracted report is §6.8 Sample 4.
 
 #### 8.5.4 Verification usage
 
-- §2.4 SC-3: correction behavior is tested end-to-end (typed and spoken);
-  §2.6 DoD item 2 is STT accuracy (SC-1).
+- §2.4 SC-3: corrections are surgical (typed or voice instruction);
+  §2.6 DoD item 4 is STT accuracy (SC-1).
 - §5 BR-09 and BR-10/BR-11 are enforced here; §35 and §21 implement them.
 
 ### 8.6 Verification usage
@@ -1351,7 +1478,10 @@ below; its extracted report is §6.8 Sample 4.
 ---
 
 *§7–§9 authored — §7.2/§7.3/§8.2/§8.4/§8.5.1/§8.5.2 and the §8.5.3 transcript
-preserved verbatim from the requirements; §7.4 derived only from §6.8
-samples; canonical decisions in §8.3; no invented content; pointers to
+preserved verbatim from the requirements; §7.3–§7.5 cover transliteration
+(decision matrix in §7.5); §7.6–§7.8 restate the requirement boundary rules
+(UI English, content Amharic/mixed, no forced translation, language codes,
+tone ownership) with §1.7 as the executive summary; §7.4 derived only from
+§6.8 samples; canonical decisions in §8.3; no invented content; pointers to
 §21/§30/§31/§34/§35 detailed in later parts.*
 
