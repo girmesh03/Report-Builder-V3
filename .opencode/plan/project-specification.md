@@ -50,6 +50,10 @@ sections are appended here as they are authored):
 - [19. User Model](#19-user-model)
 - [20. Branch Model](#20-branch-model)
 - [21. Report Model](#21-report-model)
+- [22. Audio Model](#22-audio-model)
+- [23. Transcription Model](#23-transcription-model)
+- [24. ChatConversation Model](#24-chatconversation-model)
+- [25. Mock Content & Seeding](#25-mock-content--seeding)
 
 ---
 
@@ -1846,6 +1850,7 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `LANGUAGE_CODES`  | `{ am: 'am', en: 'en' }` with `om`/`ti` reserved, not activated | §7.7, §16, §33, §34 |
 | `AI_MODELS`       | per-provider model registry, see §16.2: every model entry carries an id, a `default` flag, and a `reasoning` capability flag. Initial registry: addis `[Addis-፩-አሌፍ]` (default, reasoning off); gemini `[gemini-3.1-flash-lite]` (default, reasoning on); nvidia `[deepseek flash 4]` (default, reasoning on) | §16, §34, §35, §36, §54 |
 | `AI_REASONING_EFFORTS` | `['off', 'low', 'medium', 'high']`   | §16, §34, §35, §36, §54 |
+| `MESSAGE_ROLES` | `['system', 'user', 'assistant']` | §24, §36 |
 
 ### 11.5 Client constants inventory
 
@@ -3349,7 +3354,7 @@ the authoritative edge list):
 | User — Branch | 1 — N | `user` on Branch | §3.2.3, §20 |
 | User — Report | 1 — N | `user` on Report | §3.2.3, §21 |
 | Branch — Report | N — M via snapshot | `branches[].branch` + snapshot `name` | §20, BR-14 |
-| Report — Audio | 1 — N clips | `{ reportId, visitId }` on Audio (exact keys) | BR-01/BR-02, §22 |
+| Report — Audio | 1 — N clips | `{ report, visitId }` on Audio (exact keys) | BR-01/BR-02, §22 |
 | Audio — Transcription | 1 — 1 | transcription ref | §22, §23, §33 |
 | Report — ChatConversation | 1 — N | conversation refs | §24, §36 |
 
@@ -3363,10 +3368,10 @@ filters and pickers while the branch exists), `name` is the immutable
 display snapshot (`§17.4` tombstone rules).
 
 **Visit–audio–transcription binding (source side).** Each Audio row
-carries `{ reportId, visitId }`, written once at upload: `reportId`
+carries `{ report, visitId }`, written once at upload: `report`
 joins the report, `visitId` is the **exact key** of the visit this
 clip belongs to (`visits[].visitId`, §21.2). A visit's source resolves
-by exact-key query — `Audio.where({ reportId, visitId })`, then each
+by exact-key query — `Audio.where({ report, visitId })`, then each
 clip's 1:1 transcription ref (§33) — never by array position, clip
 count, or ordering assumption. This is the future §22 contract: the
 binding has a single write site; the report row keeps no audio or
@@ -3460,7 +3465,7 @@ audio addition, removal, or content edit (BR-10).
 |---|---|
 | `draft` | report row only (no audio required) |
 | `audio_attached` | report + at least one `Audio` row |
-| `transcribed` | report + audio rows + transcription(s) with `raw` (and `latest`, both initialized equal); per-visit source resolved via the exact-key edges (`audio.{ reportId, visitId }` → 1:1 transcription, §17.3) — the presence check is the query, never a stored ref on the row |
+| `transcribed` | report + audio rows + transcription(s) with `raw` (and `latest`, both initialized equal); per-visit source resolved via the exact-key edges (`audio.{ report, visitId }` → 1:1 transcription, §17.3) — the presence check is the query, never a stored ref on the row |
 | `reviewed` | transcription content locked by the review decision (accept/revert, BR-11) |
 | `completed` | accepted content fixed at accept (BR-08, BR-11); report exported (§37) — the export is a deliverable, never a persisted artifact on any row (§21.5, §37/§58) |
 
@@ -4118,7 +4123,7 @@ and the type (Type-1/Type-2) are derived deterministically from
 `visits` per §6.4 — they are never stored as copies. No audio,
 transcription, or conversation references exist on the report row:
 the edges of §17.3 are served from the child side — each Audio row
-carries `{ reportId, visitId }`, so a visit's clips and their
+carries `{ report, visitId }`, so a visit's clips and their
 transcriptions resolve by exact-key query over the edges, never by
 array position or implicit ordering (§17.3; future §22 contract); the
 ChatConversation row carries the report ref (§24). No branch-digest or
@@ -4355,3 +4360,646 @@ construction (data-consistent: the join key stays the live
 - §21 introduces no constant, no path (§15.4 unchanged),
   and no package (§13.3 manifest unchanged — nothing to install);
   it is standalone — it references only specification sections.
+
+---
+
+## 22. Audio Model
+
+### 22.1 Purpose & scope
+
+This section authors the Audio row — the metadata-only document that
+represents one recorded audio clip (the binary itself lives on the
+backend local filesystem, §12.9). The section owns the Audio schema,
+its keys and indexes, its lifecycle fields, and the binary/metadata
+contract. It does **not** own: upload mechanics, multer usage, and
+temp-cleanup execution (§32); chunking, ffmpeg/WAV preparation, and
+the STT call sequence (§33); cascade execution and status transitions
+(§31); request validation and error shaping (§29, §27); provider
+contracts (§16); or the captured-visits contract (§6.10, §52).
+
+Audio rows are user-scoped (BR-13, §3.2.3): every row binds to the
+authenticated, server-assigned user (`req.user._id.toString()`,
+§17.2). The row is the **child-side join key holder** of the
+Report—Audio edge (§17.3): it carries `{ report, visitId }`, written
+once at upload, and a nullable 1:1 `transcription` ref — the exact-key
+source binding of §17.3. The report row keeps no audio or
+transcription field (§21.2); nothing in this section re-introduces it.
+
+The six persistent entities are User, Branch, Report, Audio,
+Transcription, and ChatConversation (§17.2). The complete persisted
+system of record is those six collections only (§17.3); the Audio
+document itself contains **metadata only** — binary audio never enters
+MongoDB, GridFS is excluded (§13.6), and the physical file path is the
+only binary contact point (§12.9, §12.10).
+
+### 22.2 Field registry
+
+| Field | Type | Required | Rule |
+|---|---|---|---|
+| `_id` | ObjectId | auto | the only key; never `id` (§12.11-3) |
+| `user` | ObjectId | yes | owner-scoping (BR-13, §3.2.3, §18.7); all queries throughout §30–§39 resolve the owning user server-side |
+| `report` | ObjectId | yes | the owning report — child-side join key of the Report—Audio edge (§17.3); document reference fields carry the plain model name — no `Id` suffix (§9.3); set once at upload inside the §32 session, never moved between reports |
+| `visitId` | Number | yes | the exact visit key this clip belongs to — equals a member of `visits[].visitId` of the owning report at the upload moment (§21.2, §17.3); written once at insert, together with `report`, in the same session (single write site per §17.3); a report's visit removal detaches or cascades the visit's clips in the same write session (§17.4, §18.5) |
+| `transcription` | ObjectId | no (null until transcribed) | the 1:1 Audio—Transcription edge (§17.3); set in the same session that creates the transcription (STT completion, §33) and re-pointed by re-transcription in the same session (§23.4, ADR-030); deleted with this row when the audio is removed (§17.4) |
+| `filePath` | String | yes | server-internal absolute-ish path under `backend/uploads/audio/` (§12.9, §15.4) — gitignored (§12.9, §32); never exposed by any transform (§22.7) and never logged (§9.5); the physical file is unlinked after commit, non-transactionally, with failures retried by the orphan sweep (§17.4, §31, §62) |
+| `mimeType` | String | yes | member of `AUDIO_ALLOWED_MIME_TYPES` (§11.3) — the recorded browser MIME per the client recording priority (§53); schema enum constrained to the constant (§18.2); never `audio/webm` for STT chunks (chunk MIME is the §33 pipeline's own rule) |
+| `sizeBytes` | Number | yes | the uploaded byte size; the `AUDIO_MAX_SIZE_BYTES` (50 MB) cap is enforced by the §29/§32 validators — schema validation is shape-only (§18.8) |
+| `durationSec` | Number | yes | recorded duration in seconds — informational metadata only, never used in pipeline math; validated server-side via ffprobe by §32 |
+| `createdAt` / `updatedAt` | Date | auto | §18.2 timestamps |
+
+No `status` field exists: audio presence is expressed exclusively
+through the report machine (`audio_attached`, §17.6) and the
+transcription rows — a clip is either uploaded (row exists) or not.
+No `isArchived`/`archivedAt` exists: only Report and Branch are
+archivable (§20.4, §21.6); no archivable model may evade the §20/§21
+rule list. No `deletedAt` exists (BR-15, §18.3). No ordering field
+exists: within a visit the clips' chronological order is
+`createdAt`, and the §17.3 contract forbids any array-position or
+ordering assumption as a *binding* — `Audio.where({ report, visitId })`
+is exact-key.
+
+### 22.3 Keys, indexes & TTL
+
+- **Owner scope.** `schema.index({ user: 1 })` — the mandatory
+  owner-scoping index (§18.3, BR-13); every clip query resolves the
+  owning user first.
+- **Exact-key source query.** `schema.index({ user: 1, report: 1,
+  visitId: 1 })` — serves the §17.3 per-visit source resolution and
+  the clip group reads of the review UI (§54); declared via
+  `schema.index(..)` (§18.3), no field-level `unique: true` (a visit
+  legitimately holds several clips).
+- **1:1 transcription edge.** `schema.index({ transcription: 1 },
+  { unique: true, sparse: true })` — the proven uniqueness of the
+  Audio—Transcription 1:1 (§17.3, §33): every transcription belongs
+  to exactly one audio row; sparse accommodates the pre-transcribed
+  null. Uniqueness is declared only because the owning edge proves it
+  (§18.3).
+- **No TTL.** The spec declares exactly two TTL indexes — Report and
+  Branch on `archivedAt` (§18.3, §21.3, §20.3). Audio declares none;
+  the expiry of a finished report's clips is governed by the owning
+  report's retention anchor, never by an index on this model.
+- **No further indexes.** Anything else is indexed only under the
+  §18.3 proof rule.
+
+### 22.4 Lifecycle fields & document states
+
+The Audio row has **no document states** — it exists from upload until
+cascade removal, and the report machine (`REPORT_STATUSES`, §17.6)
+observes it through presence queries, never through a state stored on
+this row.
+
+- **Creation.** Insert happens inside the §32 upload session: the
+  `report`/`visitId` bindings are written at insert (the single write
+  site, §17.3) and the owning report is validated as existing and
+  owned by the session user in the same transaction (BR-13, §17.4).
+  The physical binary write follows the session commit; a failure is
+  retried by the orphan sweep (§17.4, §31, §62) — the document and the
+  file never form a two-phase promise inside a hook (§18.6).
+- **Removal.** Deleting one audio always cascades its transcription
+  (§17.4); deleting the **last** audio of the report rewinds
+  `audio_attached` → `draft` and `transcribed`/`reviewed` →
+  `audio_attached` — the single explicit backward transition (ADR-003,
+  declared in §31). A `completed` report never rewinds; clip deletion
+  there is storage hygiene only (§17.4, BR-11).
+- **Addition at any status** never rewinds; new clips attach as new
+  rows with their own bindings (§17.4, BR-10).
+- **Report cascade.** Report hard-delete removes the audio documents
+  and their physical files in one transaction-pair: documents in the
+  session, `fs.unlink` after commit, failures retried by the orphan
+  sweep (§17.4, app-level sweeper §62).
+
+### 22.5 Binary & metadata contract
+
+- Binary audio lives at `backend/uploads/audio/` (gitignored); the
+  collection stores metadata only (§12.9). No GridFS, no S3/object
+  store — that class of storage is excluded (§13.6).
+- The Audio document never contains audio bytes; the transform layer
+  never forwards `filePath` to the client (§22.7) — consumers reach
+  binaries exclusively through the §30–§39 audio endpoints.
+- Retention is inherited from the owning report's lifecycle: the
+  30-day window (BR-15, `ARCHIVED_TTL_SECONDS` §11.3) binds the report
+  row; this model stores no window anchor of its own.
+- Logs never include audio content, raw file bytes, or full
+  transcription texts (§9.5, §16.3); provider keys never appear on any
+  client surface or log (§16.3).
+
+### 22.6 Hooks & session contract
+
+- **No business-logic hooks** — nothing that computes status, derives
+  bindings, deletes, cascades, or touches the filesystem runs in a
+  hook (§18.6): audio binaries are out-of-DB and out-of-hook platform
+  (§18.6, §12.9). Hooks are awaitable and session-aware when present
+  (§18.6).
+- **Write contract.** All write statics/methods accept `{ session }`
+  and are invoked from a caller-owned session (ADR-018, §18.5); a
+  statics method never opens a hidden session (§18.5). Read endpoints
+  use no transactions (§18.5).
+- **Read contract.** Reads use `.lean({ virtuals: true })` (§18.4);
+  no transform mutates the document (§18.4).
+
+### 22.7 Transforms & exposure
+
+- `toJSON`/`toObject` with `virtuals: true`; delete `id` and `__v`
+  (§18.4, §18.2).
+- `filePath` is stripped from every serialized output — it is a
+  server-internal value (§22.5); the DTO exposes the metadata surface
+  only (`_id`, `report`, `visitId`, `mimeType`, `sizeBytes`,
+  `durationSec`, timestamps).
+- Exposed refs keep the §9.3 plain-name doctrine; route parameters
+  keep the `Id` suffix (`:audioId`, §12.11-1) — the two namespaces
+  never collide.
+
+### 22.8 Seeds & mocks
+
+Audio seeds are **metadata-only** clips — real binaries are never
+written by seeding (ADR-037, §25). Seeded rows carry valid
+`report`/`visitId`/`mimeType`/`sizeBytes`/`durationSec` values that
+satisfy §17.6 presence and the §22 registry; injection and wipe are
+session-aware (§18.5) and arrive exclusively through the §25/§40
+mechanisms — never hard-coded in the model (§18.8).
+
+### 22.9 Evolution
+
+Changes are additive-only (§18.9, §14.5); a documented destructive
+schema change is applied through the §25/§40 wipe mechanism in
+development (§12.10). The binding fields (`report`, `visitId`,
+`transcription`) are load-bearing for the §17.3 source contract; a
+change to their shape requires §17.3/§21.2 coordination (§18.9) and
+an amendment record (§14.5).
+
+### 22.10 Verification usage
+
+- Grep gates: no `status`, no `isArchived`, no `archivedAt`, no
+  `deletedAt` on this model; no TTL declaration beyond §18.3's two;
+  `mimeType` values always resolve to `AUDIO_ALLOWED_MIME_TYPES`; the
+  binding fields are exactly `report` + `visitId` (no `reportId`
+  anywhere — §9.3); `transcription` appears only as the nullable 1:1
+  ref; no array-position or ordering vocabulary as a binding (§17.3).
+- Cross-section checks: mirrors §17.2/§17.3 (exact-key edges, child
+  side), §17.4 (cascades, rewind, unlink + orphan sweep), §17.6
+  (presence rows), §18 (indexes, sessions, hooks, transforms,
+  evolution), §12.9/§32 (paths, gitignore, metadata-only), §16
+  (proxy, keys, contracts), §9.5 (log bans). Endpoints, multer
+  mechanics, chunking, and STT calls are owned by §32/§33/§30–§31 —
+  this section asserts none.
+- §22 introduces no constant, no path (§15.4 unchanged —
+  `audio.model.js` is the §15.4 `<entity>.model.js` file), and no
+  package (§13.3 manifest unchanged — nothing to install); it is
+  standalone — it references only specification sections.
+
+---
+
+## 23. Transcription Model
+
+### 23.1 Purpose & scope
+
+This section authors the Transcription row — the STT output document
+derived from exactly one audio clip (Audio—Transcription 1:1, §17.3).
+The section owns the Transcription schema, its keys and lifecycle,
+the `raw`/`latest` content contract (F5, BR-11, §18.7), and the
+re-transcription persistence semantics (ADR-030). It does **not**
+own: the chunked STT pipeline, ffmpeg/WAV preparation, retry/backoff,
+and the Addis AI call sequence (§33); report status transitions and
+guards (§31); the review/edit user flows and correction modes
+(§54, §35); provider contracts and error mapping (§16); request
+validation (§29); or the clip-level review vocabulary of the capture
+digest (reported → in_progress → completed — §6.10/§6.11 domain).
+
+Transcription rows are user-scoped (BR-13, §3.2.3). The transcription
+is *raw material*: it is the Amharic text version of the recorded
+conversation — informal, possibly unordered — and is never treated as
+the final report (§8.2, §8.4); the report's body content is generated
+from the **reviewed** transcription (§6.1 rule 4, §8.5.1). This model
+is one of exactly two content-bearing models (the second is Report,
+§21.2) and implements the shared `raw`/`latest` shape (§18.7).
+
+### 23.2 Field registry & content contract
+
+| Field | Type | Required | Rule |
+|---|---|---|---|
+| `_id` | ObjectId | auto | the only key; never `id` (§12.11-3) |
+| `user` | ObjectId | yes | owner-scoping (BR-13, §3.2.3, §18.7) |
+| `audio` | ObjectId | yes | the owning audio — plain-model-name reference field (§9.3); unique + sparse: the proven 1:1 edge (§17.3, §22.2/§22.3) |
+| `raw` | String | yes (null until transcription completes) | the original STT result, written once at transcription completion and **never rewritten** (BR-11, §18.7, §21.2 pattern); the §16.4 `data.transcription` value lands here (§12.4 stage 3) |
+| `latest` | String | yes (null until transcription completes) | the single current-content slot, initialized equal to `raw` at creation (§18.7); review edits overwrite it (§54), re-transcription rewrites both (§23.4), and one-click restore copies `raw` into it — single-undo, no version chain (ADR-005 retired, §14.3) |
+| `language` | String | yes (default `am`) | the STT language of the transcription — member of `LANGUAGE_CODES` (§11.4); `am` active, `om`/`ti` reserved and not activated (§7.7); the §16.4 `request_data.language_code` echoed here |
+| `stt.requestId` | String | no (null if unknown) | the Addis AI request correlation id from `usage_metadata.requestId` (§16.4) — persisted per the §16.4 permission (ADR-019 audit); provider request ids may be logged (never secrets) |
+| `stt.model` | String | no (null if unknown) | the Addis voice model actually used (e.g. `አሌፍ-Audio-AM`) — a free provider-native string: the `AI_MODELS` registry (§11.4, §16.2) is the **text-generation** registry only; STT model choice is the §33 pipeline's own, stored here as audit metadata |
+| `createdAt` / `updatedAt` | Date | auto | §18.2 timestamps |
+
+No `status` field exists, by design: transcription presence and the
+review lock are expressed exclusively through `REPORT_STATUSES`
+(`transcribed`, `reviewed` — §17.6, §21.4); the clip-level
+`reported → in_progress → completed` vocabulary is review/capture UI
+state owned by §6.10/§6.11, not a document field, and introducing a
+`TRANSCRIPTION_STATUSES` enum would fork the state machine of §31
+against §17.6. No `isArchived`/`archivedAt` (only Report and Branch
+are archivable, §20.4), no `deletedAt` (BR-15, §18.3), no version or
+history fields of any kind (ADR-005 retired), and no
+`aiCorrectedText` or equivalent — corrections write `latest`
+(§8.5.2). Token/usage accounting beyond `stt.requestId` is not
+persisted here: per-message usage metadata is the §36 conversation
+domain (§16.1).
+
+### 23.3 Keys, indexes & TTL
+
+- **Owner scope.** `schema.index({ user: 1 })` (§18.3, BR-13).
+- **1:1 edge.** `schema.index({ audio: 1 }, { unique: true,
+  sparse: true })` — one transcription per audio (§17.3, ADR-030);
+  sparse accommodates nothing here (the ref is required) but is
+  declared for index symmetry with the §22 sparse counterpart.
+- **No TTL.** Exactly two TTL indexes exist in the spec — Report and
+  Branch on `archivedAt` (§18.3). Transcription declares none; its
+  lifetime is bounded by the owning report's lifecycle and cascades
+  (§17.4).
+- **No further indexes** without the §18.3 proof rule.
+
+### 23.4 Lifecycle, re-transcription & content contract
+
+- **Creation.** The row is created at STT completion inside the §33
+  pipeline session: `raw` set from the STT result, `latest`
+  initialized to it, `language` from the request, `stt` metadata
+  filled, and `audio.transcription` pointed at the new row — all in
+  the same write session (§12.4 stage 3, ADR-018). A row never exists
+  before its audio (the chain of §17.3 is enforced by the pipeline's
+  write path, never by a hook — §18.6).
+- **Review contract.** During the review step (§1.4, §54) `latest` is
+  the editable slot; `raw` stays untouched (BR-11); the four review
+  paths — direct edit (Mode 1), typed instruction (Mode 2), voice
+  instruction (Mode 3), re-transcription — all persist through the
+  same review write path (§12.4 stage 4).
+- **Re-transcription (ADR-030).** Re-transcription replaces the
+  row: delete the old transcription and insert the new one (fresh
+  `raw` = new STT result, `latest` = same) atomically in one session,
+  re-pointing `audio.transcription` to the replacement — the §17.3
+  keying stays stable across replacement. Allowed at every report
+  status **except `completed`**; at `reviewed` the re-transcription
+  invalidates the review lock and the report returns to `transcribed`
+  (the transition rule itself is declared by §31 per §17.6 — this
+  section records the presence consequence, not the rule book). The
+  rewind rules of §17.4 apply to audio removal, not to
+  re-transcription: no audio is removed here.
+- **Cascade.** Audio deletion cascades its transcription in the same
+  session (§17.4); report deletion cascades all transcriptions of its
+  audio rows (§17.4). Orphan transcriptions left by sweeper races are
+  removed by the orphan sweep (§31, §62).
+- **Presence.** `transcribed` requires every visit's source resolved
+  through the exact-key edges with a transcription whose `raw` (and
+  `latest`, equal) exist; `reviewed` locks that content (§17.6) — the
+  checks are queries, never stored flags on this row.
+
+### 23.5 Snapshot, tombstone & single-undo contract
+
+- No snapshot fields exist: the transcription carries no branch or
+  visit names (those live in the report's `visits`/`branches[]`
+  blocks, §21.2/§21.7) and no report-derived values — tombstone reads
+  of a deleted branch render through the report's snapshot (§17.4).
+- The content slots are exactly `raw` + `latest` (single-undo,
+  BR-11, §21.5 pattern): `raw` immutable, `latest` current; restore =
+  copy `raw` over `latest`; no version chain exists beside them.
+
+### 23.6 Hooks & session contract
+
+- **No business-logic hooks** (§18.6): nothing computes statuses,
+  touches files, calls STT, or enforces the §17.3 chain from a hook.
+- **Write contract:** statics/methods accept `{ session }`; never
+  open hidden sessions (§18.5); caller-owned sessions for the §33
+  write and all correction writes (ADR-018).
+- **Read contract:** `.lean({ virtuals: true })` (§18.4); reads take
+  no transactions (§18.5).
+
+### 23.7 Transforms & exposure
+
+- `toJSON`/`toObject` with `virtuals: true`; delete `id` and `__v`
+  (§18.4).
+- Exposed surface: `_id`, `audio`, `language`, `raw`, `latest`,
+  `stt.requestId`, `stt.model`, timestamps. Full transcription texts
+  are **never logged** (§9.5) and never enter analytics payloads; the
+  transform layer adds no derived text fields.
+- Margin: the §16.4 `confidence` value is STT-call information, not a
+  document field — it is not persisted here (§16.4 permission covers
+  `requestId` only).
+
+### 23.8 Seeds & mocks
+
+Mock transcriptions are written directly as documents (valid `raw` =
+`latest`, `language: am`, matching `audio` ref) through the §25/§40
+mechanism — seeding never invokes STT, writes no physical audio
+(ADR-037, §25), and stays session-aware (§18.5). No seed content is
+hard-coded in the model (§18.8).
+
+### 23.9 Evolution
+
+Additive-only (§18.9, §14.5); destructive changes flow through the
+§25/§40 wipe in development (§12.10). The `raw`/`latest` contract and
+the `audio` 1:1 ref are load-bearing for §17.3/§17.6/§21.2 — shape
+changes require coordinated amendments (§18.9).
+
+### 23.10 Verification usage
+
+- Grep gates: no `status`, no `isArchived`, no `archivedAt`, no
+  `deletedAt`; no version/history vocabulary; no `aiCorrectedText`;
+  no `TRANSCRIPTION_STATUSES`; content slots exactly `raw` + `latest`;
+  `language` members resolve to `LANGUAGE_CODES`; `stt.requestId`
+  only as provider correlation (§16.4); no invention of STT
+  response fields beyond §16.4's contract.
+- Cross-section checks: mirrors §12.4 stage 3/4 (write site), §16.4
+  (STT contract, permission), §17.2/§17.3 (1:1 child-side edge),
+  §17.4 (cascades, orphan sweep), §17.6 (presence rows), §18.7
+  (`raw`/`latest` shape, F5), §21.2/§21.5 (report mirrors the same
+  content pattern), §8.5/§54 (review paths — owned there), §6.1/§6.3
+  (reviewed transcription is source-of-truth fallback). Endpoints,
+  pipeline mechanics, and transitions are owned by §33/§31/§30 — this
+  section asserts none.
+- §23 introduces no constant, no path (§15.4 unchanged —
+  `transcription.model.js` is the §15.4 `<entity>.model.js` file), and
+  no package (§13.3 manifest unchanged — nothing to install); it is
+  standalone — it references only specification sections.
+
+---
+
+## 24. ChatConversation Model
+
+### 24.1 Purpose & scope
+
+This section authors the ChatConversation row — the persistent AI
+chat history of a report (F7, §12.8, §36, §55). The section owns the
+conversation document shape, its one-per-report keying, and the
+embedded message-document contract including the per-message
+`{ provider, model, reasoning }` triple (ADR-014, §16.2, §18.7). It
+does **not** own: the chat service, conversation API endpoints, and
+the message-append business flow (§36); the MUI X Chat correction
+interface and rendering (§55); usage-token accounting and what
+additional per-message metadata is persisted (§16.1 assigns that
+decision to §36); provider request/response contracts and the
+conversation_history formation rules (§16.4); rate limiting (§27) or
+validation (§29).
+
+There is exactly **one** conversation per report (§17.2, §17.3 —
+Report—ChatConversation 1—N exactly, i.e. a single conversation
+document owned by each report). Messages are **embedded child
+documents** of the conversation — they are not a separate collection
+(§17.2). Rows are user-scoped (BR-13, §3.2.3). Conversation turns are
+saved for display (§12.8) and are also the `conversation_history`
+source used by §16.4's regeneration contract. The conversation may be
+in Amharic, English, or mixed (content surface, §7.6); translation is
+never invoked by any chat path (§7.7).
+
+### 24.2 Field registry & message contract
+
+| Field | Type | Required | Rule |
+|---|---|---|---|
+| `_id` | ObjectId | auto | the only key; never `id` (§12.11-3) |
+| `user` | ObjectId | yes | owner-scoping (BR-13, §3.2.3, §18.7) |
+| `report` | ObjectId | yes | the owning report — plain-model-name reference field (§9.3); **unique + sparse: one conversation per report** (§17.2) |
+| `messages` | Array | yes (default `[]`) | the embedded message-document list — each entry is `{ role, content, provider, model, reasoning, createdAt }` (§18.7); empty until the first saved turn (§36) |
+| `messages[].role` | String | yes | member of `MESSAGE_ROLES` (`system` \| `user` \| `assistant`, §11.4) — schema enum constrained to the constant (§18.2); the §16.4 `conversation_history` projection passes only `user`/`assistant` entries (§16.4) |
+| `messages[].content` | String | yes | the message text — Amharic, English, or mixed (content surface, §7.6); never logged verbatim (§9.5) |
+| `messages[].provider` | String | yes | member of `AI_PROVIDERS` (§11.4) — the provider that produced this turn (§16.2); different providers may serve different turns (initial generation vs corrections, ADR-014, §16.2) |
+| `messages[].model` | String | yes | a registry member id of `AI_MODELS` for the text-generation provider in use (§11.4, §16.2); validated against the registry by §36/§29 — a non-member is rejected 422, never stored |
+| `messages[].reasoning` | String | yes | member of `AI_REASONING_EFFORTS` (§11.4, §16.2, §16.4) — the effort governing this turn; the Gemini/NVIDIA mapping and the Addis ignore-rule are §16.4's |
+| `messages[].createdAt` | Date | auto (subdoc) | per-message timestamp; reads re-merge chronologically (§18.7, §16.4) |
+| `createdAt` / `updatedAt` | Date | auto | §18.2 timestamps |
+
+Explicitly absent: `reasoning_content` (or any reasoning text) is
+**never stored** (§16.4 — provider reasoning output is not surfaced to
+the client and not persisted); token/usage statistics are not declared
+here — §36 decides what usage metadata beyond the §18.7 triple is
+persisted (§16.1); no `isArchived`/`archivedAt` (only Report and
+Branch are archivable, §20.4); no `deletedAt` (BR-15, §18.3); no
+conversation-typed status or lifecycle enum — a conversation exists
+from first turn to cascade.
+
+### 24.3 Keys, indexes & TTL
+
+- **Owner scope.** `schema.index({ user: 1 })` (§18.3, BR-13).
+- **One-per-report edge.** `schema.index({ report: 1 },
+  { unique: true, sparse: true })` — the proven §17.2/§17.3
+  one-conversation-per-report key. The same index serves the
+  per-report conversation read used by §36/§55.
+- **Chronology.** `schema.index({ report: 1,
+  'messages.createdAt': 1 })` covers ordered message reads; the
+  chronological re-merge rule is a read convention (§18.7), not a
+  stored order field.
+- **No TTL.** Exactly two TTL indexes exist in the spec (§18.3);
+  the conversation's lifetime is the owning report's — cascade (§17.4)
+  and sweeper (§62), never an index.
+
+### 24.4 Lifecycle fields & document states
+
+- **Creation.** The conversation document is created lazily on the
+  first saved turn — the creation timing and the append business flow
+  are §36's; this section fixes the container contract they write
+  into: one row per report (unique key), messages embedded, appended
+  in-order inside the write session (ADR-018).
+- **Append.** Each saved turn `$push`es one message document inside
+  the §36 write session; the triple is validated against §11.4
+  registers before append (§16.2); chronological order is guaranteed
+  by per-message `createdAt` (never by array index as a key — arrays
+  re-sort on read, §18.7).
+- **Cascade.** Report hard-delete removes the conversation document
+  in the same session (§17.4); orphans left by sweeper races are
+  removed by the orphan sweep (§31, §62). There is no other removal
+  path — conversations are never individually archivable or deletable
+  outside their report's lifecycle.
+- **Read paths.** Every report read path that renders conversation
+  material (detail, export, chat) is a report-scoped read (§21.7
+  tombstone rule: deleted-branch snapshots render via the report's
+  `branches[]`, never via the conversation).
+
+### 24.5 Snapshot & tombstone contract
+
+The conversation owns no snapshot: it never stores branch names,
+person names, or header values (those live in the report's own
+snapshot blocks, §21.2/§21.7) — a tombstoned branch's name renders
+through the report's snapshot on every chat read path (§17.4,
+§21.7). No foreign display value is duplicated into messages.
+
+### 24.6 Hooks & session contract
+
+- **No business-logic hooks** (§18.6) — nothing triggers provider
+  calls, computes anything, or cascades from a hook.
+- **Write contract:** the §36 flow owns a session and the
+  conversation's write statics accept `{ session }`; never a hidden
+  session (§18.5).
+- **Read contract:** `.lean({ virtuals: true })`, no transactions on
+  reads (§18.4, §18.5).
+
+### 24.7 Transforms & exposure
+
+- `toJSON`/`toObject` with `virtuals: true`; delete `id` and `__v`
+  (§18.4); embedded messages serialize as plain objects in
+  chronological order.
+- The exposed message surface is exactly `role`, `content`,
+  `provider`, `model`, `reasoning`, `createdAt` — no provider-native
+  wire keys (those are §16.4's transport concern, not persisted
+  names), no usage fields until §36 declares them, and no reasoning
+  text of any kind (§16.4).
+- Content is a UI surface: full conversation texts never appear in
+  logs (§9.5) and never enter analytics payloads (§36).
+
+### 24.8 Seeds & mocks
+
+Mock conversations are seeded as valid documents (one per mock
+report, messages schema-valid with registered provider/model/reasoning
+members) through the §25/§40 mechanism — session-aware (§18.5),
+never hard-coded in the model (§18.8). Mock messages may reuse the
+§6.8 sample voices for realism but remain schema-valid (§25).
+
+### 24.9 Evolution
+
+Additive-only (§18.9, §14.5); the `report` unique key and the
+message-document shape are load-bearing for §17.2/§17.3/§36/§16.4 —
+shape changes require coordinated amendments (§18.9). Any future
+per-message metadata field is introduced by §36, not here (§16.1).
+
+### 24.10 Verification usage
+
+- Grep gates: `role` values always resolve to `MESSAGE_ROLES`; the
+  triple `provider`/`model`/`reasoning` always resolves to
+  `AI_PROVIDERS`/`AI_MODELS`/`AI_REASONING_EFFORTS`; no
+  `reasoning_content`, no token/usage fields, no `status`, no
+  `isArchived`, no `archivedAt`, no `deletedAt`; one `report` ref with
+  unique keying (§17.2); no snapshot/denormalized display values.
+- Cross-section checks: mirrors §17.2/§17.3 (one-per-report message
+  child docs), §18.7 (message triple shape), §16.2/§16.4 (registry
+  membership, conversation_history projection, reasoning never
+  stored), §12.8 (chat saved for display), §36/§55 (service and UI —
+  owned there), §21.7 (tombstone rule), §9.5 (log ban). Endpoints,
+  append flows, and usage accounting are owned by §36 — this section
+  asserts none.
+- §24 introduces exactly one constant — `MESSAGE_ROLES`, registered
+  in §11.4 (domain constants — the only §11 change of this section);
+  it introduces no path (§15.4 unchanged — `conversation.model.js` is
+  the §15.4 `<entity>.model.js` file) and no package (§13.3 and §13.4
+  manifests unchanged — nothing to install: the MUI X Chat dependency
+  of §55 is already registered); it is standalone — it references
+  only specification sections.
+
+---
+
+## 25. Mock Content & Seeding
+
+### 25.1 Purpose & scope
+
+This section authors the **mock-content rules** — the policy every
+seed fixture must obey (§12.9, §17.1, §17.5). It owns: the mock
+discipline (no seeds in models), the fixture inventory, the
+session-aware injection and wipe contract (ADR-037, §18.5), and the
+development-only boundary. It does **not** own: the seed endpoints
+and their routes (§40), validators (§29 — all validation rule books
+live there, so nothing called "validation rules" belongs here),
+schema shapes (§19–§24), or environment boot (§26).
+
+The spec's seeding story is a two-section split: **§25 = the rules**,
+§40 = the endpoints that execute them (§17.1, §17.5, §12.9). Mock
+data flows only through §25 rules and the §40 endpoints — never
+hard-coded into models (§18.8, §19.6, §20.8, §21.10, §22.8, §23.8,
+§24.8). Mock-content work supports sessions, like any write (§18.5),
+and exists for development only (§12.10).
+
+### 25.2 Mock-content rules
+
+1. **No seeds in models.** None of the six models (§17.2) contains
+   default users, branches, reports, audio, transcriptions, or
+   conversations (§18.8; each of §19.6/§20.8/§21.10/§22.8/§23.8/§24.8
+   repeats this). A report's creation data always comes from the user
+   flow, never from defaults (§21.10).
+2. **Metadata-only audio (ADR-037).** Seeded Audio rows carry valid
+   metadata without any physical binary — no file is written to
+   `backend/uploads/audio/` by seeding, and `filePath` values of seeds
+   are synthetic but schema-valid (never pointing at real files).
+3. **Schema-valid transcriptions.** Mock transcriptions carry
+   `raw` = `latest` (equal), `language: am`, and a matching `audio`
+   ref — the §17.6 `transcribed` presence rows stay satisfiable.
+4. **§17.6-presence-valid state.** Every seeded report sits in a
+   report status whose §17.6 artifact requirements hold (e.g. a mock
+   `audio_attached` report has at least one audio row; a mock
+   `transcribed` report's visits resolve to transcriptions through the
+   exact-key edges; a mock `reviewed` report's content is review
+   locked). A `completed` mock report never carries an export artifact
+   — export deliverables are never persisted on any row (§17.6,
+   §21.5, §37).
+5. **Content-language boundary.** Mock Amharic content fills the
+   content surfaces (reports, transcriptions, conversations) and
+   English copy fills the chrome surfaces (§7.9) — the §7.6 boundary
+   applies to fixtures exactly as to real data.
+6. **No privacy data.** Fixtures use the sample persona of §6.8/§3
+   (ቤዛ አያሌው) and the sample branch names of §6.8 (መድኃኒዓለም, ኤርፖርት,
+   ቡልቡላ, ጎላጉል, ብስራተ ገብርኤል) — never real persons, real places, or
+   real recordings; sample report bodies come verbatim from §6.8
+   samples, never from invented content.
+7. **Seeded-state consistency.** All fixtures together satisfy the
+   §17.2/§17.6 maps, the §21.2 registry, and the §22–§24 registries;
+   a fixture that breaks a presence row is invalid (§17.6).
+
+### 25.3 Fixture inventory
+
+The canonical development fixture set (versioned with the §40 seed
+scripts):
+
+- **Users** — one mock supervisor persona (`ቤዛ አያሌው`, profile name
+  per §6.8 — persona §3.3.1) with a schema-valid account (§19
+  registry), and a second user so ownership scoping (BR-13) is
+  exercisable; no mock user carries a real email or password material
+  — password material follows the §28 account-creation contract.
+- **Branches** — the §6.8 branch names as branch rows (§20 registry)
+  covering Type-1 and Type-2 combinations (single-branch rows and
+  multi-branch days).
+- **Reports** — one of each status of `REPORT_STATUSES` (draft,
+  audio_attached, transcribed, reviewed, completed); bodies follow the
+  §6.8 samples (Sample 3 for the Type-1 day; Samples 1, 2, 4 for the
+  Type-2 days) with `reportDate`, `supervisorName`, `branches[]`
+  snapshot, and `visits[]` per §21.2 (OQ-002's nullable clock fields
+  used as null in at least one fixture).
+- **Audio** — metadata-only rows bound to the reports (valid
+  `report`/`visitId`/`mimeType`/`sizeBytes`/`durationSec`; no
+  `transcription` ref on the `audio_attached` fixture, refs set on the
+  transcribed+ fixtures).
+- **Transcriptions** — `raw` = `latest` rows for the transcribed,
+  reviewed, and completed fixtures (1:1 with their audio).
+- **Conversations** — one per mock report with at least one seeded
+  report; messages valid against `MESSAGE_ROLES`/`AI_PROVIDERS`/
+  `AI_MODELS`/`AI_REASONING_EFFORTS`, mirroring the §6.8 sample voice
+  where natural.
+
+### 25.4 Injection & wipe contract
+
+- **Session-aware.** Injection and wipe run in Mongoose sessions
+  (ADR-018, §18.5) and commit atomically like any write — a partially
+  injected fixture set is a violation, never a state.
+- **Idempotence.** Re-running injection against an already-seeded
+  state is a defined §40 behavior (re-seed replaces the seeded scope
+  after wipe, or no-ops per the §40 endpoint contract) — §25 fixes
+  that the result state equals the canonical fixture set either way.
+- **Wipe = full reset.** Wiping removes the entire seeded scope
+  (all seeded users, branches, reports, audio, transcriptions,
+  conversations) and leaves the environment empty of mock data; wipe
+  and destructive dev resets use this mechanism (§18.9, §12.10) —
+  never manual collection droppings.
+- **Development-only.** Seeding, re-seeding, and wipe are
+  development-instrumented operations (§12.10); production never runs
+  them — the guard lives with the §40 endpoints and the §10.4 env
+  chain (§10.2: the configuration object is the single source of
+  truth). No seeded value may leak into production behavior.
+- **Order.** Fixtures are injected in dependency order (users →
+  branches → reports → audio → transcriptions → conversations) so the
+  §17.3 refs resolve; wipe runs in reverse.
+
+### 25.5 Verification usage
+
+- Grep gates: the six authored model sections (§19.6, §20.8, §21.10,
+  §22.8, §23.8, §24.8) contain no seed data — everything routes here;
+  "validation rules" vocabulary does not appear (validators = §29);
+  no plan-file names or paths appear (§25 is standalone); no constant
+  and no path is introduced beyond §15.4's existing `mock/` folder
+  and its §40 responsibility.
+- Cross-section checks: mirrors §12.9/§12.10/§17.1/§17.5 (storage and
+  seeding map), §18.5 (session-aware writes), §18.8 (seed
+  discipline), §7.9 (content-language boundary), §6.8 (verbatim
+  samples), §17.6 (presence validity), and §19–§24 (registries).
+  Endpoints, route guards, and wipe execution are owned by §40 — this
+  section asserts none.
+- §25 introduces no constant, no path (§15.4 unchanged), and no
+  package (§13.3 manifest unchanged — nothing to install); it is
+  standalone — it references only specification sections.
