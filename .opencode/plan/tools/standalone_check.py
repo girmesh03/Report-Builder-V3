@@ -49,9 +49,13 @@ def main() -> int:
     last = max(tops) if tops else 0
 
     fail, pending = set(), set()
+    lo = min(tops) if tops else 0
     for m in CITE_RE.finditer(text):
         n, s = int(m.group(1)), m.group(2)
-        if n > last:
+        # An un-authored top section cited inside an already-authored
+        # range (e.g. Part C §26-§40 while Part B and Part D are
+        # authored) is a planned forward reference: pending, not FAIL.
+        if n > last or (lo < n < last and n not in tops):
             pending.add(f"{n}.{s}" if s else str(n))
         elif n not in tops:
             fail.add(str(n))

@@ -54,6 +54,25 @@ sections are appended here as they are authored):
 - [23. Transcription Model](#23-transcription-model)
 - [24. ChatConversation Model](#24-chatconversation-model)
 - [25. Mock Content & Seeding](#25-mock-content--seeding)
+- [41. Frontend Foundation](#41-frontend-foundation)
+- [42. Frontend Network Layer](#42-frontend-network-layer)
+- [43. Design & Theme System](#43-design--theme-system)
+- [44. Theme & Component Customizations](#44-theme--component-customizations)
+- [45. Responsive System](#45-responsive-system)
+- [46. MUI Reusable Component Library](#46-mui-reusable-component-library)
+- [47. Layout System](#47-layout-system)
+- [48. Pages — Auth (Landing, Login, Register)](#48-pages--auth-landing-login-register)
+- [49. Page — Dashboard & Analytics UI](#49-page--dashboard--analytics-ui)
+- [50. Page — Reports List](#50-page--reports-list)
+- [51. Page — Report Details](#51-page--report-details)
+- [52. Page — Report Creation Wizard](#52-page--report-creation-wizard)
+- [53. Audio Recording UX](#53-audio-recording-ux)
+- [54. Transcription Review UX](#54-transcription-review-ux)
+- [55. AI Correction Chat UI](#55-ai-correction-chat-ui)
+- [56. Page — Branches](#56-page--branches)
+- [57. Page — Profile](#57-page--profile)
+- [58. Export UI](#58-export-ui)
+- [59. Global Search & 404 Page](#59-global-search--404-page)
 
 ---
 
@@ -2391,6 +2410,7 @@ become manifest truth:
 | ------------- | ------------------------------------------------ | --------------- | -------------------------- |
 | @tiptap/react | `MuiEditor` rich-text editing (toolbar: bold, italic, font size, text color) | client dependencies | editor phase in §66 |
 | dompurify     | Sanitizes rich-text HTML on save and on render  | client dependencies | editor phase in §66; §61 |
+| @fontsource/noto-serif-ethiopic | Ethiopic content face — report, transcription, and chat surfaces (§43) | client dependencies | theme phase in §66; §43 |
 | NVIDIA multipart transport helper (named at install) | Conditional (§16.4): only if the installed runtime lacks reliable multipart forwarding to NVIDIA | backend dependencies | transport phase in §66; §16.4 rules stay in force |
 
 Until these are installed, no section may assume their behavior; the
@@ -5002,4 +5022,1304 @@ scripts):
   section asserts none.
 - §25 introduces no constant, no path (§15.4 unchanged), and no
   package (§13.3 manifest unchanged — nothing to install); it is
+  standalone — it references only specification sections.
+
+---
+
+## Part D — Frontend (HLD/LLD)
+
+## 41. Frontend Foundation
+
+### 41.1 Purpose & scope
+
+§41 is the foundation of Part D (frontend internals, §41–§59 per
+§12.1). It owns the client entry composition — `main.jsx` and
+`App.jsx` (§15.5) — the flat route map with its guards (ADR-025),
+the Redux store layout (ADR-026, §15.5/§15.6), and the Part D
+locked-decisions table (§41.2). It does **not** own: the network
+layer (`apiSlice.js`, §42), the theme files (§43–§44), the
+responsive system (§45), the reusable component library (§46), the
+layout shells (§47), or any page behavior (§48–§59).
+
+The scaffold facts this section builds on: `client/` is a Vite 8
+single-page application with the file tree of §15.5; the theme files
+exist in the scaffold but are **not yet mounted** — mounting is
+prescribed here (§41.3) so every page renders through the design
+system (§43) and the error/toast surfaces (§60).
+
+- **Owned here (normative).** The client entry composition and the
+  provider order (§41.3); the root-layout responsibility of
+  `App.jsx` (§41.4); the guard pair and every redirect rule (§41.5);
+  the store, slice, and endpoint-injection layout (§41.6); the
+  client module-boundary rules restated for Part D (§41.7); and the
+  Part D locked-decisions table (§41.2).
+- **Owned elsewhere — deliberately not repeated here.** Route
+  parameters and their `Id` suffixes = §9.3/§12.11-1 (applied in
+  §49–§54); the session/auth contract that guards consume = §28
+  (Part C); reauth and error normalization = §42; shared loading,
+  empty, error, and success behavior = §60; the page set and its
+  per-page behavior = §48–§59; the route definitions of the backend
+  API = §30–§39.
+- **Explicitly out of scope §41.** No endpoint address, no auth
+  token handling, no data fetch beyond wiring the API layer, no new
+  constant (§11 unchanged — §41 introduces none), no new path
+  (§15.5 unchanged — every file named here is already in the tree),
+  no new package (§13.4/§13.5 unchanged — nothing to install).
+
+### 41.2 Locked decisions (Part D, normative)
+
+The decisions below are stated once here and applied by the sections
+that reference them. They extend the §12.11 table — those rows stay
+in force (§12.11 rows 1–3, 6–7 bind every Part D section).
+
+| # | Decision | Applied in |
+| - | --- | --- |
+| 1 | The client is a Vite SPA with one entry (`main.jsx`): React 19, MUI 9 community, no SSR, no TypeScript, no Tailwind — per §12.2, §13.6 | §41.3, §42–§59 |
+| 2 | Routes are a **flat array** owned by `main.jsx` via `createBrowserRouter` (ADR-025); every route uses the lazy `Component` form — `element` is never used; no separate routes file unless `main.jsx` becomes unmanageable (§15.5) | §41.3 |
+| 3 | `App.jsx` is the root layout: `AppTheme` + `CssBaseline` + error boundary + toast container + `<Outlet/>` — components render only inside it, never beside it | §41.4 |
+| 4 | Guards: `ProtectedRoute` shows a spinner while auth is initializing, redirects unauthenticated users to `/login` with `state={{ from: location }}`; `PublicRoute` is the inverse and redirects authenticated users to `/dashboard` | §41.5 |
+| 5 | The store lives at `redux/app/store.js`; one slice per domain under `redux/features/`; `features/apiSlice.js` is the single RTK Query descriptor using `injectEndpoints` (ADR-026) | §41.6, §42 |
+| 6 | Cached entities are keyed by `_id` (`selectId: (entity) => entity._id`) — the §9.3/§12.11-3 doctrine | §41.6, §42 |
+| 7 | All server calls carry `credentials: 'include'` (cookie sessions, §28); the browser never holds provider keys or credentials (SC-7, §12.8) | §42 |
+| 8 | Backend errors — including 422 field errors — are surfaced through **toasts**; `setError` is used for client-side rule failures only (react-hook-form), never for server errors (ADR-033, §9.6, §60) | §42, §48–§59 |
+| 9 | Successful registration redirects to `/login` with a success toast ("Account created — please log in"); a created account never auto-enters the app | §48.4 |
+| 10 | Post-login navigation goes to `state.from` when present, else `/dashboard`; the logo navigates to `/dashboard` when authenticated, else `/` | §41.5, §47 |
+| 11 | The registration form collects only `email` and `password`; no name field — `firstName`/`lastName` are extracted by the backend (§19.2, §28) | §48.4 |
+| 12 | Every input element carries a start adornment (§46); submit buttons are `size="small"`, use the MUI `loading` state, and never shrink on flex (§9.6) | §46, §48–§57 |
+
+### 41.3 Entry composition (`main.jsx`)
+
+`main.jsx` is the only module that mounts the application. Order of
+composition (top to bottom, normative):
+
+1. `@fontsource/inter` weight imports (300/400/500/600/700) — the
+   chrome face (§43.5).
+2. `createRoot(document.getElementById('root'))` with React
+   `StrictMode` (§12.3).
+3. Inside the root, outermost to innermost: Redux `Provider`
+   (store from `redux/app/store.js`, §41.6) → `LocalizationProvider`
+   with `AdapterDayjs` (§13.4, §46.6) → `RouterProvider` with the
+   `createBrowserRouter` result (ADR-025).
+
+The route map is a flat array (locked decision 2). The two layout
+branches are `PublicRoute`-wrapped `PublicLayout` children and
+`ProtectedRoute`-wrapped `AppShell` children (§47); the `*` route
+renders the 404 page (§59). Every page module is loaded via
+React Router's lazy form (`Component` + `lazy`); the guard wrappers
+(`PublicRoute`, `ProtectedRoute`) are loaded the same way.
+
+The route set is decided here and detailed by the page sections:
+
+| Path | Component | Guard | Section |
+| --- | --- | --- | --- |
+| `/` | Landing page | Public | §48.2 |
+| `/login` | Login page | Public | §48.3 |
+| `/register` | Register page | Public | §48.4 |
+| `/dashboard` | Dashboard page | Protected | §49 |
+| `/reports` | Reports page (list/grid toggle) | Protected | §50 |
+| `/reports/new` | Report Creation Wizard | Protected | §52 |
+| `/reports/:reportId` | Report Details page | Protected | §51 |
+| `/branches` | Branches page | Protected | §56 |
+| `/profile` | Profile page | Protected | §57 |
+| `*` | 404 page | Public | §59 |
+
+Routes are kebab-case (§9.3); the only route parameter is
+`:reportId` (§9.3 — a bare `:id` is never used). This table is the
+complete page set: AI chat (§55), audio recording (§53),
+transcription review (§54), export flows (§58), and global search
+(§59) are **embedded surfaces** of the pages above — they are never
+routes. The rationale for each page's existence, and for those
+non-pages, is authored in the owning sections.
+
+### 41.4 Root layout (`App.jsx`)
+
+`App.jsx` is the React Router root layout and renders nothing but
+the fixed shell chrome:
+
+1. `AppTheme` (theme definition, §43.3) wrapping the whole tree.
+2. `CssBaseline` — mounted here, once; the only global CSS reset in
+   the application (§43).
+3. `AppErrorBoundary` (react-error-boundary, §13.4) — the render-
+   error surface of §60; its fallback is distinct from the 404 page
+   (§59).
+4. `AppToastContainer` (react-toastify, §13.4) — the single toast
+   surface of §60.
+5. `<Outlet/>` — the routed view.
+
+No page, component, or layout renders its own copy of any of these
+(locked decision 3). The router's `ErrorBoundary` slots the
+`AppErrorPage` component (ADR-025) — the router-level error surface
+of §60 — never a page.
+
+### 41.5 Guards & redirects
+
+Two guard components in `components/layout/` (§47) wrap the two
+route branches. Their contract:
+
+- **`ProtectedRoute`.** While the auth state is `initializing`
+  (populated by the §28 session contract through the §42 network
+  layer), renders `LoadingSpinner` full-page (§46.14). When
+  unauthenticated, renders `<Navigate to="/login" replace
+  state={{ from: location }} />` (locked decision 4) — the login
+  page reads `state.from` for post-login navigation (§48.3). When
+  authenticated, renders `<Outlet/>`.
+- **`PublicRoute`.** The inverse: authenticated → `<Navigate
+  to="/dashboard" replace />`; unauthenticated → `<Outlet/>`.
+  Landing, Login, and Register are public by lock (decision 4).
+
+Redirect targets are fixed strings — `/login`, `/dashboard` —
+defined in the route map, never recomposed by callers. The 401
+expiry path that *lands* on login is the §42 reauth chain's
+responsibility, not a guard's.
+
+### 41.6 Store, slices & endpoint injection
+
+- **Store creation** — `redux/app/store.js`: `configureStore` with
+  the `apiSlice` middleware and, when present, the domain slices.
+  Slices do not own API state: every server call is RTK Query
+  (fetchBaseQuery, §42) so each domain slice holds only domain UI
+  state (ADR-026, §12.6).
+- **API layer** — `redux/features/apiSlice.js` is the **single**
+  descriptor: `createApi` with `fetchBaseQuery`
+  (`VITE_API_BASE_URL`, `credentials: 'include'`, §42.2) — one
+  `reducerPath` (`'api'`) — and the `baseQueryWithReauth` wrapper
+  (§42.3). Domain endpoint sets are added with `injectEndpoints`
+  from the domain pages that consume them (ADR-026, §12.6).
+- **Entity keys** — every injected list/detail query declares
+  `selectId: (entity) => entity._id` (locked decision 6, §12.11-3);
+  invalidation tags are declared per domain (`Reports`, `Branches`,
+  `Audio`, `Transcription`, `Conversation`, `Me`) and the owning
+  page sections pin the mutation-tag pairs (§50–§57).
+- **Server-as-source-of-record** — the browser holds only ephemeral
+  UI state and a possibly-stale RTK Query cache; anything stale is
+  re-fetched via tag invalidation — the browser never mutates server
+  truth locally (§12.2-10).
+- **Selector naming** — slices export named selector functions
+  (camelCase, §9.3); components consume selectors, never raw store
+  paths.
+
+### 41.7 Module boundaries (Part D restatement)
+
+The §15.2 conventions bind every Part D module: imports only within
+`client/src/`; the network layer is the only place an HTTP call
+leaves the SPA (§12.6, §42); reusable components in
+`components/reusable/` (§46), layout shells in `components/layout/`
+(§47), MuiDataGrid column sets in `components/columns/` (§50, §56),
+every other component in `components/<domain>/` (e.g. `login/`,
+`landing/`, `report/`), pages in `pages/`, shared UI-state logic in
+`hooks/` (§53), and store/API modules in `redux/` (§41.6). Page
+files own no leaf UI outside page-level composition (§15.5).
+
+### 41.8 Verification usage
+
+- Grep gates: `element` never appears in the route map (locked
+  decision 2); no page file outside `pages/`; no `id` used as a
+  document key (only `_id`, §12.11-3); route parameters always carry
+  the `Id` suffix (`:reportId`); guard redirects match §41.5
+  verbatim; no `fetch`/`axios` outside `features/apiSlice.js`
+  (§12.6, §42).
+- Cross-section checks: mirrors §12.6 (frontend HLD), §15.5/§15.6
+  (tree and folder responsibilities), §12.11 (locked decisions),
+  §13.4 (client manifest), §60 (toast and error surfaces), §28
+  (session contract, Part C). Route-to-section ownership matches the
+  §3.1.2 F6/F9 maps; no route exists that a page section does not
+  author.
+- §41 introduces no constant (§11 unchanged), no path (§15.5
+  unchanged — every file named here already exists), and no package
+  (§13.4 manifest unchanged); it is standalone — it references only
+  specification sections.
+
+---
+
+## 42. Frontend Network Layer
+
+### 42.1 Purpose & scope
+
+§42 owns the client's single API layer — `redux/features/apiSlice.js`
+(§15.5, §41.6): the `createApi` descriptor, the `fetchBaseQuery`
+base, the `baseQueryWithReauth` reauth chain, the envelope unwrap,
+and the error normalization that feeds the §60 toast protocol
+(§12.6, §9.6). It is the **only** owner of HTTP on the client: every
+server call — public and protected — goes through it (locked
+decision 7, §12.6), so the §12.11-3 `_id` keying and the §12.11-2
+toast discipline are enforced in exactly one place.
+
+- **Owned here (normative).** The descriptor shape (§42.2); the
+  reauth chain and the 401 rule (§42.3); the envelope unwrap and
+  error normalization contract (§42.4); timeouts, abort and session
+  rules (§42.5); tags and endpoint registration (§42.6).
+- **Owned elsewhere — deliberately not repeated here.** Session
+  issuance, cookies, and refresh tokens = §28 (Part C); token
+  lifetimes = §28; backend envelope shape and pagination payloads =
+  §5/§27; backend error shapes, including the 422 field-error shape
+  and the `message` language rule = §27/§12.5; loading/empty/error/
+  success presentation = §60 and the page sections.
+- **Explicitly out of scope §42.** No endpoint path is invented
+  here: endpoints are named by their §30–§39 owners and referenced
+  by contract (§42.6 lists the §28 session calls only). No constant
+  is added (§11 unchanged — `PAGINATION_*`, `AUDIO_*` and the §11.5
+  mirrors are consumed, never redefined). No new package: the client
+  has no axios (§13.4) and §42 adds none.
+
+### 42.2 API descriptor
+
+`features/apiSlice.js` defines exactly one `createApi`:
+
+- `baseQuery` = a wrapper over `fetchBaseQuery({ baseUrl:
+  VITE_API_BASE_URL, credentials: 'include' })` that adds the reauth
+  chain (§42.3) and the normalization pass (§42.4).
+- `credentials: 'include'` on every call — including public pages —
+  because the session lives in httpOnly cookies (§28, app-info
+  contract, §12.7).
+- No `extraOptions` beside the §42.3 retry marker; no custom fetch
+  (browser `fetch` only, via `fetchBaseQuery`).
+- Domain endpoints are **injected** by the modules that consume
+  them with `injectEndpoints({ overrideExisting: false })`
+  (ADR-026): `auth` (references the §28 session contract), plus the
+  domain endpoint sets registered in §50–§59. A domain endpoint set
+  may be injected exactly once; re-injection with the same name is a
+  review error.
+- Every mutation succeeds into the cache through the owning domain's
+  tags (§42.6) — the UI never refetches manually after a mutation
+  (§12.2-10).
+
+### 42.3 Reauth chain (`baseQueryWithReauth`) & the 401 rule
+
+The chain is the single owner of session expiry on the client
+(§12.7). Behavior is ordered and normative:
+
+1. Execute the request.
+2. On **non-401** responses, pass through (§42.4 normalizes).
+3. On **401**: if the request is the refresh call itself, fail
+   through (§30/§28 define the server's own semantics) — no retry.
+   Otherwise, exactly **one** refresh attempt: `POST /auth/refresh`
+   (the §28 refresh endpoint, referenced — never re-implemented).
+4. If refresh succeeds, retry the **original** request once. If the
+   retry succeeds, return its result; if the retry 401s again, fail
+   through as expiration.
+5. If refresh fails, the session is expired: clear auth state
+   (`authSlice`), redirect to `/login` (§41.5), and fail the
+   original request without a toast.
+6. **401s are never toasted** — expiry is a silent redirect flow
+   (§12.11-2, §9.6). Only non-401 errors surface as toasts (§42.4).
+
+Concurrency rule: if several requests 401 concurrently, the refresh
+is dispatched once and the queued requests resume on its resolution;
+a second refresh never starts while one is in flight. The refresh
+call itself never triggers another refresh (step 3).
+
+### 42.4 Envelope unwrap & error normalization
+
+- **Success:** the envelope `{ success, message, data }` (§5) is
+  unwrapped in the network layer — page-level hooks and components
+  receive `data` (or the paginated `data.docs` surface of §27)
+  directly; the wrapper never leaks `success`/`message` into page
+  state (§12.6).
+- **Errors:** every non-401 error is normalized into the toast-ready
+  shape consumed by §60: `{ message, fieldErrors }` where `message`
+  is the server-provided plain end-user language (§27, §12.5 —
+  technical terms and provider names never reach the client) and
+  `fieldErrors` (only for 422 responses) maps field names to their
+  validation messages. The normalized shape is keyed by
+  `error.data` per the §27 envelope; if `fieldErrors` is empty, the
+  toast carries `message` alone (§9.6, §12.11-2).
+- **Never `setError`:** page forms do not receive server errors
+  through react-hook-form `setError`; the 422 field-error surface
+  routes through the same toast protocol (§60) per §9.6. `setError`
+  remains reserved for client-side rule failures authored in the
+  page sections (§48–§57).
+- Internals — the technical cause, the provider names, the stack
+  trace — stay in the network layer's logging surface (development
+  only, §12.5); the client log never prints cookies, tokens, or
+  transcription/report text (§9.5).
+
+### 42.5 Timeouts, abort & request lifecycle
+
+- The browser's native `fetch` timeout semantics apply; §42 defines
+  no custom timeout constant (§11 unchanged). A hung request is
+  surfaced by the RTK Query lifecycle (pending → error) through the
+  §60 error state of the calling section — never by a page timeout
+  heuristic.
+- Requests are bound to their RTK Query lifecycle: navigation away
+  from a page unsubscribes its listeners and aborts in-flight
+  queries through the standard RTK Query mechanism; no page-level
+  abort code exists (§41.6).
+- Uploads (multipart `clips`, §53) and long-running pipeline calls
+  (generation, §52; correction, §54; STT-triggering actions) use the
+  same descriptor with `formData` where the §30–§36 contracts demand,
+  keeping `credentials: 'include'` throughout.
+
+### 42.6 Endpoint registration & tags
+
+- **Registration contract.** Domain endpoint sets are injected by
+  their consuming section (§50–§59) with RTK Query `injectEndpoints`;
+  each set declares its `providesTags`/`invalidatesTags` pairs, and
+  the tag families are the five domain families of §41.6 (`Reports`,
+  `Branches`, `Audio`, `Transcription`, `Conversation`, `Me`).
+  Mutations that close a wizard step or a page action invalidate the
+  families they change — the detailed pairs are pinned by the owning
+  page sections, never invented here.
+- **Auth surface.** The client calls exactly the §28 endpoints:
+  login, logout, refresh, the current-user read consumed by
+  `authSlice`/guards (§41.5), and the profile update surface (§57).
+  None of these shapes are defined here; §42 references the §28
+  contract and records that 401 handling follows §42.3.
+
+### 42.7 Verification usage
+
+- Grep gates: `fetch(`/`axios` appear only in `features/apiSlice.js`
+  (none anywhere else in `src/`); `setError` appears only for
+  client-side rule failures in the form-owning sections; no toast
+  text is a technical term; 401 paths never toast; `_id` keys only
+  (§12.11-3); no timeout constant, no new tag family beyond §41.6.
+- Cross-section checks: mirrors §12.7 (reauth owner), §12.11-2/7
+  (toast and plain-language rules), §9.6 (form rules), §5/§27
+  (envelope), §28/§30–§39 (endpoint contracts consumed, never
+  invented), §60 (state protocol).
+- §42 introduces no constant, no path, and no package; it is
+  standalone — it references only specification sections.
+
+---
+
+## 43. Design & Theme System
+
+### 43.1 Purpose & scope
+
+§43 owns the design system's definition — `AppTheme.jsx` and
+`themePrimitives.js` (§15.5), the design language of the product,
+the typography contract including Ethiopic text (§12.6 "the theme
+supports Ethiopic text"), the light/dark color schemes, and the
+date-display conventions (ADR-011, ADR-032). It does **not** own:
+the per-component style overrides (inputs, dataGrid, charts, …, §44),
+the breakpoint mechanics (§45), or the reusable component contracts
+(§46).
+
+The design language is normative: every page section (§48–§59)
+derives its colors, type, spacing, and motif treatment from here and
+from the §44 customization contract — never from ad-hoc values
+(§9.6, SC-6: no magic values).
+
+### 43.2 Design language (normative)
+
+**Grounding.** The product is the daily supervision report of a
+restaurant-chain area supervisor in Addis Ababa (§1.1, §3.3.1): the
+supervisor speaks Amharic, the boss reads the finished report, and
+the report's most characteristic artifact is the fixed eight-line
+Amharic header (ቀን / ብራንች / ስም / ሰዓት …, §6.3). The design language
+is therefore "**regulatory paper with a dictation desk**": flat,
+paper-white surfaces with hairline rules, an English chrome that
+stays quiet, and the report's own header as the one repeated
+identity motif.
+
+**Palette (committed scales).** The palette is the scaffold's
+committed token set (§44 applies it mode-aware; components never
+import primitives directly). Semantic roles (normative):
+
+- Brand blue — interactive elements, selection, focus (`brand`
+  scale, §44.1).
+- Paper neutrals — page background (light: `hsl(0, 0%, 99%)`;
+  dark: `gray[900]`) and surface (`hsl(220, 35%, 97%)` light /
+  `hsl(220, 30%, 7%)` dark), text `gray[800]`/`gray[600]` (light)
+  and `white`/`gray[400]` (dark), dividers at 40–60% alpha.
+- Orange/amber — **reserved for audio** (recording states, timing,
+  warning surfaces; `warning` role) and never used as a brand
+  accent (§44.4).
+- Green/red — success/error roles only (§44.4).
+- Status colors follow the §46.13 `MuiStatusBadge` binding (draft →
+  default, audio_attached → warning, transcribed → info, reviewed →
+  primary, completed → success) — derived from the role palette,
+  never new colors.
+
+**Type roles (normative).**
+
+- Chrome (shell, navigation, labels, buttons, validation messages,
+  helper text, table headers): **Inter** 300–700 (§13.4
+  `@fontsource/inter`).
+- Content (report body, transcription text, chat messages — the
+  §7.6 content surfaces): **Noto Serif Ethiopic** — the planned
+  `@fontsource/noto-serif-ethiopic` dependency of §13.5, installed
+  at the §66 theme phase; Latin runs inside content keep the Inter
+  stack, Amharic runs render through the Ethiopic face (see the
+  §43.5 stack rule).
+- Captions and data (metadata, timestamps, badges): Inter 12px,
+  `text.secondary`.
+
+**Layout concept.** Flat paper surfaces (border-only cards, no
+shadow, §44.6), hairline dividers, a single-document content spine
+on md+ (details, wizard, report views) and stacked cards on xs–sm;
+the app-bar and sidebar are the only fixed chrome (§47). The
+"header strip" motif — a hairline rule above a small-caps eyebrow
+and a title — is the standard page-header treatment (§46.12) and
+mirrors the report's own line structure without imitating its
+Amharic labels (§7.6 — chrome copy is English).
+
+**Signature element (normative).** The Landing page hero (§48.2)
+renders the *report-header motif*: the eight-line Amharic header of
+§6.3, typeset in the Ethiopic content face over a hairline-ruled
+paper panel, with a single restrained animation — a low-opacity
+waveform line traced once across the ስም line ("the spoken report")
+that obeys `prefers-reduced-motion` (§45.7). This is the only
+decorative motion in the product; every other transition in §44–§59
+is a MUI default or an explicit functional micro-interaction.
+**Uniqueness rationale:** the brief's committed tokens (blue,
+paper, Inter, light-first) rule out the common warm-cream/serif and
+near-black/accent templates; the Ethiopic header ties the identity
+to the subject's own artifact rather than to a decorative trope —
+no Ge'ez ornament, no RTL, no invented Ethiopian styling beyond the
+product's own header (§7.6, ADR-011).
+
+### 43.3 Theme definition (`AppTheme.jsx`)
+
+`AppTheme.jsx` composes the MUI theme exactly once (a `useMemo`
+over an empty dependency array) and exports the provider component:
+
+- `createTheme` with `cssVariables: { colorSchemeSelector:
+  'data-mui-color-scheme', cssVarPrefix: 'template' }` — the CSS
+  variable identity of the scaffold; the `--template-*` variables
+  are the only CSS variables consumed in `sx` overrides (§44).
+- `colorSchemes` — the light and dark schemes of §43.4, switched at
+  runtime via `data-mui-color-scheme` (the theme toggle, §47).
+- `typography` — the committed Inter scale (h1 48/600, letterSpacing
+  −0.5; h2 36/600; h3 30/600; h4 24/600; h5 20/600; h6 18/600;
+  subtitle1 18; subtitle2 14/500; body1 14; body2 14/400; caption
+  12) plus the content-stack addition of §43.5; customizations may
+  refine weights, never the roles.
+- `shape: { borderRadius: 8 }` and the shadow ramp (baseShadow at
+  index 1, §44.6) — the committed geometry.
+- `components` — the spread of the eight `customizations/*` files
+  (§44).
+- `ThemeProvider` with `disableTransitionOnChange` (scaffold
+  contract) and children rendering — mounted once in `App.jsx`
+  (§41.4).
+
+No page or component creates a second theme, calls `createTheme`, or
+imports `themePrimitives.js` directly (§44.1, §9.6).
+
+### 43.4 Light & dark schemes
+
+Both schemes are authored by the color roles of §43.2 and the
+scaffold scales; the page sections reference roles only.
+
+| Role | Light | Dark |
+|---|---|---|
+| `primary.main` | brand[400] `hsl(210, 98%, 48%)` | brand[400] |
+| `background.default` | `hsl(0, 0%, 99%)` | gray[900] |
+| `background.paper` | `hsl(220, 35%, 97%)` | `hsl(220, 30%, 7%)` |
+| `text.primary` | gray[800] | `hsl(0, 0%, 100%)` |
+| `text.secondary` | gray[600] | gray[400] |
+| `divider` | alpha(gray[300], 0.4) | alpha(gray[700], 0.6) |
+| `error`/`warning`/`success` | red/orange/green scales (§13.4→§44.4) | dark variants per §44.4 |
+| shadows/baseShadow | `hsla(220, 30%, 5%, 0.07) 0px 4px 16px 0px` + `hsla(220, 25%, 10%, 0.07) 0px 8px 16px -5px` | gray-based equivalent |
+
+- The toggle between schemes is the §47 theme toggle; the browser's
+  `prefers-color-scheme` seeds the initial scheme through MUI's
+  color-scheme resolution (scaffold behavior, §44.1).
+- Text and icons always resolve through roles (`text.primary`,
+  `background.paper`, `grey.500`) — raw `gray[N]`/`brand[N]` value
+  literals never appear in page `sx` (§44.1).
+
+### 43.5 Typography & Ethiopic text
+
+- **Chrome stack.** `fontFamily: "Inter, sans-serif"`; Inter weights
+  300/400/500/600/700 loaded by `@fontsource/inter` in `main.jsx`
+  (§41.3). Counters, times, and dates render in Inter with `font-
+  variant-numeric: tabular-nums` where the surface aligns figures
+  (tables, §50; visits grid, §51; times, §52/§53).
+- **Content stack (normative).** Content surfaces (report body
+  §51, transcription review §54, chat §55) set the family
+  `'Noto Serif Ethiopic', 'Inter', sans-serif`; Latin words inside
+  Amharic content render through Inter within the same stack — the
+  Ethiopic face is used for Ethiopic-script runs, the pair never
+  doubles Latin weights. The face is the §13.5 planned dependency,
+  installed at the §66 theme phase; until installed, content
+  surfaces fall back through the Inter stack (the §13.5 rule: no
+  section assumes an uninstalled package's behavior before its
+  phase).
+- **PDF embedding** is an export concern of §58 (an Ethiopic-aware
+  face embedded client-side), distinct from this screen-face
+  contract.
+- Display surfaces (page titles, the §48.2 hero header) use the
+  Inter `h1`–`h3` scale — the Ethiopic face is a content face, not
+  a display face, except the hero's report-header reproduction
+  (§48.2).
+
+### 43.6 Date & time display conventions
+
+- Ethiopian dates display in **numeric notation only** —
+  `DD-MM-YY` ("25-02-18") — with English day/month names (ADR-011,
+  ADR-032, §6.5, §7.6); Ethiopian month names and Latin-letter
+  Amharic words never appear in chrome (§7.6).
+- The 13-month Ethiopian calendar (Meskerem … Pagume) maps to
+  English month names for chrome labels; Pagume renders as
+  "Pagume" in the MuiDatePicker header and never as a Gregorian
+  equivalent (§46.6, §6.5).
+- Times display as 24-hour `HH:mm`, zero-padded (§6.5).
+- `dayjs` is the date library (§13.4); `ethiopianDate.js` (§46.6)
+  is the only conversion surface — pages never inline Ethiopian↔
+  Gregorian math.
+
+### 43.7 Scaffold assets & migration
+
+- `src/assets/hero.png` and the starter art (§15.5) are scaffold
+  placeholders: the §48.2 landing signature supersedes their visual
+  role; the files remain served assets until the implementing
+  phase removes them (§15.7, §66). No other asset is added by §43.
+- `public/favicon.svg` remains the scaffold favicon (§15.5); a
+  favicon refresh, if any, is a §66 phase decision — never invoked
+  by a page section.
+
+### 43.8 Verification usage
+
+- Grep gates: no `createTheme` outside `AppTheme.jsx`; no
+  `themePrimitives` import outside `theme/*`; no `brand[`/`gray[`/
+  `hsl(` literals in page or component code outside `theme/` and
+  §44's customization files; no Ethiopian month-name words in
+  chrome copy; `DD-MM-YY` everywhere dates appear; times `HH:mm`.
+- Cross-section checks: mirrors §12.6 (theme + Ethiopic support),
+  §13.4/§13.5 (Inter present; Ethiopic face planned), §7.6/§7.9
+  (language boundary), §15.5 (theme tree), §46 (component
+  contracts), §48.2 (hero signature), §58 (PDF face) and §14.3
+  (ADR-011/032/038).
+- §43 introduces no constant (§11 unchanged — the design tokens
+  live in the scaffold `themePrimitives.js`), no path outside §15.5,
+  and registers exactly one planned package in §13.5
+  (`@fontsource/noto-serif-ethiopic`); it is standalone — it
+  references only specification sections.
+
+---
+
+## 44. Theme & Component Customizations
+
+### 44.1 Purpose & scope
+
+§44 owns the eight scaffold customization files under
+`client/src/theme/customizations/` (§15.5: `inputs`, `dataDisplay`,
+`feedback`, `navigation`, `surfaces`, `dataGrid`, `datePickers`,
+`charts`, re-exported by `index.js`). It converts their existing
+override sets into **binding contracts**: the behavior below is what
+the files implement, and the page sections (§48–§59) and the
+reusable library (§46) build on these contracts — never on new
+inline overrides.
+
+**Rules (normative, extend §43.3).**
+
+- All theme configuration lives under `theme/`; components and pages
+  define no inline theme override (§9.6). A new override is added by
+  extending the owning customization file, re-exported through
+  `index.js`, and documented here (§15.7).
+- `AppTheme.jsx` spreads the eight customization objects into
+  `createTheme.components` (§43.3); the spread order is the §44
+  contract.
+- Components never import `themePrimitives.js` directly (§43.3,
+  §9.6); `sx` uses mode-aware tokens only (`text.primary`,
+  `background.paper`, `grey.500`, `error.main`, …) — never raw
+  `brand[N]`/`gray[N]` literals (§43.4).
+- Component customization applies to both schemes via MUI
+  `colorSchemes`/`applyStyles` so every override is mode-aware
+  (§43.4).
+
+### 44.2 Inputs (`inputs.js`)
+
+- `MuiButtonBase`: ripple disabled; minimum touch target 44px on
+  viewports below 600px (§45.6); focus outlines use
+  `alpha(primary.main, 0.5)` 3px (keyboard-focus floor, §45.7).
+- `MuiButton`: sizes small 2.25rem / medium 2.5rem; `contained`
+  primary renders as the **near-black** gradient (gray[900] →
+  gray[800], white text) — the committed "ink" primary; `contained`
+  secondary renders the brand gradient; `outlined`/`text` per the
+  role palette (§43.2); `textTransform: none`.
+- `MuiIconButton`: 2.25rem/2.5rem squares; icon color via `sx` —
+  never the `color` prop of `MuiDataGrid` action icons (§46.8).
+- `MuiToggleButton`/`MuiToggleButtonGroup`: the list/grid and
+  filter toggles of §50.
+- `MuiCheckbox`: rounded custom icons, brand[500] checked, fitted
+  to form rows (§46.2).
+- `MuiOutlinedInput`/`MuiInputBase`: 8px × 12px padding; `height`
+  variants for single-line and search; `notchedOutline` = divider;
+  focus border brand[400]; autofill fix via the `--template-*`
+  variables.
+- `MuiInputAdornment`: the standard adornment slot (§46.2 — every
+  text input carries a start adornment).
+- `MuiFormLabel`: caption size, 8px bottom margin above the field —
+  the field-label contract of the form sections.
+
+### 44.3 Data display (`dataDisplay.js`)
+
+- `MuiList`/`MuiListItem`: padding and 1rem icons; `ListItemIcon`
+  `minWidth: 0`; `ListSubheader` per section grouping; selected
+  states per the §47 sidebar contract.
+- `MuiChip`: default `size="small"`, 999px pill radius, `maxHeight:
+  20`; color variants through the status roles (§46.13 status badge
+  and the §52/§54 per-clip status chips use the same chip contract).
+- `MuiTablePagination`: the pagination footer contract, consumed by
+  MuiPagination/MuiDataGrid (§46.7/§46.8).
+- `MuiIcon`: tone via the role palette; size per the icon-only rule
+  (§45.5).
+
+### 44.4 Feedback (`feedback.js`)
+
+- `MuiAlert`: borderRadius 10; warning styling orange[100]
+  background / orange[500] icon (the §60 toast and inline-alert
+  surfaces); `error`/`success` variants through their roles.
+- `MuiDialog`: paper radius 10; divider between sections —
+  consumed by MuiDialog/MuiConfirmDialog (§46).
+- `MuiLinearProgress`: height 8, radius 8 — the determinate
+  pipeline progress of §52/§53/§54 (limited to functional
+  surfaces; §43.2's one-animation rule).
+
+### 44.5 Navigation (`navigation.js`)
+
+- `MuiMenu`/`MuiMenuItem`: white paper in light / dark surface in
+  dark, `baseShadow` elevation — the dropdown contract of §46.5.
+- `MuiSelect`: `UnfoldMoreRounded` indicator, bordered field,
+  hidden native `:before/:after` — the field look, not the native
+  select look (§46.5).
+- `MuiLink`: `underline: none` with the animated `::before` hover —
+  links in auth pages (§48) and inline text; focus visible (§45.7).
+- `MuiDrawer`: the sidebar/overlay drawer styling of §47.
+- `MuiPaginationItem`: page buttons of the pagination contract
+  (§46.7).
+- `MuiTabs`/`MuiTab`: tab surfaces (wizard steps §52; per-visit
+  tabs §52.4); also the base of `MuiStepConnector`/`MuiStepIcon`/
+  `MuiStepLabel` — the custom 12px dot stepper of the wizard
+  (§46.17 MuiStepper).
+
+### 44.6 Surfaces (`surfaces.js`)
+
+- `MuiAccordion`: elevation 0, disableGutters — the global-search
+  result groups (§59).
+- `MuiPaper`: elevation 0 default — the paper-desk language
+  (§43.2).
+- `MuiCard`: padding 16, gray[50] background (light) / gray[800]
+  (dark), divider border, **no box-shadow**; `outlined` variant on
+  white paper — the report cards of §50 and the KPI cards of §49.
+- `MuiCardContent`/`MuiCardHeader`/`MuiCardActions`: zero padding
+  (the card owns spacing) — the composition contract for card
+  bodies and action rows.
+- Shadows: `baseShadow` at index 1 only — elevation appears on
+  overlays (menus, dialogs, drawers), never on static surfaces.
+
+### 44.7 DataGrid (`dataGrid.js`)
+
+- `MuiDataGrid`: overlay loaded with the custom no-rows overlay
+  (min-height 300px); column-header and footer on `background.paper`;
+  cell borders = divider; row hover/selected roles; the
+  `iconButtonContainer`/`menuIconButton` action-column styling and
+  the filter-form and columns-management chrome — the whole
+  MuiDataGrid contract of §46.8 (server pagination, checkbox
+  selection, GridToolbar).
+
+### 44.8 Date pickers (`datePickers.js`)
+
+- `MuiPickerPopper` (desktop popper) and picker dialogs (mobile):
+  paper surface; `PickerArrowSwitcher`/`CalendarHeader`/
+  `MonthCalendar`/`YearCalendar` spacing; `MuiPickersDay` selected =
+  gray[700] with brand focus rings — the MuiDatePicker look of
+  §46.6, including the Ethiopian calendar headers (Pagume label,
+  §43.6).
+
+### 44.9 Charts (`charts.js`)
+
+- `MuiChartsAxis`: gray[300] lines / gray[500] labels; tooltip and
+  legend through the paper surface; `MuiChartsGrid`: dashed grid
+  `4 2`, width 0.8 — the dashboard chart contract of §49
+  (@mui/x-charts, §13.4).
+
+### 44.10 Verification usage
+
+- Grep gates: no `sx`/`styled` theme override outside the eight
+  customization files and `AppTheme.jsx`; no `themePrimitives`
+  import outside `theme/*`; no raw `brand[`/`gray[` literal in page
+  or component code (§43.4); every override mode-aware.
+- Cross-section checks: mirrors §43 (roles and schemes), §15.5
+  (files and indices), §46 (components consuming each contract),
+  §47–§59 (surfaces built on this section).
+- §44 introduces no constant (§11 unchanged), no path, and no
+  package; it is standalone — it references only specification
+  sections.
+
+---
+
+## 45. Responsive System
+
+### 45.1 Purpose & scope
+
+§45 owns the responsive behavior shared by the whole Part D: the
+breakpoint buckets every page and component must state, the
+icon-only and overflow rules (§12.6), the fixed-chrome layout
+skeleton, the dialog/popover mode rules, touch targets, and the
+accessibility floor (keyboard focus, reduced motion). The page
+sections (§48–§59) author their **per-page** breakpoint matrices on
+top of these rules — §45 never describes a single page's layout.
+
+- **Owned here (normative).** Buckets and their semantics (§45.2);
+  the icon-only rule (§45.3); the viewport skeleton (§45.4); text
+  overflow and ellipsis (§45.5); dialog/popover modes (§45.6);
+  touch targets and landscape (§45.7); focus and reduced motion
+  (§45.8).
+- **Owned elsewhere.** The `MuiDialog` fullscreen props = §46; the
+  sidebar drawer modes = §47; per-page matrices = §48–§59.
+
+### 45.2 Breakpoint buckets (normative, spec-wide)
+
+Every page matrix, component rule, and responsive statement uses
+exactly these five buckets — the MUI theme breakpoints with the
+1200–1535 range split into two authoring buckets:
+
+| Bucket | Width | MUI semantics |
+|---|---|---|
+| xs | < 600px | `theme.breakpoints.down('sm')` |
+| sm | 600–899px | `up('sm')` below `up('md')` |
+| md | 900–1199px | `up('md')` below `up('lg')` |
+| lg | 1200–1535px | `up('lg')` below `up('xl')` |
+| lg+ | ≥ 1536px | `up('xl')` |
+
+Responsive logic uses MUI breakpoint props in `sx` (`xs`/`sm`/`md`/
+`lg`/`xl` Grid sizes, `display: { xs: 'none', md: 'flex' }`, …) and
+`useMediaQuery(theme.breakpoints.up('md'))` where a JS decision is
+required (drawer mode §47, picker mode §46.6). Inline pixel
+guesses — other than the bucket bounds above — are forbidden
+(§9.6, SC-6).
+
+### 45.3 Icon-only rule
+
+Per §12.6: an element bigger than an icon is always accompanied by
+its label at **xs and sm**, and at **md and above in landscape
+below 768px** where the rule applies (app-info contract, §9.6). A
+label may hide only:
+
+- below 600px (portrait): full labels may collapse to icons with
+  `MuiTooltip` text on hover for **chrome actions** (app-bar
+  actions, grid action columns — §46.8/§47), never for primary
+  content controls (submit, accept, record) which keep
+  icon + text full-width per the §46.2 button contract.
+
+The page matrices state which controls hide labels when.
+
+### 45.4 Viewport skeleton
+
+- Layout containers use the scaffold `layoutConfig` measures:
+  `drawerWidth: 240`, `headerHeight: 64`, `mobileBreakpoint: 'md'`
+  (§43.3, §47).
+- **The 100vh rule:** all layouts wrap in
+  `height: 100vh; overflow: hidden`; chrome (PublicLayout app-bar
+  or AppShell sidebar + app-bar) is fixed; content areas use
+  `overflow-y: auto`; the `body`/`html` elements are never
+  scrollable (§47.2/§47.3).
+- Content never overflows its column at any bucket (§45.5); the
+  sidebar modes are §47.
+
+### 45.5 Text overflow & ellipsis
+
+- All text must ellipsize after the owning surface's cap: page
+  titles, report titles, branch names, grid cells, and list rows
+  use `text-overflow: ellipsis; white-space: nowrap; overflow:
+  hidden` (single-line) or `-webkit-line-clamp` (multi-line, cap 2)
+  at their responsive widths.
+- Text never overlaps or wraps mid-word in stacked layouts; a field
+  or cell that cannot fit at its bucket renders the ellipsized form
+  of §45.5 — never horizontal scrolling of the surface.
+- Icon button rows (grid actions, app-bar actions) shrink by icon
+  count rules (§45.3) before they overflow.
+
+### 45.6 Dialog & popover modes
+
+- `MuiDialog` renders fullscreen when `down('sm')` **or**
+  (`down('md')` + landscape) — the §46.3 responsive contract.
+- Menu/popovers (`MuiSelect` dropdown, avatar menu, export menu)
+  render as anchored popovers above 600px and as bottom sheets or
+  full-width lists below 600px per the §46 contracts.
+- The GlobalSearchDialog follows its own size matrix (§46.15/§59).
+
+### 45.7 Touch targets & landscape
+
+- Interactive elements enforce the 44px minimum touch target on
+  viewports below 600px (§44.2); on larger viewports the §44 sizes
+  apply.
+- Below 768px in landscape, controls follow the icon-only rule
+  (§45.3) and two-action rows keep both actions fully tappable
+  (44px) even when labels collapse.
+
+### 45.8 Focus & reduced motion
+
+- Keyboard focus is always visible: the §44.2 3px focus outline on
+  interactive elements, and the CSS `:focus-visible` emphasis — no
+  focus surface may be invisible (`outline: none` without a
+  replacement) (§44, §43.2).
+- `@media (prefers-reduced-motion: reduce)`: the §43.2 signature
+  animation and every decorative transition are disabled; functional
+  feedback (spinners, progress bars) remains. The §53 recorder
+  keeps its live timer; the §43.2 waveform renders statically.
+
+### 45.9 Verification usage
+
+- Grep gates: no viewport literals other than the §45.2 bounds; no
+  `outline: 0`/`outline: none` without a focus replacement; no
+  `overflow-x` on page-level wrappers (§45.4/§45.5); the
+  five buckets appear in every page matrix.
+- Cross-section checks: mirrors §12.6 (icons/overflow owners),
+  §43.2/§44.2 (roles and focus), §46.3/§46.15 (dialog modes), §47
+  (drawer modes), §48–§59 (page matrices).
+- §45 introduces no constant (§11 unchanged), no path, and no
+  package; it is standalone — it references only specification
+  sections.
+
+---
+
+## 46. MUI Reusable Component Library
+
+### 46.1 Purpose & scope
+
+§46 owns the reusable `Mui*` component library —
+`components/reusable/`, one PascalCase file per component (§15.5,
+§15.2, §9.3: `MuiButton.jsx`, `MuiTextField.jsx`, …). Every
+locally-authored UI surface in §47–§59 composes these components —
+raw `@mui/material` widgets appear only inside this library
+(§9.6, §12.6). The library is the only place a component's public
+API is defined; pages never re-skin MUI components.
+
+Each contract below states: file, purpose, props table (defaults
+in bold), states, and responsive behavior. Forms bind through the
+§46.2 patterns; the page sections cite these contracts by §46.x.
+
+### 46.2 Library conventions (normative)
+
+- **Props tables.** Every component lists its props with types and
+  defaults in the contract below; unlisted MUI props pass through
+  unless listed as fixed.
+- **Loading.** Buttons use MUI's native `loading` prop — spinner
+  (20px `CircularProgress`), `loadingPosition`, disabled while
+  loading — never a local spinner state (§9.6).
+- **Icons.** Icon colors via `sx` (`sx={{ color: 'primary.main'
+  }}`), never the `color` prop on icon-bearing action controls
+  (§44.2).
+- **Imports.** Tree-shaken single imports (`import TextField from
+  '@mui/material/TextField'`) — never the `@mui/material` barrel
+  (§9.6, app-info contract); `Grid` uses the `size` prop, never
+  `item`; deprecated props are never used (`margin="normal"` →
+  `sx={{ mb: 2 }}`; `InputProps` → `slotProps.input`; `Link
+  component="button"` → `Link slots={{ root: 'button' }}`).
+- **Forms (react-hook-form).** All forms use `useForm({
+  mode: 'onBlur' })` with `register` by default; `Controller` is
+  used only for pickers whose value arrives via custom `onChange`
+  (MuiDatePicker, MuiTimePicker) with a justification comment;
+  cross-field validation uses `validate` with `getValues`
+  (never `watch`); field errors render through the MUI `error` and
+  `helperText` props; submission wraps `handleSubmit(onSubmit)` in
+  try/catch and calls `reset()` on success (§9.6).
+- **Adornments.** Every text input carries a start adornment
+  (§44.2).
+- **Themes & fonts.** Thematic: chrome Inter, content Ethiopic per
+  §43.5; no inline `style` anywhere; `sx`/`styled` only (§9.6).
+
+### 46.3 MuiButton
+
+- **File:** `components/reusable/MuiButton.jsx`.
+- **Purpose:** the single button; composed by every surface.
+- **Props:** `variant` (`contained`/`outlined`/`text`), `color`
+  (default `primary`), `size` (**small**), `loading`
+  (**false**), `loadingPosition` (**center**), `startIcon`,
+  `endIcon`, `fullWidth`, `disabled`, `children`, `onClick`, `sx`,
+  `type`; icon-only buttons stay raw `@mui/material/IconButton`
+  (never MuiButton) (§44.2).
+- **States:** default / hover / focus-visible (§45.8) / pressed /
+  disabled / loading (spinner replaces the label per
+  `loadingPosition`). Submit buttons: `size="small"`,
+  `flexShrink: 0` — **never shrink on flex** (§9.6).
+- **Responsive:** full-width inside forms at every bucket; the
+  §45.3 icon-only rule applies to chrome buttons, never to primary
+  form actions.
+
+### 46.4 MuiTextField
+
+- **File:** `components/reusable/MuiTextField.jsx`.
+- **Purpose:** all text entry: single-line, multiline, and
+  passwords (no separate password component — an internal eye
+  toggle on `type="password"` via `useState`/`useCallback`,
+  `onMouseDown` prevents focus loss, no layout shift when
+  toggled; caller `slotProps.input.endAdornment` merges after the
+  eye).
+- **Props:** `label`, `placeholder`, `type` (**text**), `required`,
+  `disabled`, `multiline`, `rows`/`maxRows`, `fullWidth`,
+  `error` + `helperText` (validation surface), `startAdornment`,
+  `slotProps`, `sx`, standard passthrough.
+- **States:** empty / filled / focused / error (helperText shows
+  the manual-resolver message) / disabled; `register` returns the
+  input props; `helperText` space is reserved so error appearance
+  never shifts the layout.
+- **Responsive:** full-width in form columns at every bucket;
+  multiline grows by row caps, never by page scroll (§45.5).
+
+### 46.5 MuiSelect
+
+- **File:** `components/reusable/MuiSelect.jsx`.
+- **Purpose:** all dropdown selection (provider picker §54/§52,
+  branch picker §52/§56, filters §50) — the bordered, arrowed
+  field style of §44.5.
+- **Props:** `options` (`{ value, label }[]`), `value`, `onChange`,
+  `label`, `fullWidth`, `disabled`, `error`/`helperText`;
+  `MenuProps={{ slotProps: { paper: { sx: { maxHeight: 300 } } }
+  }}` — the fixed dropdown height.
+- **States:** empty (label + placeholder), focused, error,
+  disabled, open; empty-option behavior is the owning form's
+  validation concern (§48–§57).
+
+### 46.6 MuiDatePicker & `ethiopianDate.js`
+
+- **Files:** `components/reusable/MuiDatePicker.jsx` and
+  `utils/ethiopianDate.js` (§15.5).
+- **Purpose:** the Ethiopian-calendar date picker with English
+  day/month names (§43.6, ADR-011/ADR-032) — built on
+  `@mui/x-date-pickers` community (no Pro features). When the
+  section needs a time value, the same component file renders the
+  matching `MuiTimePicker` behavior (24h `HH:mm`, §43.6).
+- **Conversion contract** (`ethiopianDate.js`):
+  `ethiopianToGregorian(ethDate) → JS Date` and
+  `gregorianToEthiopian(jsDate) → { day, month, year }` — a
+  lightweight local utility, no npm package (§13.4); 13-month
+  structure (Meskerem … Pagume); Pagume renders as "Pagume" in
+  chrome headers (§43.6); input/display value `DD-MM-YY` numeric.
+- **Props:** `value`, `onChange` (value arrives via the picker's
+  custom onChange — **`Controller` is required**, with a
+  justification comment, §46.2), `label`, `views` (day/month/year
+  per the owning form, §52.3/§50.3), `disabled`, `error`/
+  `helperText`.
+- **Responsive:** md+ (≥ 900px) renders `DesktopDatePicker`
+  (popper mode); below 900px renders `MobileDatePicker` (dialog
+  mode, fullscreen below 600px per §45.6).
+- **States:** empty (placeholder `DD-MM-YY`), invalid input
+  (error + helperText), focused, disabled; the §29 validators
+  remain the server-side authority (this component is the client
+  input surface only).
+
+### 46.7 MuiPagination
+
+- **File:** `components/reusable/MuiPagination.jsx`.
+- **Purpose:** the pagination control for server-driven lists
+  (Reports §50, Branches §56).
+- **Props:** `page`, `count` (**= `totalPages` from the server —
+  never computed client-side**, §27), `onChange`, `disabled`.
+- **Contract:** page size comes from the owning list
+  (`PAGINATION_DEFAULT_LIMIT` 10 / `PAGINATION_MAX_LIMIT` 100,
+  §11.5); the grid's `MuiDataGrid` owns its own footer (§46.8).
+- **Responsive:** compact page buttons below 600px (§44.5).
+
+### 46.8 MuiDataGrid
+
+- **File:** `components/reusable/MuiDataGrid.jsx`; domain columns
+  live in `components/columns/*.js` — `reports.js` (§50),
+  `branches.js` (§56).
+- **Purpose:** every data table (Reports §50, Branches §56,
+  analytics-owned surfaces §56).
+- **Props/contract:** `columns` (from the domain column file),
+  `rows`, `loading`, `rowCount` (**= server `totalDocs`**),
+  `paginationMode="server"`, `page`, `pageSize`, `onPaginationModelChange`, `onRowClick`, `checkboxSelection` (**true**),
+  `disableRowSelectionOnClick` (**true**), `onSelectionModelChange`,
+  `slots` (toolbar override), `slotProps`, `sx` (default height
+  400, overridable); `pageSizeOptions={[10, 25, 50, 100]}` — the
+  §11.5 `PAGINATION_*` mirrors.
+- **Toolbar:** `GridToolbar` (columns toggle, filter, density, CSV
+  export of the **selected rows**) — the CSV export is the §58
+  export surface of the lists.
+- **Action column:** per domain — View (`VisibilityIcon`,
+  `sx={{ color: 'primary.main' }}`, tooltip "View", navigates to
+  `/${resource}/${_id}`), Edit (`EditIcon`, `sx={{ color:
+  'warning.main' }}`, tooltip "Edit"), and Archive/Restore/Delete
+  rendered conditionally by row state (§50, §56); icon colors via
+  `sx` only (§44.2).
+- **States:** loading (custom overlay), empty (custom
+  `noRowsOverlay` — the §60 empty copy), error (toast, §60),
+  success, selected rows bar.
+- **Responsive:** columns hide by an explicit per-domain priority
+  list below 900px (the §50/§56 matrices); action icons follow
+  §45.3; horizontal scroll is never applied to the page (§45.5).
+
+### 46.9 MuiConfirmDialog
+
+- **File:** `components/reusable/MuiConfirmDialog.jsx`.
+- **Purpose:** every destructive or irreversible confirmation
+  (archive, restore, delete, session revoke, leave-with-unsaved).
+- **Props:** `open`, `onClose`, `onConfirm`, `title`, `message`,
+  `confirmText`, `cancelText`, `confirmColor` (**default
+  `primary`**; `error` for delete actions).
+- **Contract:** built on MuiDialog (§46.10); message is a full
+  sentence in plain end-user language (§12.5) stating what will
+  happen ("Are you sure you want to archive this report?");
+  confirm runs the action and closes; Escape/backdrop close
+  without acting.
+- **Responsive:** fullscreen below 600px (§45.6).
+
+### 46.10 MuiDialog
+
+- **File:** `components/reusable/MuiDialog.jsx`.
+- **Purpose:** the only dialog wrapper (§44.4); `MuiConfirmDialog`
+  and `MuiDatePicker` mobile mode build on it; the search dialog is
+  the one exception (§46.15, standalone).
+- **Props:** `open`, `onClose`, `title`, `children`, `actions`,
+  `maxWidth`, `fullWidth`, `disableEnforceFocus` (**true**),
+  `disableRestoreFocus` (**true**).
+- **Responsive:** fullscreen at `down('sm')` **or** `down('md')` +
+  landscape (§45.6); otherwise centered paper with radius 10.
+
+### 46.11 MuiAppbar
+
+- **File:** `components/reusable/MuiAppbar.jsx`.
+- **Purpose:** the single app-bar for PublicLayout (public
+  variant, full-width, fixed) and AppShell (protected variant,
+  64px, sits inside the content column beside the sidebar). Its
+  section-level behaviors (which actions render, navigation)
+  belong to §47.
+- **Props:** `variant` (`public`/`protected`), `actions`
+  (ReactNode slot), `sx`.
+- **Responsive:** below 600px only icons + tooltips (§45.3); height
+  64px constant (§45.4); avatar sizes 32px below 600px / 36px at
+  and above 600px.
+
+### 46.12 MuiPageHeader
+
+- **File:** `components/reusable/MuiPageHeader.jsx`.
+- **Purpose:** the standard page header — the §43.2 header-strip
+  motif: eyebrow (small-caps, `text.secondary`) + title (h4) +
+  optional subtitle; right-side `actions` slot; `mb: 2`; bottom
+  border 1px solid divider.
+- **Props:** `eyebrow`, `title`, `subtitle`, `actions`,
+  `hideSubtitle` (auto: subtitle hidden below 600px portrait).
+- **States:** default only — loading/empty/error belong to the
+  page sections.
+
+### 46.13 MuiStatusBadge
+
+- **File:** `components/reusable/MuiStatusBadge.jsx`.
+- **Purpose:** read-only presentation of `report.status` — a
+  non-interactive, color-coded chip (no click, no pointer cursor).
+- **Props:** `status` (**required**) — one of
+  `REPORT_STATUSES` (§11.4): `draft` | `audio_attached` |
+  `transcribed` | `reviewed` | `completed`.
+- **Color mapping (normative):** `draft` → default; `audio_attached`
+  → warning; `transcribed` → info; `reviewed` → primary;
+  `completed` → success (§43.2).
+- **Usage:** Report Details header (§51), Reports grid/list cells
+  (§50), wizard step headers (§52).
+
+### 46.14 LoadingSpinner
+
+- **File:** `components/reusable/LoadingSpinner.jsx`.
+- **Purpose:** centered `CircularProgress` for full-page or
+  section-level loading.
+- **Props:** `message` (optional, `text.secondary`), `minHeight`
+  (**`100vh`** default; sections override, e.g. `400px`).
+- **Usage:** guards §41.5, page loads §49–§59, dialog loads.
+
+### 46.15 GlobalSearchDialog
+
+- **File:** `components/reusable/GlobalSearchDialog.jsx` (UX in
+  §59; standalone — does not use MuiDialog's actions slot).
+- **Props:** `open`, `onClose`, `initialQuery`.
+- **Behavior contract:** search field with start adornment
+  (**`ArrowBackIcon`** — clears the field, resets results, closes
+  the dialog); React Hook Form `register('search')`; search fires
+  on Enter or on click of the action — **no debounce** (§9.6);
+  results grouped by entity (Reports, Branches) in MuiAccordion
+  sections; empty state "No results found"; loading state;
+  fullscreen below 600px (and below 768px landscape, no border
+  radius, 100vh); centered at 600–1200px (80vh / 600px) and above
+  1200px (70vh / 720px); closes via back arrow, Escape, or click
+  outside.
+- **Data:** the §39 search endpoint via the §42 layer; archived
+  entities hidden unless the search contract of §39 includes them.
+
+### 46.16 MuiEditor (TipTap + DOMPurify)
+
+- **File:** `components/reusable/MuiEditor.jsx` (planned deps
+  `@tiptap/react` and `dompurify`, §13.5 — installed at the §66
+  editor phase; until then no section may assume the editor's
+  runtime, but its contract is fixed here).
+- **Purpose:** the single rich-text editing surface for **report
+  content** (§51, §52 Step 5) and **transcription review** (§54);
+  also renders read-only content (the details-body viewer writes
+  through the same sanitized surface).
+- **Toolbar (fixed scope, ADR-038):** **Bold, Italic, Font size,
+  Text color** — the §44-styled toolbar; no other toolbar actions
+  exist in this scope.
+- **Values:** HTML string in/out (TipTap document → HTML; §14.4);
+  `dompurify` sanitizes on **write and on render**; rendering uses
+  `dangerouslySetInnerHTML` only on already-sanitized input
+  (§61); no JSON-document storage (§14.4).
+- **OQ-007 (open, recorded):** whether the persisted
+  `raw`/`latest` slots carry plain text or rich-text HTML is
+  decided at the editor phase (§21.2 open item, §66); `MuiEditor`
+  emits and consumes HTML either way — the slots stay `String`
+  (§21.2) until that decision lands.
+- **Ethiopic content:** the content stack of §43.5 renders through
+  the editor; the toolbar labels are chrome (English, §7.6).
+- **Props:** `value` (HTML), `onChange`, `readOnly`, `minHeight`,
+  `id` (editor instance id for the form integration).
+- **States:** empty (placeholder in report voice), focused,
+  read-only, error (owning form's `helperText` surface).
+
+### 46.17 New components (owned here)
+
+Justified by their sections; the same contract discipline applies:
+
+- **MuiAudioPlayer** (`components/reusable/MuiAudioPlayer.jsx`) —
+  clip playback; drives §53 (recording review) and §54 (clip
+  playback during review). Props: `audio` (**the metadata-only
+  DTO of §22.7 — no `filePath` ever reaches the client**), URL
+  via the §32 audio endpoint, `onEnded`; states loading/playing/
+  paused/ended/error; the play button is the recorder's only
+  interactive cue with icon-only labels below 600px (§45.3).
+- **MuiStatCard** (`components/reusable/MuiStatCard.jsx`) — the
+  Dashboard KPI card (§49): `label` (small-caps eyebrow), `value`
+  (h3), `icon` (start adornment, role color), optional `trend`
+  caption; plain card surface (§44.6).
+- **MuiStepper** (`components/reusable/MuiStepper.jsx`) — the
+  wizard step indicator (§52): the §44.5 dot style, step labels,
+  `activeStep`, `onStepClick` (only to visited steps), completed
+  check; responsive: step labels collapse to dots below 600px.
+
+### 46.18 Verification usage
+
+- Grep gates: raw `@mui/material/*` imports appear only inside
+  `components/reusable/` (and `theme/customizations/`); pages import
+  only `Mui*` components, layout, and domain components; no `style={}`
+  anywhere; no `color` prop on icon controls (§44.2); every text
+  input has a start adornment prop; `Controller` appears only where
+  a justification comment exists (§46.2).
+- Cross-section checks: mirrors §43/§44 (roles and overrides),
+  §45 (responsive buckets), §47–§59 (usage), §14.3/§14.4
+  (ADR-023/032/034/038, editor), §22.7/§32/§37 (DTO and file
+  exposure rules), §61 (sanitization), §13.5/§13.7 (planned
+  packages and their gates).
+- §46 introduces no constant (§11 unchanged), no path beyond §15.5
+  (`components/reusable/`, `components/columns/` already exist),
+  and no package beyond the §13.5 planned set; it is standalone —
+  it references only specification sections.
+
+---
+
+## 47. Layout System
+
+### 47.1 Purpose & scope
+
+§47 owns the three layout shells of `components/layout/` (§15.5) —
+`PublicLayout`, `AppShell`, `AppSidebar` — their composition and
+responsive behavior, and the wiring of `MuiAppbar` (§46.11) into
+each. It does **not** own: the reusable bar itself (§46.11), the
+header-strip treatment (§46.12, used per page), the guards
+(§41.5), or any page content (§48–§59).
+
+- **Owned here (normative).** PublicLayout structure and auth-aware
+  actions (§47.2); AppShell composition and content column (§47.3);
+  AppSidebar modes, nav items, and theming (§47.4); app-bar wiring,
+  the theme toggle, the avatar menu, and the search trigger (§47.5);
+  navigation and active-state rules (§47.6).
+- **Owned elsewhere.** Guard redirects §41.5; search dialog behavior
+  §59; dialogs fullscreen §45.6/§46.10; statuses/copy §7.6/§60.
+
+### 47.2 PublicLayout
+
+- **File:** `components/layout/PublicLayout.jsx`.
+- **Purpose:** the root wrapper of the public branch (Landing,
+  Login, Register, 404 — §41.3). No sidebar, no auth gating.
+- **Structure (column flex):** 1) `MuiAppbar` `variant="public"`
+  (fixed, full-width; logo → `/`; right-aligned actions: theme
+  toggle (LightMode/DarkMode icon buttons), and — auth-aware via
+  `authSlice` — "Log in" (text) and "Sign up" (contained, §46.3)
+  when unauthenticated, or a Logout icon button (with `MuiTooltip`
+  "Logout") when authenticated); 2) `<Outlet/>` — scrollable
+  content (`overflow-y: auto`); the outer wrapper applies
+  `height: 100vh; overflow: hidden` (§45.4).
+- **Responsive:** below 600px the bar actions collapse to
+  icons/tooltips (§45.3); the content area scrolls independently.
+
+### 47.3 AppShell
+
+- **File:** `components/layout/AppShell.jsx`.
+- **Purpose:** the protected root wrapper; one layout for all
+  authenticated pages (§41.3).
+- **Structure (horizontal flex):** left `AppSidebar` (§47.4);
+  right content column (column flex): 1) `MuiAppbar`
+  `variant="protected"` (64px, sits **inside** the content column —
+  never spanning the sidebar; right-aligned: search icon button
+  (opens `GlobalSearchDialog`, §46.15/§59), theme toggle, avatar —
+  see §47.5; **no title text, no hamburger** — the hamburger lives
+  in the sidebar header); 2) the page header, rendered by each page
+  (§46.12 — not a reusable view here); 3) `<Outlet/>` — scrollable
+  (`overflow-y: auto`). Outer wrapper: `height: 100vh;
+  overflow: hidden` (§45.4).
+- **Responsive:** the content column resizes to the sidebar mode
+  (§47.4); on xs/sm the sidebar is an overlay (§47.4).
+
+### 47.4 AppSidebar
+
+- **File:** `components/layout/AppSidebar.jsx`.
+- **Props:** `open` (boolean), `onClose` (function), `sidebarMode`
+  (`'full'` | `'mini'`), `onToggle` (function).
+- **Header:** menu icon + logo + app name (**"Report Builder"** —
+  `VITE_APP_NAME`, §10.5). The menu icon toggles full/mini on the
+  permanent drawer (md+); on xs/sm the menu icon opens the
+  temporary overlay.
+- **Nav items** (top, `flexGrow: 1`): **Dashboard, Reports,
+  Branches, Profile** — each a `MuiListItemButton` with icon +
+  label and a link to its route (§41.3). Bottom: `MuiDivider` +
+  **Logout** (`MuiListItemButton`, icon + label; hover styled via
+  `error.main` tint, §44.2/§47.6).
+- **Theming (normative, §44):** default `backgroundColor:
+  transparent`, `color: text.secondary`; hover `backgroundColor:
+  action.hover`, radius 8; **selected**: `backgroundColor: primary.main
+  + 0.08`, `color: primary.main`, `fontWeight: 600`, `borderLeft:
+  3px solid primary.main`; icon selected `color: primary.main`,
+  otherwise `color: action.active`; Logout hover:
+  `backgroundColor: error.main + 0.08`, `color: error.main`.
+- **Responsive (normative):**
+  - xs (< 600px) and sm (600–899px): **temporary overlay** drawer
+    (240px) — opens via the sidebar-header menu icon, closes on
+    backdrop click, nav selection, or Escape (§45.6/§46.10).
+  - md+ (≥ 900px) default: **permanent docked** drawer (240px),
+    full icon + text.
+  - md+ after toggle: **permanent mini** drawer (64px), icons only;
+    labels via `MuiTooltip` on hover; header shows the menu icon
+    only.
+  - The mini/full mode is `sidebarMode` state held by the shell
+    (§47.3); `MuiDrawer` per §44.5.
+
+### 47.5 App-bar wiring (protected variant)
+
+- **Search icon** — `IconButton` (icon + tooltip "Search"), opens
+  `GlobalSearchDialog` (§46.15; UX §59).
+- **Theme toggle** — LightMode/DarkMode icon buttons switching the
+  §43.4 color scheme (MUI `colorSchemes` via `data-mui-color-scheme`).
+- **Avatar dropdown** — the user avatar button (sizes 32px below
+  600px, 36px at and above 600px) opens a `Menu` with **Profile**
+  (`/profile`, §57) and **Logout** (runs the §42/§28 logout, then
+  `<Navigate to="/login">`).
+- The logo navigates to `/dashboard` when authenticated, else `/`
+  (§41.5, decision 10; in the protected bar the logo sits in the
+  sidebar header, §47.4).
+
+### 47.6 Navigation & active-state rules
+
+- Nav marking follows the active route: exact match on the four
+  nav paths (Dashboard, Reports, Branches, Profile); the wizard
+  (`/reports/new`) and details (`/reports/:reportId`) do **not**
+  mark the Reports nav item as selected (page-context rule),
+  unless the section chooses a different rule explicitly.
+- `useNavigate` is the only navigation mechanism for actions;
+  `Link` is used for nav items and inline links (§44.5).
+- Logout clears the `authSlice` state **after** the §28 logout
+  call succeeds; a failing logout still clears local state and
+  navigates (§42 handles refresh/expiry independently).
+
+### 47.7 Verification usage
+
+- Grep gates: the four nav items and their paths match §47.4
+  verbatim; no second app-bar/title inside `AppShell` content; the
+  `100vh` wrapper and `overflow-y: auto` patterns appear in both
+  shells (§45.4); no hamburger in the protected app-bar.
+- Cross-section checks: mirrors §12.6/§12.7 (shell and auth),
+  §44.5/§44.2 (drawer/button styles), §45 (buckets and drawer
+  modes), §46.11/§46.15 (bar and search contracts), §41.3/§41.5
+  (routes and guards), §59 (search UX).
+- §47 introduces no constant (§11 unchanged — "Report Builder"
+  is `VITE_APP_NAME`, §10.5), no path, and no package; it is
   standalone — it references only specification sections.
