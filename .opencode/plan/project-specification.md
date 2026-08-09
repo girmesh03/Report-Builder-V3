@@ -1950,7 +1950,7 @@ goals in §2, and the deferral decisions in §4:
 11. **Records outlive resources.** Archive marks
     `isArchived`/`archivedAt`; permanent deletion happens only through
     the sweeper after the 30-day window (BR-15), with TTL indexes on
-    `archivedAt` as the MongoDB-internal safety net (BR-17, §18,
+    `archivedAt` as the MongoDB-internal safety net (BR-15, §18,
     §62).
 12. **Ethiopian language first.** Amharic is the language of both UI
     chrome and content when the §7.6 boundary allows; providers may
@@ -2033,14 +2033,27 @@ backend service call. Page content lives in Part D.
   1. **Middleware chain** — the fixed security stack plus CORS,
      cookie-parser, body parsing, and rate limiters (§27);
   2. **Routing layer** — every route module lives in `routes/` and is
-     mounted in `routes/index.js` (§26); each route applies its
-     validator middleware before its controller (§29);
-  3. **Controller layer** — one controller file per domain; handlers
-     are wrapped with `express-async-handler`; write handlers use the
+     mounted in `routes/index.js` (§26); each route mounts its domain
+     validator rule chain followed by the validation harness before
+     its controller (§26, §29);
+  3. **Validator layer** — every domain exposes an express-validator
+     rule chain in `validators/<domain>.validator.js` (^7.3.2, §13.3);
+     the shared harness `validators/validation.js` runs
+     `validationResult(req)` — on failure it responds 422 with the §27
+     validation-error shape; on success it attaches
+     `req.validated = { body: matchedData(req, { locations: ['body'] }),
+     params: matchedData(req, { locations: ['params'] }),
+     query: matchedData(req, { locations: ['query'] }) }` and calls
+     `next()` (§26, §29);
+  4. **Controller layer** — one controller file per domain; handlers
+     are wrapped with `express-async-handler`; controllers hold no
+     validation or auth logic — they read `req.user._id` and
+     destructure `req.validated` (§26, §28); write handlers use the
      transaction template (startSession → startTransaction → writes →
-     commit/abort → endSession in finally); errors are forwarded via
-     `next(error)` (§27);
-  4. **Data layer** — Mongoose models (session-aware hooks and
+     commit/abort → endSession in finally); errors are always
+     forwarded via `next(error)` — no catch block responds directly
+     or swallows an error (§27);
+  5. **Data layer** — Mongoose models (session-aware hooks and
 methods), `mongoose-paginate-v2` on list endpoints (page 1, limit
       10, max 100), TTL indexes where declared (§18–§24).
 - **Response contract:** every HTTP response is the envelope
@@ -2050,6 +2063,17 @@ methods), `mongoose-paginate-v2` on list endpoints (page 1, limit
 - **Errors:** `CustomError`; the global error handler logs via
   Winston; development returns the stack trace, production a generic
   message (§27).
+- **Single error path (normative):** every request/response error —
+  422 validation failures, controller and service throws, provider
+  failures, unmatched 404s — converges on the one global error handler
+  through `next(error)`; no layer responds to an error directly,
+  rewrites it as a different status, or logs-and-continues.
+  Background work (the sweeper) is logging-only (§27, §62).
+- **User-readable messages (normative):** every `message` served to
+  the frontend is plain end-user language — "Please login again",
+  never "Authentication is required"; no technical terms, provider
+  names, or internals reach the client; details stay in the logs and,
+  development only, the stack trace (§27).
 - **Background work:** the sweeper is a single timer inside the web
   process (every `SWEEPER_INTERVAL_MS`, §11) running two passes —
   expired-archives hard delete and orphan sweep (dependents + audio
@@ -2173,6 +2197,8 @@ referenced.
 | 3 | Every document's primary key is **`_id`**; code never uses `id` (`report._id`, never `report.id`) | §9.3, §12.6, §41–§42 |
 | 4 | Environment lookup chain: pre-defined `.env` → `backend/.env` and `client/.env` → default → fail-fast (required) | §10.2–§10.4, §12.10 |
 | 5 | Amharic STT is provided by Addis AI **exclusively**; Gemini and NVIDIA are text-generation providers only | §12.8, §16, §33 (ADR-001; index §14) |
+| 6 | Every backend error path — 422 validation failures, controller and service throws, provider failures, unmatched 404s — converges on the single global error handler via `next(error)`; no layer responds directly or swallows errors; the sweeper remains logging-only | §12.5, §27, §62 |
+| 7 | Every user-facing error `message` is plain end-user language ("Please login again"); technical terms never reach the client — internals stay in logs; the stack trace is development-only | §12.5, §27 |
 
 (An ADR index lives in §14; ADR-001 is listed there.)
 
@@ -2627,6 +2653,9 @@ backend/
 |   `-- <domain>.routes.js          # per-domain route modules, kebab-case (§30–§39)
 |-- controllers/
 |   `-- <domain>.controller.js      # one controller file per domain (§26, §30–§39)
+|-- validators/
+|   |-- validation.js               # validate() harness: validationResult + req.validated (§29)
+|   `-- <domain>.validator.js       # express-validator rule chains, one per domain (§29, §30–§39)
 |-- models/
 |   `-- <entity>.model.js           # one schema file per entity, session-aware (§19–§24)
 |-- services/                       # provider & pipeline work: STT, generation, correction,
@@ -2639,7 +2668,8 @@ backend/
 ```
 
 The layer hierarchy follows §12.5 top to bottom: middleware chain →
-mount registry/route modules → controllers → services (provider and
+mount registry/route modules → validators → controllers → services
+(provider and
 pipeline work) → models → MongoDB. The response envelope, error
 handling (global handler + CustomError), pagination helper, and the
 transaction template (§27) are used by every layer that raises an
@@ -2713,6 +2743,10 @@ files own no leaf UI outside page-level composition (§12.6, §15.6).
 - `controllers/` — request lifecycle only: validate (throws 422),
   session/transaction, service call, envelope response, `next(error)`
   (§12.5, §27).
+- `validators/` — declarative express-validator rule chains, one per
+  domain; pure rules with no DB/HTTP/service access and no business
+  logic; the shared `validation.js` harness runs `validationResult`
+  and attaches `req.validated` for controllers (§29).
 - `models/` — schema, indexes, toJSON transforms, session-aware hooks
   and methods (§18–§24).
 - `services/` — provider & pipeline work (STT, generation,
@@ -3315,7 +3349,9 @@ display snapshot (`§17.4` tombstone rules).
   material for the next generation/correction cycle.
 - **Two-path lifecycle** (BR-14, BR-16): archive is soft (`isArchived`,
   `archivedAt`, hidden from pickers by default) and reversible
-  (`restore`); delete is soft on a `deletedAt` marker; permanent
+  (`restore`); the retention-window anchor is declared per owning
+  model — for Branch (§20) `archivedAt` is the single anchor and no
+  `deletedAt` marker exists; permanent
   removal runs only via the sweeper after `ARCHIVED_TTL_SECONDS`
   (§11.3, BR-15) or the TTL-index safety net (§18). Branch
   archiving/deletion never breaks report history — the name snapshot
@@ -3406,3 +3442,557 @@ an allowed material change (BR-10).
 - §17 introduces no constant (§11 unchanged), no path (§15.4
   unchanged), and no package; it is standalone — it references only
   specification sections, never plan folders or tool files.
+
+---
+
+## Part B — Data & Persistence (PDS)
+
+## 18. Data Model Conventions (timestamps, transforms, indexes, TTL, sessions)
+
+### 18.1 Purpose & scope
+
+§18 is the shared convention skeleton of Part B (data structures,
+§18–§25). It defines the Mongoose conventions every one of the six
+models must obey — schema fundamentals, indexes and TTL declarations,
+transforms, the model-side session contract, hooks, validation and
+seed discipline, and schema evolution — exactly the
+timestamps/transforms/indexes/TTL/sessions home promised by §12.9,
+§15.6, and §17.1. Field-level schemas are never authored here.
+
+- **Owned here (normative).** The universal schema options (§18.2);
+  index and key policy, including the two TTL declarations (§18.3);
+  toJSON/read conventions (§18.4); the model-side session contract
+  (ADR-018, §18.5); hook rules (§18.6); the shared shape conventions
+  (ownership `user`, snapshot, `raw`/`latest`, status, message
+  metadata — §18.7); validation/seed discipline (§18.8); and schema
+  evolution rules (§18.9).
+- **Owned elsewhere — deliberately not repeated here.** Field-level
+  schemas, per-model indexes, hooks, and transforms of each entity
+  are authored by their model sections: User §19,
+  Branch §20, Report §21, Audio §22, Transcription §23,
+  ChatConversation §24. Status transitions and guards = §30–§31
+  (invariants mirrored in §17.6). Field validators per domain = §29.
+  Seeding and mock content = §25, §40. Retention arithmetic, the
+  sweeper, and orphan sweep = §31, §62. Constants = §11. Storage and
+  retention overview = §12.9. Cascade map/ERD view = §17.
+- **Explicitly out of scope §18.** No endpoint or route design
+  (§30–§39), no status-transition rule (§30–§31), no seed data, no
+  timestamp arithmetic, no new constant (§11 unchanged), no new
+  package (the mongoose family is manifest truth in §13.3 and follows
+  the §13.7 dependency protocol), and no mock literals inside models.
+
+### 18.2 Schema fundamentals (universal options)
+
+- **`timestamps: true` on every collection.** Mongoose-managed
+  `createdAt` and `updatedAt`, stored as UTC Dates. No second
+  timestamp field per collection; display/local rendering (Ethiopian
+  `DD-MM-YY` in domain data, §7.6) happens at the boundary, never in
+  the schema.
+- **Primary key.** `_id` is the only key field of every document;
+  code never uses `id` (`report._id`, never `report.id`) per
+  §12.11-3. No derived or surrogate keys are introduced.
+- **Strict mode.** Mongoose `strict` (default) is retained for every
+  schema — fields not listed in the schema are rejected, never
+  silently persisted.
+- **Virtuals.** A model section may declare virtuals (the User's
+  `fullName`, §19.4); a virtual is a computed getter over the schema's
+  own fields — never persisted, never indexed (§18.3), never
+  queryable. `toJSON` and `toObject` run with `virtuals: true` so
+  declared virtuals serialize alongside real fields; each model's
+  transform still strips `id` and `__v` (§18.4, §19.5).
+- **Names.** Field names are camelCase; collection names are the
+  pluralized model name (Mongoose default); a collection name that
+  collides with a MongoDB reserved name is never used.
+- **Types.** All date/datetime fields are `Date` (UTC); all id
+  references are `ObjectId` (see the edge keys of §17.3); enum-valued
+  fields are restricted to the shared constants of §11 —
+  `REPORT_STATUSES` (§11.4) — never literals (§11 freeze rule,
+  §17.7 gates).
+
+### 18.3 Indexes, keys & TTL declarations
+
+- **Policy.** No schema field combines `unique: true` with a separate
+  index; every compound, sparse, or TTL index is declared with
+  `schema.index(..)` — the owning model section names its indexes,
+  this section sets the rules and the TTL declarations.
+- **Routing keys.** Every schema indexes `user` (ownership lookup,
+  §3.2.3/BR-13) and the sort/query paths its owning section proves
+  (§19–§24). `mongoose-paginate-v2` list queries (page 1, limit 10,
+  max 100, §12.2) rely on indexes declared per owning model.
+- **Uniqueness.** Declared only where the owning section proves it
+  (e.g. the auth domain in §28 owns the email uniqueness decision);
+  §18 does not pre-declare which fields are unique.
+- **TTL declarations (the MongoDB-internal safety net).** Exactly two
+  indexes are declared here, one per lifecycle:
+  - **Report** (§21): TTL index on `archivedAt` with
+    `expireAfterSeconds` = `ARCHIVED_TTL_SECONDS` (§11.3).
+  - **Branch** (§20): TTL index on `archivedAt` with
+    `expireAfterSeconds` = `ARCHIVED_TTL_SECONDS` (§11.3).
+  Semantics belong to §17.4/§62 and BR-15, restated here only as
+  contract: the index fires only when the sweeper missed a deadline;
+  TTL deletion runs server-side, cannot cascade dependents, and
+  cannot use a session — the single documented exception to
+  transactional deletion (§12.2, §62); the orphan sweep cleans rows
+  the TTL left behind; when both mechanisms race, the sweeper wins
+  (§62). No other collection declares a TTL index; no index exists on
+  `deletedAt` — the 30-day countdown from `deletedAt` (BR-15) is
+  sweeper logic (§62), never an index.
+
+### 18.4 Transforms & read conventions
+
+- **Ownership of output.** Each schema owns a deterministic `toJSON`
+  transform; `_id` stays `_id` (§12.11-3); fields are never renamed
+  in transforms.
+- **Leaks are forbidden.** Credential- and secret-bearing fields
+  (auth secrets, tokens, provider keys) are excluded from output —
+  the fields are marked `select: false` by the sections that own
+  them (§28, §36); the envelope and DTOs consume only the transform
+  output (§27, §42), never raw documents.
+- **Read paths.** Read-only endpoints (get/list, §12.2) query with
+  `.lean({ virtuals: true })` — declared virtuals (e.g. the User's
+  `fullName`, §19.4) reproduce on plain projections — return plain
+  objects through the same transforms, and never open sessions
+  (§12.2, §18.5).
+- **No mutation.** A transform never mutates the stored document;
+  transient projection joins (e.g. branch snapshot name, §17.4) are
+  read-side only.
+
+### 18.5 Sessions & transactions (model-side contract)
+
+- **Canonical write pattern.** Every write flow that spans more than
+  one document runs in one MongoDB session and transaction:
+  `startSession → startTransaction → writes → commitTransaction →
+  catch → abortTransaction → finally → endSession` (ADR-018, §12.2,
+  §27; the §17.4 cascades are the prime users and also conform to
+  §62).
+- **Model-side rule.** Mongoose hooks, instance methods, and static
+  methods that write must accept a `{ session }` option and join the
+  caller's transaction; they never open an implicit/hidden session,
+  and they never run outside the transaction the controller (§27)
+  creates for the write path.
+- **Read endpoints.** get/list endpoints do not use transactions and
+  do not require session support (§12.2).
+- **Seed/mock writes.** Injection and wipe of mock data (§25, §40)
+  support sessions so test setups commit atomically like any write.
+- **Hooks must be awaitable.** All async middleware/hooks return a
+  Promise (`@returns {Promise<void>}`) so transaction boundaries are
+  never broken by fire-and-forget logic.
+
+### 18.6 Hooks & middleware rules
+
+- **No business logic in hooks.** Hooks validate shape and maintain
+  mechanical invariants only (timestamps are automatic; unique-key
+  conflicts are surfaced as errors), and must be assignable to the own
+  model. Business state machines, notifications, analytics, and
+  cascades live in the services (§30–§39, §62) and validators (§29),
+  never in Mongoose middleware.
+- **Session-aware.** All hooks that write accept `{ session }`
+  (§18.5).
+- **Async contract.** An async hook returns a Promise and awaits its
+  DB calls (see §18.5); synchronous hooks contain no I/O.
+- **Safety.** No hook performs filesystem work (audio binaries are
+  out-of-DB, §12.9/§32), no hook writes logs (logging lives in §26),
+  and no hook deletes dependents — deletions cascade in the service
+  transaction (§17.4, §31).
+
+### 18.7 Common shapes (the six-models contract)
+
+- **Ownership.** Every collection except the User root (§19)
+  carries a required `user` (`ObjectId`) — the single owner
+  reference per BR-13/§3.2.3; the User document itself is the
+  ownership root and carries no self-referential `user` field (its
+  `_id` is the key every other row points at, §17.2); all
+  user-scoped queries resolve the owner server-side; nothing is
+  shared between users (except via the §17.4 tombstone rule).
+- **Branch reference shape.** Wherever a model references branches it
+  does so with the snapshot shape `branches[].{ branch, name }`:
+  `branch` is the live `ObjectId` join key and `name` the immutable
+  display snapshot copied at report creation (§3.2.3, BR-14). Reads
+  through a deleted branch render the snapshot `name` and never treat
+  the missing document as an error (§17.4).
+- **Content shape (`raw`/`latest`, BR-11).** On every model that
+  carries content, the content is stored in exactly two slots:
+  `raw` (the original first-state content, written once and never
+  touched) and `latest` (the single current content slot that every
+  edit, correction, and acceptance update — §8.5.2, §35; no version
+  chain exists, ADR-005 retired). The pattern is used by the
+  Transcription model (§23) and the Report model (§21) per F5.
+- **Status shape.** Report status is stored from `REPORT_STATUSES`
+  (§11.4) — the constant value, never a literal string (§17.7 gates);
+  the state machine itself is exclusively §30–§31.
+- **Message metadata shape.** Every AI chat message sub-document
+  carries `{ provider, model, reasoning }` matching §16.2 — persisted
+  in ChatConversation (§24), whose message docs are child documents
+  not separate collections (§17.2), re-merged in chronological order
+  (BR-07, §6.4).
+
+### 18.8 Validation & seed discipline
+
+- **Schema-level validation is shape-only.** Mongoose validates
+  types, requiredness, enum membership (against §11 constants), and
+  reference `ObjectId` shape. Domain rules (business logic, form-wins
+  capture rules of §6, transition guards) are enforced by §29
+  validators and the services; a schema never rejects a value that
+  §6/§31 allows.
+- **No constants inside schemas.** Models reference the frozen §11
+  constants (state strings, TTL windows, limits); literal values
+  never appear in schema files (§11.4, §17.7 gates).
+- **No seeds in models.** Mock data, development branches, or sample
+  reports are never hard-coded into models — seeding and mock
+  content are exclusively the §25/§40 mechanisms, and their writes
+  are session-aware (§18.5). A report's creation data always comes
+  from the user flow (§6, §52), never from defaults.
+
+### 18.9 Schema evolution
+
+- **Ownership of change.** Each of §19–§24 owns its schema; a change
+  is made in its owning section, never collaterally in another
+  section.
+- **Additive only in-flight.** Schema changes on shipped surfaces
+  are additive (new optional fields, new indexes), and any change
+  touching a declared index, TTL, or shape contract of this section
+  amends §18 text first and the register as per §14.5 (decision row
+  and owner text move together).
+- **No destructive in-place edits.** Renames, type changes, or
+  destructive schema edits are not expressed as frozen migrations; a
+  broken-shape environment is cleared and re-seeded through the
+  §25/§40 wipe mechanism in development (§12.10), and production data
+  never carries silent transforms (see §18.4).
+
+### 18.10 Verification usage
+
+- Grep gates: `REPORT_STATUSES` and `ARCHIVED_TTL_SECONDS` resolve to
+  §11.4/§11.3 — never literals; the only TTL declarations in the spec
+  are the two named in §18.3 (Report §21, Branch §20), and neither
+  sits on `deletedAt`; the snapshot shape everywhere is
+  `branches[].{ branch, name }`; content slots are exactly `raw` +
+  `latest`; message metadata is exactly `{ provider, model,
+  reasoning }` (§16.2); the six entities of §17.2 are the only
+  entities.
+- Cross-section checks: §18 asserts no fieldset, no endpoint, no
+  transition, and no retention arithmetic — the models own fields
+  (§19–§24), §30–§31 own transitions, §62 and §25/§40 own retention
+  and seeds; session/transaction mechanics mirror §12.2 and
+  ADR-018; TTL semantics mirror §17.4 exactly; no new article
+  (constants §11, paths §15.4) is introduced.
+- §18 introduces no signature, no package (§13.3 manifest unchanged),
+  and no constant; it is standalone — it references only
+  specification sections.
+
+---
+
+## 19. User Model
+
+### 19.1 Purpose & scope
+
+§19 is the model section for the User — the single actor of the
+product (Area Supervisor, §3; no roles, ADR-036). It owns the User
+document definition: the field set, keys and indexes, the
+password-hashing hook, the instance/static methods used by the auth
+flows, and the serialization exposure of the profile. It renders the
+§17.2 User row ("user-scoped, key `_id`, single actor") as a schema
+contract and follows the §18 conventions exactly like every model.
+
+- **Owned here (normative).** Field registry and the derived-name
+  rule (§19.2); keys and indexes (§19.3); hooks and methods (§19.4);
+  transforms and exposure (§19.5); seed and mock position (§19.6);
+  evolution (§19.7).
+- **Owned elsewhere — deliberately not repeated here.** Registration,
+  login/logout, the two JWT cookies, refresh rotation, and the
+  Google OAuth **stub** (ADR-024; the real-vs-stub question stays
+  open in §69) = §28; field validation rules = §29; the Profile page
+  = §57; persona and single-user-type scope = §3 (ADR-036 row in
+  §14.3); the auth lookup middleware that attaches `req.user` =
+  §28 (`req.user._id.toString()` everywhere, §12.11-3).
+- **Explicitly out of scope §19.** No endpoint, no token or cookie
+  mechanics, no validation-error rules of its own, no seed users, no
+  new constant — the salt-rounds constant is `BCRYPT_SALT_ROUNDS`
+  (§11.3, owned by §28) — and no new package: the model uses
+  `bcryptjs` (^3.0.3 in the §13.3 manifest) and nothing else.
+
+### 19.2 Field registry & derived-name rule
+
+| Field | Type | Required | Rule |
+|---|---|---|---|
+| `_id` | ObjectId | auto | the only key; never `id` (§12.11-3) |
+| `email` | String | yes | unique (index §19.3); stored lowercase — normalized by the §29 validators (`normalizeEmail({ gmail_remove_dots: false })`), never composed in the schema |
+| `password` | String | no | bcrypt hash only; `select: false`; present only for email-created accounts — Google-created accounts have no password (F1) |
+| `firstName` | String | yes | set at creation from the derivation rule below; never collected on the register form (F1) |
+| `lastName` | String | yes | same as `firstName` |
+| `avatar` | String | no | optional profile picture — set later on the Profile page (§57) or provided by Google sign-in (F1); the picture is an uploaded file stored under `backend/uploads/avatar/` (gitignored, same binary discipline as `backend/uploads/audio/`, §12.9/§32) |
+| `position` | String | no | optional profile data — the workplace position/title of the user (e.g. Area Supervisor); free string, display-only, never a permission or role (ADR-036); Profile page only (F1) |
+| `createdAt` / `updatedAt` | Date | auto | §18.2 timestamps |
+
+Derived-name rule (F1, §3.2.1): at creation the account's names are
+extracted from the email local part (the part before `@`); §19 stores
+the result, the §28 creation flow executes the extraction:
+
+| Email local part | `firstName` | `lastName` |
+|---|---|---|
+| `beza` | `beza` | `beza` |
+| `beza.ayalew` | `beza` | `ayalew` |
+
+### 19.3 Keys, indexes & lifecycle
+
+- **Unique email.** Declared with `schema.index({ email: 1 },
+  { unique: true })` per §18.3 — no field-level `unique: true`
+  combined with a separate index (the §18.3 rule). The uniqueness
+  is proven by the auth domain (§28, §12.7) and declared here.
+- **Auth read paths.** The lookups the auth flow uses are `_id`
+  (the §28 `authenticate` lookup) and `email` (login and
+  registration match) — indexes serve exactly those; nothing is
+  indexed without proof (§18.3).
+- **No lifecycle fields.** User declares no `isArchived`,
+  `archivedAt`, or `deletedAt` and no TTL index — the only TTL
+  declarations in the spec are the two of §18.3 (Report §21, Branch
+  §20), and the retention rules (BR-15/BR-16, §62) never apply to a
+  user row.
+
+### 19.4 Hooks, methods & session contract
+
+- **Hashing hook.** A `pre('save')` hook hashes `password` with
+  `bcryptjs` at `BCRYPT_SALT_ROUNDS` (§11.3 — the section never
+  writes the literal `12`, §17.7 gates). The hash runs only when the
+  field is new or modified; an unchanged hash is never rehashed; a
+  document without a password (Google-created account, F1) never
+  enters the hashing branch.
+- **`comparePassword(candidate)`.** Instance method using
+  `bcrypt.compare`; returns a boolean. Plaintext passwords are never
+  stored, compared, logged (§26), or returned; a document with no
+  password returns `false`.
+- **The one hash lookup.** The only query that loads the hash is the
+  authentication lookup consumed by §28 (`select('+passwordHash')`).
+  All other reads use `.lean()` and never select the field (§18.4).
+- **`fullName` virtual.** `schema.virtual('fullName').get(...)`
+  composes the two derived names as a single space-joined string
+  (`${firstName} ${lastName}`); a pure getter over own fields — never
+  persisted, never indexed (§18.3), never queried, and reproducible on
+  lean reads (§18.4). Both source fields are required (§19.2), so the
+  getter is total: it can never yield an empty or partial name.
+- **Session contract (§18.5, ADR-018).** Write statics (creation,
+  Google auto-creation) accept a `{ session }` option and run inside
+  the caller's transaction; read-only lookups use `.lean()` and no
+  session (§12.2).
+
+### 19.5 Transforms & exposure
+
+- **`toObject`/`toJSON` deletion contract.** Both transforms **delete
+  the derived `id` virtual** and **the `__v` version key** from every
+  serialized User — a serialized document carries `_id` and the stored
+  fields (the never-bare-`id` rule of §12.11-3) and no Mongoose
+  bookkeeping field.
+- **`fullName` serializes.** With virtuals enabled (§18.2) the
+  `fullName` virtual (§19.4) appears in every serialized User next to
+  the stored fields; the transforms strip only `id` and `__v` —
+  `fullName` is never stripped.
+  The `versionKey` default of the schema is never relied on in
+  output.
+- **Secrets never serialize (§18.4).** `password` is `select: false`
+  and excluded from every transform; no serialized profile contains
+  the hash or any token-like value.
+- **No mutation (§18.4).** Transforms never write back to the
+  stored document and never rename fields.
+- **One consumer path.** The response layer (§27 envelope/DTOs) and
+  the Profile view (§57) consume the transform output only; no code
+  path serializes a raw User document (§18.4).
+
+### 19.6 Seeds & mocks
+
+- The model contains no seed users, demo accounts, or development
+  rows (§18.8); mock users are injected and wiped exclusively by the
+  §25/§40 mechanisms, whose writes support sessions (§18.5).
+
+### 19.7 Evolution
+
+- A new User field (or a change to §19.2–§19.5 text) is made here
+  first, per the §18.9 evolution rules.
+- If the auth domain (§28) proves a stored token/rotation field, §28
+  authors the proof and §19 is amended in the same change — through
+  the §14.5 protocol whenever a register row is involved.
+
+### 19.8 Verification usage
+
+- Grep gates: `BCRYPT_SALT_ROUNDS` resolves to §11.3 — the literal
+  `12` appears nowhere in §19; the only unique declaration is the
+  email index of §19.3; the field set of §19.2 matches the F1
+  contract exactly (no invented fields); `id` and `__v` are deleted
+  in §19.5; `fullName` is declared once (§19.4) as a virtual — the
+  §19.2 registry stores no `fullName` field; the User root carries no
+  `user` field (§18.7, §17.2).
+- Cross-section checks: §19 asserts no endpoint (§30–§39 own them
+  never here), no transition rule (§30–§31), no token/cookie
+  mechanics (§28), no validation-error rules (§29), no constant
+  (§11/§28); hooks obey §18.6, transforms obey §18.4, sessions obey
+  §18.5, uniqueness obeys §18.3.
+- §19 introduces no constant, no path (§15.4 unchanged), and no
+  package (§13.3 manifest unchanged — nothing to install); it is
+  standalone — it references only specification sections.
+
+---
+
+## 20. Branch Model
+
+### 20.1 Purpose & scope
+
+§20 is the model section for the Branch — the place the supervisor
+operates in (more than 14 branches, §3). It renders the §17.2 Branch
+row ("user-scoped, key `_id`, created and owned by the registering
+user; two-path lifecycle (BR-14, BR-16)") as a schema contract: the
+field set, keys and the TTL declaration, the lifecycle fields and
+document states, the snapshot source, and the transforms. It follows
+the §18 conventions exactly like §19.
+
+- **Owned here (normative).** Field registry (§20.2); keys, indexes
+  and TTL (§20.3); lifecycle fields and document states (§20.4);
+  snapshot and tombstone contract (§20.5); hooks and session contract
+  (§20.6); transforms and exposure (§20.7); seeds and mocks (§20.8);
+  evolution (§20.9).
+- **Owned elsewhere — deliberately not repeated here.** Endpoint
+  guards and the archive/restore controllers = §30 (F2's owner trio
+  §20, §30, §62); retention windows and the sweeper = §62; the
+  `branches[]` document fieldset on reports = §21; capture digest and
+  branch header lines (Type-1 `branch: x`, Type-2 `x / y / z`) =
+  §6.11/§21; pickers, Reports UI, and global search behavior = §54,
+  §39, §56; the ownership guard = §3.2.3/BR-13.
+- **Explicitly out of scope §20.** No endpoint, no transition or
+  guard rule (§30–§31 own them), no retention arithmetic (§62), no
+  new constant (§11 unchanged), no new package — the model layer is
+  `mongoose` (^9.7.4 in the §13.3 manifest, nothing to install),
+  and no seeds (§25/§40 own mocks).
+
+### 20.2 Field registry
+
+| Field | Type | Required | Rule |
+|---|---|---|---|
+| `_id` | ObjectId | auto | the only key; never `id` (§12.11-3) |
+| `user` | ObjectId | yes | creator-owner — branches are created and owned by the registering user (BR-13, §3.2.3); the key of the ERD User — Branch edge (§17.3) |
+| `name` | String | yes | free-form, Amharic-capable display identity; the single source of the snapshot `name`, of the report headers and visits digest (§6.11), and of pickers, Reports UI, and global search (F2); no format or encoding constraint |
+| `location` | String | yes | free string — the name of the place where the branch exists; display/management only; never snapshotted into reports (§20.5) |
+| `isArchived` | Boolean | yes (default `false`) | lifecycle flag; archived rows are hidden from default reads and appear only under explicit filters (F2, §17.4) |
+| `archivedAt` | Date | no (null while active) | set when the branch is archived (the deletion-decision timestamp); cleared on restore; the retention-window anchor and the TTL index target (§20.3, §20.4) |
+| `createdAt` / `updatedAt` | Date | auto | §18.2 timestamps |
+
+No `deletedAt` exists by design: the archive timestamp is the single
+retention anchor, so the "from `deletedAt` where applicable" clause of
+BR-15 does not apply to Branch (the anchor is declared per owning
+model, §17.4). No index carries uniqueness — nothing in the product
+proves unique branch names per owner, so none is declared (§18.3).
+No other field exists: no code, city, address, or region — nothing
+outside this table is persisted.
+
+### 20.3 Keys, indexes & TTL
+
+- **Owner-scoped list index.** `schema.index({ user: 1, isArchived: 1,
+  name: 1 })` serves the F2 read paths — branches listed active-only
+  by default (`isArchived: false`), archived rows on explicit
+  filter, ordered by `name`, always scoped to the owner (`user`,
+  BR-13). Declared via `schema.index(..)` per §18.3; no field-level
+  `unique: true` combined with a separate index (none is unique
+  here).
+- **TTL declaration.** Exactly the §18.3 declaration applies: an
+  index on `archivedAt` with `expireAfterSeconds` =
+  `ARCHIVED_TTL_SECONDS` (§11.3) as the MongoDB-internal safety net —
+  the sweeper wins races, TTL runs server-side without cascade or
+  session (§12.2, §62), and no other TTL index exists on the model.
+- **No further indexes.** The join direction lives on the Report side
+  (`branches[].branch`, §21); Branch lookups are owner-scoped (§30)
+  through the composite above; nothing else is indexed without proof
+  (§18.3).
+
+### 20.4 Lifecycle fields & document states
+
+The branch document has exactly three states; there is no
+"deleted-but-timed" state and no user-triggered hard delete:
+
+| State | `isArchived` | `archivedAt` | Behavior |
+|---|---|---|---|
+| active | `false` | `null` | the default for every read — pickers, Reports UI, global search (F2); create and update happen here (§30) |
+| archived (prepare-to-delete) | `true` | set at archive | hidden from default reads (F2); the 30-day window (`ARCHIVED_TTL_SECONDS`, §11.3) opens the moment the branch is archived; **restore** is possible inside the window and only from this state — it sets `isArchived: false` and clears `archivedAt` (§17.4, §30) |
+| permanently removed | — | — | window end: the row is physically removed by the sweeper (§62, BR-15) or, if the app missed the deadline, by the TTL safety net (§18.3); no document remains — only tombstone reads (§20.5) |
+
+- Archive never breaks report history — the snapshot survives
+  (BR-14, §17.4).
+- No controller may hard-delete an archived row before the window:
+  BR-15 ("no other path may hard-delete user data once archived");
+  §30 implements the guard, §62 implements the window.
+- §20 declares the fields and their values; the transitions and
+  guards are exclusively §30–§31.
+
+### 20.5 Snapshot & tombstone contract
+
+- **The only Branch → Report coupling** is the embedded snapshot
+  `branches[].{ branch, name }` (ERD §17.3): `branch` is the live
+  `ObjectId` join key and `name` is the display string copied at
+  report creation from this model's `name` (§3.2.3, BR-14).
+- **Never rewritten.** Branch rename, archive, or delete never
+  cascades into reports — there is no cascade Branch → Report
+  (§17.4); renames affect only snapshots captured afterwards.
+- **Tombstone rule.** After permanent removal, a `branch` lookup
+  returns `null`; every report read path (list, detail, export,
+  analytics, chat) renders the snapshot `name` and never treats the
+  missing document as an error state (§17.4, §17.7).
+- `location` never joins a snapshot or digest — it is the
+  management/display surface only.
+
+### 20.6 Hooks & session contract
+
+- **No business-logic hooks (§18.6).** The schema holds no middleware
+  that archives, restores, deletes, or cascades; hooks, where any
+  exist, are mechanical only (timestamps are automatic).
+- **Write contract (§18.5, ADR-018).** Archive and restore are
+  endpoint flows (§30) running inside a session transaction
+  (`startSession → startTransaction → writes → commit/abort →
+  finally endSession`); write statics accept a `{ session }` option.
+- **Read contract (§12.2).** Picker and search feeds load with
+  `.lean()` and no session; the active-only filter is part of the
+  query — the archive-state filter is never applied in a hook.
+
+### 20.7 Transforms & exposure
+
+- **`toObject`/`toJSON` deletion contract.** Both transforms delete
+  the derived `id` virtual and the `__v` version key from every
+  serialized Branch (uniform with §19.5) — a serialized document
+  carries `_id` and the stored fields (§12.11-3) and no Mongoose
+  bookkeeping.
+- **No mutation (§18.4).** Transforms never write back to the stored
+  document and never rename fields.
+- **No secrets exist** on this model; the decision of which lifecycle
+  fields appear in API responses (for example `archivedAt` for an
+  "archived since" label) stays with the §27/§30 DTOs.
+
+### 20.8 Seeds & mocks
+
+- The model contains no seed branches, demo branches, or default
+  rows (§18.8); mock branches arrive exclusively through the §25/§40
+  injection and wipe mechanisms, whose writes support sessions
+  (§18.5). Real branches always originate from the user's
+  management flows (§30, F2).
+
+### 20.9 Evolution
+
+- Field or lifecycle changes are authored here first (§18.9);
+  a change that touches a §14.3 register decision (BR-14, BR-15)
+  or the §18.3 TTL declaration follows the §14.5 protocol — register
+  row and owning text move together.
+- New fields are additive; the snapshot shape
+  `branches[].{ branch, name }` is never extended without §21/§6.11
+  coordination, because report history depends on it (BR-14).
+
+### 20.10 Verification usage
+
+- Grep gates: `isArchived`/`archivedAt` appear as the lifecycle pair
+  of §20 with **no `deletedAt`** anywhere in the section;
+  `ARCHIVED_TTL_SECONDS` resolves to §11.3 — the literal `2592000`
+  never appears; the snapshot shape everywhere is
+  `branches[].{ branch, name }`; the field set of §20.2 equals the
+  F2 branch contract — no invented fields (`code`, `city`, `address`
+  never appear); no `user`-less read is described.
+- Cross-section checks: §20 asserts no endpoint (§30–§39 own them),
+  no transition or guard (§30–§31), no window arithmetic (§62), no
+  digest or header composition (§6.11/§21); it mirrors §18
+  (indexes §18.3, transforms §18.4, hooks §18.6, sessions §18.5,
+  validation §18.8, evolution §18.9) and §17.2/§17.4 exactly.
+- §20 introduces no constant, no path (§15.4 unchanged — `uploads/`
+  and the git boundaries of line 6 already cover binaries), and no
+  package (§13.3 manifest unchanged — nothing to install); it is
+  standalone — it references only specification sections.
