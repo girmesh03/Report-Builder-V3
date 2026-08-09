@@ -8,8 +8,10 @@
 > **REFINEMENT LOG — THIS IS A WORKING DRAFT.** The content below will be
 > **refined again later** when we reach §6.10/§6.11 of the book during the
 > implementation. Decisions written here are provisional and subject to change
-> at that point. Revisit and re-check every section before folding into the
-> spec.
+> at that point — they are **locked for now** (spec status: Approved (temp),
+> spec §14.2), never permanently; they remain amendable as we go forward, via
+> the amendment protocol of spec §14.5. Revisit and re-check every section
+> before folding into the spec.
 >
 > Change history (user review rounds):
 > 1. Transcription status uses the shared vocabulary (`reported` /
@@ -372,6 +374,13 @@ own narration. `unassignedItems = []` → accept allowed.
 | 9 | Spoken "በሁለቱም ብራንቾች…" phrase inside a clip | Belongs to the bound branch only (no global bind; refine at §6.10). |
 
 ## 10. Lock list (brainstorm decisions — provisional, refined later)
+
+> **Locked status = temp.** Every item below is a decision **locked for
+> now, not forever**: when folded into the spec it carries the
+> document-wide Approved (temp) status (spec §14.2) and changes — as we
+> go forward — through the amendment protocol of spec §14.5 (owning
+> section text first, register row updated in the same change). None of
+> the items here claim permanence.
 
 1. Metadata is captured by the form; form wins over transcription; fallback
    `form → transcript → blank` (§8 rule 6).

@@ -16,6 +16,13 @@ is created (and refined) when we reach that section.
 
 ## 2. Trace: Method-3 memo → spec §6
 
+> **Locked status = temp.** Every decision this file traces (including
+> every ⏳ deferred row below) is a decision **locked for now, not
+> forever**: it enters the spec with the document-wide Approved (temp)
+> status (spec §14.2) and remains amendable as we go forward, through
+> the amendment protocol of spec §14.5. Nothing in this file claims
+> permanence.
+
 | Method-3 item | Spec §6 anchor | Verdict |
 | -------------- | -------------- | ------- |
 | Type derived from visit count (1 → Type-1, ≥ 2 → Type-2) | §6.4 | ✅ aligned |
