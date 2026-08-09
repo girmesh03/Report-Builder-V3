@@ -60,7 +60,8 @@ Derivation rules:
 - `type = visits.length >= 2 ? "Type-2" : "Type-1"`.
 - `branch` = the header line as printed: Type-1 → the single branch name;
   Type-2 → visit branch names joined with ` / ` (e.g. `ጎላጉል / ብስራተ ገብርኤል`).
-  It is stored as a value, not recomposed at print time.
+  The branch-name values come from the capture-form snapshot (§21.2 `branches[]`),
+  not recomposed by AI at print time.
 
 This JSON is the only source for the report header lines (ቀን, ብራንች, ስም,
 ሰዓት section with per-visit lines, ከስራ የወጣሁበት ሰዓት). Fallback order when a

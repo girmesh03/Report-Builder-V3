@@ -111,7 +111,7 @@ higher-priority source; never silently merge.
 30. Branch API
 31. Report & Status API (status machine; guards; cascade delete; transactions; correction endpoints: PATCH content, POST correct, POST voice-correction)
 32. Audio Upload & Storage (multer, 'clips', validation, temp cleanup)
-33. STT Pipeline (ffmpeg → wavSplitter → Addis AI; retries; re-transcription; aiCorrectedText)
+33. STT Pipeline (ffmpeg → wavSplitter → Addis AI; retries; re-transcription; transcription raw/latest fields)
 34. AI Report Generation Service (prompts, config, providers, parsing)
 35. AI Correction Service (Mode 2 typed + Mode 3 voice-transcribed instructions; temperature, partial-edit approach; accept→save flow)
 36. AI Chat & Conversation API
@@ -126,7 +126,7 @@ higher-priority source; never silently merge.
 43. Design & Theme System (AppTheme, typography incl. Ethiopic, color schemes)
 44. Theme & Component Customizations (inputs…charts; CSS variables)
 45. Responsive System (breakpoints; icon-only rule; ellipsis/overflow)
-46. MUI Reusable Component Library (full LLD: Button, TextField, Select, Dialog, ConfirmDialog, DataGrid, DatePicker + ethiopianDate, Pagination, StatusBadge, PageHeader, LoadingSpinner, GlobalSearchDialog, Appbar-sidebar, MuiEditor (TipTap; Bold/Italic/FontSize/TextColor; DOMPurify))
+46. MUI Reusable Component Library (full LLD: Button, TextField, Select, Dialog, ConfirmDialog, DataGrid, DatePicker + ethiopianDate, Pagination, StatusBadge, PageHeader, LoadingSpinner, GlobalSearchDialog, MuiAppbar + AppSidebar, MuiEditor (TipTap; Bold/Italic/FontSize/TextColor; DOMPurify))
 47. Layout System (PublicLayout, AppShell, MuiAppbar, AppSidebar, GlobalSearchDialog behaviors)
 48. Pages — Auth (Landing, Login, Register)
 49. Page — Dashboard & Analytics UI (KPI cards, charts)
@@ -251,11 +251,10 @@ Applies to spec §31, §35, §46 (MuiEditor), §53, §54. Three modes, one accep
 - Backend: STT via Addis AI (spec §33) → returns transcribed instruction text.
 - Frontend fills the instruction field → user selects provider → continues exactly as Mode 2.
 
-**Accept model (locked decision 2026-08-08):**
-- "Accept": `text = aiCorrectedText` (AI output kept stored) + one-click "Revert to original"
-  button shown while `aiCorrectedText` exists.
+**Accept model (settled 2026-08-09, §14.3/§14.5 alignment):**
+- "Accept": the corrected content becomes `latest` (§21.5 — `latest = accepted content`); one-click "Revert to original" copies `raw` back into `latest`.
 - Next correction overwrites the slot = single-undo, no revision-history model.
-- Does NOT pre-empt OQ-001 (future version history remains open).
+- OQ-001 is **closed** (ADR-005 retired 2026-08-09): no future version history.
 - Correction is a preview round-trip; only Accept persists (write = session, rule §7).
 
 ### 9.5.2 Rich Text Editor (component: `MuiEditor`)
@@ -298,12 +297,12 @@ Applies to spec §31, §35, §46 (MuiEditor), §53, §54. Three modes, one accep
 
 | ID | Section(s) | Question | Status |
 | -- | --- | --- | --- |
-| OQ-001 | spec §21 | Where do generated report content + version history live? (Embedded in Report per ADR-005 vs separate model?) | OPEN |
+| OQ-001 | spec §21 | Where do generated report content + version history live? — **CLOSED 2026-08-09**: ADR-005 retired; content embedded as `raw`/`latest` single-undo, no version history (§14.3/§14.5, §21.2/§21.5) | CLOSED |
 | OQ-002 | spec §21 | Required vs optional `clockIn`/`clockOut` at model level | OPEN |
 | OQ-003 | spec §65 | Deployment target (hosting, domain, prod Mongo) | OPEN |
 | OQ-004 | spec §37 | Google OAuth: real integration vs stub | OPEN |
 | OQ-005 | spec §49 | Exact dashboard KPI set & charts | OPEN |
 | OQ-006 | spec §58 | Export file naming convention | OPEN |
-| OQ-007 | spec §21, §54 | Rich-text HTML persisted on Report content vs locked Report schema? (sanitize-on-store, DOMPurify; related to OQ-001) | OPEN |
+| OQ-007 | spec §21, §54 | Rich-text HTML persisted on Report content vs locked Report schema? (sanitize-on-store, DOMPurify; registered at §21.2, §46/§51/§54/§61) | OPEN |
 
 Rule: OQ-001/2/7 block spec §21 finalization only; all others must not block authoring.

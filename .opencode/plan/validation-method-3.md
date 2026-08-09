@@ -59,7 +59,7 @@ is created (and refined) when we reach that section.
 | Later section | What to check against this report |
 | -------------- | --------------------------------- |
 | §19 | Supervisor name source; profile → capture form |
-| §21 | Report-shaped draft; visit rows; metadata JSON fields (`date`, `branch`, `supervisor`, `visits`, `dayClockIn/Out`, `type`) |
+| §21 | Report-shaped draft; visit rows; report-level fields per §21.2 (`reportDate`, `supervisorName` field names, `branches[].{branch,name}` snapshot, `visits[].{dayClockIn, dayClockOut, branchName}`); `type` derived from `visits` per §6.4 |
 | §30–§31 | Transcription per clip, transcript status vocabulary (`reported → in_progress → completed`) |
 | §34 | LLM input = metadata JSON + bound transcripts; output = report text + branch digest + unassigned items; header from metadata values only |
 | §35 | Corrects → digest recompute before next accept |

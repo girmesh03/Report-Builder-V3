@@ -1182,7 +1182,7 @@ Parameters: temperature `0.15`, maxOutputTokens `2048`.
 
 Correction audio → STT → correction text → used in same correction prompt.
 
-Uses the system to fix transcription errors (fill gaps, fix misrecognized words). Returns corrected text as `aiCorrectedText` in the Transcription model.
+Uses the system to fix transcription errors (fill gaps, fix misrecognized words). Corrected content lands in `latest` per the raw/latest single-undo model (BR-11 §18.7; there is no `aiCorrectedText` field).
 
 The AI prompt must enforce these rules:
 
@@ -1451,7 +1451,7 @@ Path 2 (automatic):       Active → Archive → 30-day wait → Auto cascade ha
 - **Permanent delete** — a cascade hard-delete that removes the resource and all of its dependents (35.2). It is never reachable from the active state; it only runs after archive, through Path 1 or Path 2.
 
 - **Report** cascade hard-delete removes, in one transaction:
-  - the Report document itself (including its embedded `generatedHistory`)
+  - the Report document itself (including its embedded `latest`/`raw` content)
   - its Transcription document (24.6)
   - its Audio documents (24.5) plus their physical files on disk (`filePath`)
   - all ChatConversation documents linked to the report (24.9)
