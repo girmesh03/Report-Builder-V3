@@ -23,6 +23,12 @@
 >
 > **API envelope:** `{ success, message, data }`; paginated
 > `{ success, message, data: { docs, page, limit, totalDocs, totalPages, ... } }`.
+>
+> **Implementation protocol:** this document is implemented by an agent
+> executing the §66 phase protocol (§66.2) in the §66.5 protocol chain,
+> using the workspace agent skills — the *frontend-design* skill (UI
+> practice, §66.4) and the *planning-with-files* skill (working-files
+> practice, §66.3) — and any skills added to that set.
 
 ## Table of Contents
 
@@ -88,6 +94,15 @@ Authored top sections (each heading links to its section):
 - [58. Feature — Print-to-PDF & Client-side Exports](#58-feature--print-to-pdf--client-side-exports)
 - [59. Feature — Global Search & 404 Page](#59-feature--global-search--404-page)
 - [60. Universal UX — States Protocol, Toasts & Feedback](#60-universal-ux--states-protocol-toasts--feedback)
+- [61. Security & Reliability Requirements](#61-security--reliability-requirements)
+- [62. Sweeper, TTL & Data Retention](#62-sweeper-ttl--data-retention)
+- [63. Testing & Verification Strategy](#63-testing--verification-strategy)
+- [64. Performance & Scale (+ official-± resolution)](#64-performance--scale--official--resolution)
+- [65. Deployment](#65-deployment)
+- [66. Implementation Phases](#66-implementation-phases)
+- [67. Risks & Mitigation](#67-risks--mitigation)
+- [68. Glossary](#68-glossary)
+- [69. Open Questions & Assumptions (registry)](#69-open-questions--assumptions-registry)
 
 ---
 
@@ -1150,13 +1165,334 @@ specification (§1.6, §3.5).
   samples (format + tone) before a work item is done.
 - §5 BR-03/BR-04/BR-19 business rules are enforced by the format rules
   above; no new behavior is asserted here.
-- **Reserved anchors.** The capture & attribution contract (per-visit
-  recording tabs, the attribution priority chain, the per-branch content
-  status vocabulary, the branch digest used by filtering, and the
-  unassigned-accept gate) is specified in §6.10 (capture & attribution)
-  and §6.11 (branch digest & filtering) when that refinement point is
-  reached. Nothing in those later subsections may contradict the format
-  rules above.
+- The capture & attribution contract is owned by §6.10; the branch-digest
+  and filtering contract by §6.11. Nothing in either may contradict the
+  format rules above.
+
+### 6.10 Capture & attribution contract
+
+§6.10 completes §6's day model with the capture–attribution
+contract: the rules that determine, for every content item of a
+branch day, which branch it belongs to — even when the narration
+never names a branch — and the shared content-status vocabulary of
+the review surfaces. It implements the multi-branch business rules
+(BR-03/BR-04, ADR-010, §6.4, §6.7) at item level.
+
+- **Owned here (normative).** The form-only metadata contract;
+  the clip-to-visit
+  binding model; the branch-directive narration rule; the attribution
+  priority chain and its `attributionBasis` values; the item status
+  vocabulary and rating semantics; the locked decisions of the
+  capture model; edge cases.
+- **Owned elsewhere — deliberately not repeated here.** The wizard
+  pages, steps and form fields = §52; the capture fields and the
+  Audio row with its `visitNo` binding = §21.2/§22/§32; the
+  transcription review surface = §54; the branch digest and the
+  filtering contract = §6.11; the accept gate = §31.6; generation
+  mechanics and the structured-output schema = §34; the clip-level
+  transcription vocabulary as UI state (never a document field) =
+  §23.2.
+- **Explicitly out of scope §6.10.** No endpoint, no schema field
+  (the capture fields are §21.2's), no constant (§11 unchanged), no
+  package, no transition or guard rule (§31 owns them).
+
+**Locked status = temp.** Every decision in this section is
+approved for the current phase only — status **Approved (temp)**
+per §14.2 — and changes only through the §14.5 amendment protocol
+(owning-section text first, the §14.3 register row updated in the
+same change). None of the decisions here claims permanence.
+
+**Capture metadata is form-only.** Every header value of the §6.2
+skeleton comes from the §21.2 capture fields (`reportDate`,
+`supervisorName`, `visits[]`) filled by the wizard's capture form
+(§52.4–§52.5). No metadata is ever extracted from audio or
+transcription text by the model (the mandatory line of the next
+paragraph is content, not metadata). The fallback order for a missing value is form → reviewed
+transcription → blank/"not specified" (BR-19, §6.3 value-source
+cells, §8 rule 6); a value is never invented. The `ብራንች:` header
+line, the per-visit time-range lines, the day start/exit, and the
+type (Type-1/Type-2 — one visit vs two or more) are derived
+deterministically from `visits[]` per §6.4 and are never stored as
+copies (§21.2). On a Type-2 day the branch names join with ` / `
+in visit order (§6.4); a branch visited twice appears as two visit
+lines while the snapshot holds one member (§6.4, Sample 4).
+
+**Clip-to-visit binding (recording).** The wizard Audio step
+(§52.6) shows **one recording tab per visit** — there is no
+global/all tab and no all-branches state: every clip belongs to
+exactly one visit. A clip is **bound** at upload time in the same
+write session: the Audio row's `visitNo` exact key (§21.2, §32.2)
+copies the tab's visit row. On a Type-1 (single-visit) day there is
+one visit only, so no tab is needed — binding is implicit (every
+clip lands on the day's only visit). The supervisor finishes a
+branch's activities, issues and comments inside that branch's
+clips; content may be spoken in any order, and a forgotten point is
+fixed by recording a new clip on the same visit's tab. Multiple
+clips per visit are allowed and merge in the digest (§6.11) in any
+order — recording order never matters.
+
+**Branch-directive narration (the mandatory line).** When narration
+names the branch its content belongs to, it uses the §6.8 prefix
+pattern `በ[branch] ብራንች፡` — the mandatory line. A clip carries at
+most one mandatory line (one directive style; two directive styles
+never appear together in one clip). The mandatory line attributes
+the items that follow it (rule 1 of the chain below), and the §6.7
+rule-10/rule-11 preservation applies: the generated multi-branch
+body may keep the same `በ[branch] ብራንች፡` prefixes for branch-
+specific items, while a single-branch day's body stays as natural
+narration (the samples of §6.8). The report body is the §8.4
+rewrite of the narration — never a verbatim repeat — but the branch
+attribution it expresses is exactly the one resolved here.
+
+**Attribution priority chain (normative, no guessing).** For every
+content item the attribution is resolved in this order, and
+`attributionBasis` on the item records which rule won (§6.11):
+
+| # | Basis | Rule |
+| - | ------ | ---- |
+| 1 | `spoken` | Narration names a branch (via the mandatory line or inline) — that wins, even against a conflicting tab binding. |
+| 2 | `binding` | The clip's bound visit (`Audio.visitNo`, §21.2/§32) — the tab the clip was recorded on. |
+| 3 | `single-branch-default` | A Type-1 day: every item belongs to the day's only branch, without any spoken name. |
+| 4 | `user-assigned` | Anything left appears in the review Unassigned panel; the supervisor assigns it with one tap (§54). |
+
+There is **no silent fallback** and **no global/all concept**: a
+spoken phrase like `በሁለቱም ብራንቾች…` inside a clip bound to one
+visit belongs to that visit's branch only (edge case 9 below). An
+item that cannot be attributed by rules 1–3 becomes an
+`unassignedItems` member (§6.11) and the report accept is blocked
+until it is resolved (the §6.11 gate, §31.6).
+
+**Item status vocabulary & ratings.** Content items share one
+status vocabulary, **`reported` → `in_progress` → `completed`**
+(the vocabulary §23 references as this section's domain):
+
+- activities → `completed` (default) or `in_progress`;
+- issues → `reported` (default); the model upgrades to
+  `in_progress` when the narration promises a visit (e.g.
+  `ነገ መጥቶ ያስተካክላል`) or to `completed` when it verifies one
+  (e.g. `መጥቶ አስተካክሎታል`);
+- comments → no status; an optional integer `rating` 0–5, `null`
+  allowed (no rating voiced = `null`);
+- clip-level transcription review state → the same vocabulary as
+  **UI/capture state only, never a document field** (§23.2: no
+  transcription status field exists by design; the §31.6 per-clip
+  acceptance gesture is the only persistence, and the §33.5/§34.2
+  presence contract is the generation gate).
+
+Statuses are editable during review (activities and issues alike;
+§54); edits update the item in the digest before the next accept
+(§6.11).
+
+**Locked decisions (normative).** The capture-model decisions
+locked for this phase:
+
+1. Metadata is captured by the form; form wins over transcription;
+   fallback `form → reviewed transcription → blank` (BR-19).
+2. Audio carries content only (activities, issues, comments; any
+   order) — never metadata.
+3. Type = visit count (1 → Type-1, ≥ 2 → Type-2; §6.4, ADR-010).
+4. Header lines derive from `visits[]`; the `ብራንች:` value is the
+   visit-ordered ` / ` join — never a stored copy, never
+   LLM-composed at print time (§21.2).
+5. **No global (ብራንች ሁሉ) tab/step** — binding tabs per visit
+   only; every clip belongs to exactly one visit; Type-1 needs no
+   tab.
+6. Attribution priority: spoken > binding > single-branch-default >
+   user-assigned; no silent fallback; no global-all rule.
+7. `accept` is blocked while `unassignedItems` is non-empty
+   (§6.11, §31.6).
+8. Status vocabulary: `reported → in_progress → completed`;
+   activities `completed` (default) or `in_progress`; issues
+   `reported` (default); comments have no status; `rating` 0–5
+   optional, `null` allowed; clip transcription review state uses
+   the same vocabulary as UI state (§23.2).
+9. Multi-branch body may carry `በ[branch] ብራንች፡` prefixes
+   (§6.7 rules 10–11); single-branch body stays natural.
+10. The branch digest (§6.11, schemaVersion 1) is stored,
+    regenerated at the §6.11 derivation points, and is the **only**
+    source for branch filtering — no model call in the filtering
+    loop.
+
+**Edge cases.**
+
+| # | Case | Rule |
+| - | ----- | ---- |
+| 1 | Clip bound to visit X, but narration names branch Y | `spoken` wins (rule 1). |
+| 2 | A clip mentions another branch too | The itemization splits the piecewise content; split pieces go to the spoken branch; ambiguous pieces → `unassignedItems` (rule 4); the supervisor assigns. |
+| 3 | Branch archived/deleted after the report | The digest keeps the stored branch-name text; filters match stored text regardless of the current branch-list state (§17.4 tombstones). |
+| 4 | Correction adds/removes a visit | The digest is re-derived at the next §6.11 derivation point; items of a removed visit's branch become `unassignedItems`; the supervisor reassigns (rule 4). |
+| 5 | No rating voiced | `rating: null` — valid. |
+| 6 | No comment voiced | `comment.text: null` — valid. |
+| 7 | Zero visits or no audio | The wizard blocks generation (invalid report; §31.2 creation steps, §52.10). |
+| 8 | Multiple clips on the same visit tab | All merge into that branch's items in the digest — order-independent. |
+| 9 | Spoken `በሁለቱም ብራንቾች…` inside a bound clip | Belongs to the bound visit's branch only (no global bind). |
+
+### 6.11 Branch digest & filtering contract
+
+§6.11 owns the **branch digest**: the stored, item-level
+itemization of the report content (which activity, issue, and
+comment belongs to which branch, with its status, rating, and
+attribution basis), the unassigned-items gate on accept, and the
+server-side filtering vocabulary that reads only this digest.
+
+- **Owned here (normative).** The digest schema (schemaVersion 1,
+  below); the digest lifecycle and its derivation points; the
+  unassigned-accept gate; the filtering contract and its parameter
+  vocabulary.
+- **Owned elsewhere — deliberately not repeated here.** The
+  attribution rules the digest records = §6.10; the item status
+  vocabulary = §6.10; the accept endpoint and its guards = §31.6;
+  the generation round that writes the digest = §34.4/§34.6; the
+  analytics payloads = §38; search mechanics = §39; the review UI
+  (Unassigned panel, status editing) = §54; report lists = §50;
+  exports = §58.
+- **Explicitly out of scope §6.11.** No endpoint shape is owned
+  here (endpoints register in §31.6/§38/§39); the digest field
+  itself is registered in §21.2 (this section decides its value
+  contract only); no constant new to §11 — the derivation reuses
+  the generation parameters (§11.3); no package.
+
+**Digest schema (schemaVersion 1, normative).** The digest is a
+single embedded document on the report row (§21.2 `branchDigest`):
+
+```json
+{
+  "schemaVersion": 1,
+  "report": {
+    "type": "Type-2",
+    "visits": [
+      { "visitNo": 1, "branchName": "ጎላጉል", "clockIn": "01:05", "clockOut": "02:20" },
+      { "visitNo": 2, "branchName": "ብስራተ ገብርኤል", "clockIn": "03:30", "clockOut": "12:00" }
+    ]
+  },
+  "branches": [
+    {
+      "branchName": "ጎላጉል",
+      "activities": [
+        { "itemId": "a1", "text": "…", "status": "completed", "sourceClip": "…", "attributionBasis": "single-branch-default" }
+      ],
+      "issues": [
+        { "itemId": "i1", "text": "…", "status": "reported", "sourceClip": "…", "attributionBasis": "binding" }
+      ],
+      "comment": { "text": null, "rating": null }
+    }
+  ],
+  "unassignedItems": []
+}
+```
+
+Field rules:
+
+- `schemaVersion` — a Number, `1` today; changes through §14.5,
+  never silently.
+- `report.visits` — the §21.2 `visits[]` block of the report,
+  mirrored at derivation time (`visitNo` row keys — never
+  `visitId`, §9.3/§12.11); equality holds by construction at the
+  write moment, and the digest survives later snapshot edits as a
+  copy (the mirror is refreshed at the next derivation point).
+- `branches[]` — one member per branch appearing in the day; the
+  member for a branch visited twice is a single entry (two visit
+  rows) — the branch is the item's unit, the visit only its
+  binding source (§6.10).
+- `branches[].branchName` — the **stored branch-name text**
+  (survives archival/deletion, edge case 3): filters match this
+  text, never a live join.
+- Items (`activities[]`, `issues[]`) — each entry is
+  `{ itemId, text, status, sourceClip, attributionBasis }`:
+  `itemId` is unique within the digest (stable across versions of
+  the same item); `text` is the item's report wording (§8.4 — the
+  rewritten line); `status` is a member of the §6.10 vocabulary
+  (`reported`, `in_progress`, `completed`); `sourceClip` is the
+  ObjectId of the Audio row the item came from (plain-model ref,
+  §9.3/§22); `attributionBasis` records which §6.10 rule won
+  (`spoken`, `binding`, `single-branch-default`, `user-assigned`
+  — auditable).
+- `branches[].comment` — `{ text: String|null, rating:
+  Number 0–5|null }`; no status (the §6.10 vocabulary applies to
+  activities and issues only).
+- `unassignedItems[]` — items resolved by no rule of §6.10; same
+  item shape with `attributionBasis: "unassigned"`; when the
+  supervisor assigns one (§54), it moves into its branch's list
+  with `attributionBasis: "user-assigned"`. There is no stored
+  "all branches" member anywhere — a report's items partition
+  across `branches[]` ∪ `unassignedItems[]`.
+
+**Digest lifecycle & derivation points.** The digest is written
+or cleared only in a §27.7 session, together with the content
+write it reflects:
+
+1. **Generation (§34).** The provider round outputs the §6.11
+   digest together with the report text (the §34.4 structured
+   schema carries `branchDigest` and `unassignedItems`); §34.6
+   persists it in the same session as `raw`/`latest`.
+2. **Content writes (Mode-1 Save and Mode-2/3 accept→save, §31.6/
+   §35.5) and visit writes (§31.5)** clear the stored digest
+   (`branchDigest` is nulled in the same session — the
+   **stale marker**). No model call happens in these paths (the
+   no-AI-in-Mode-1 rule of §35.8 is preserved).
+3. **Report accept (§31.6)** re-derives a stale digest before the
+   gate: when `branchDigest` is null, the endpoint runs one
+   derivation call — the §34.5 provider chain with the generation
+   parameters (§11.3, no new constant), output schema = the digest
+   shape of this section — for the current `latest` text; provider
+   exhaustion → 502 with no state change (the saved content is
+   untouched, BR-11). Derivation failure never blocks
+   corrections, only the accept.
+4. **After `completed`** (BR-10 corrections) the digest is cleared
+   as in (2) and never re-derived automatically: item-level
+   filtering then excludes the report (a "pending re-derivation"
+   state surfaced in analytics, §38) until the supervisor runs
+   `POST /reports/:reportId/digest` — the manual re-derivation
+   retry (ai tier per §27.3; failure → 502 + a §36 assistant
+   note). No derivation ever happens inside a filtering read: the
+   filtering loop is model-free by construction.
+
+**Unassigned-accept gate (normative).** `POST /reports/:reportId/
+accept` (§31.6) proceeds only from a fresh digest whose
+`unassignedItems` is empty. Non-empty → 422 with the unassigned
+item texts (§27.5 semantics); the UI routes to the Unassigned
+panel (§54) for rule-4 assignment or a Mode-1/2/3 content
+correction, after which accept is retried. The gate never drops
+an unassigned item silently. At `completed` the gate does not
+re-run (accept is the only gate point; BR-10 keeps edits open
+afterwards).
+
+**Filtering contract (server-side, model-free).** The only data
+source for branch-aware filtering is the stored digest — no model
+in the loop, no derivation on read (§6.10 locked decision 10).
+Parameter vocabulary:
+
+| Param | Values | Semantics |
+| ----- | ------ | --------- |
+| `branch` | branch-name text | matches `branches[].branchName` stored text — tombstone-safe (edge case 3) |
+| `group` | `activities` \| `issues` \| `comments` | the §6.7 content classes of the digest |
+| `status` | `reported` \| `in_progress` \| `completed` | the §6.10 vocabulary; ignored for `comments` |
+| `dateFrom` / `dateTo` | Ethiopian `DD-MM-YY` | report-date window, §38.5 rollup semantics |
+| `q` | free text | text match over digest item text — search mechanics are §39's |
+| `page` / `limit` | numbers | server-side pagination (ADR-034, §11.3) |
+
+Responses use the §27.4 envelope; DTO shapes and exact endpoint
+routes register with their owning sections — report content items
+view = §31.6/§50, analytics items = §38 (incl. the "pending
+re-derivation" state), search = §39 — all reading this vocabulary.
+Exports (§58) render the report text; branch filtering of what is
+exported follows the same vocabulary.
+
+**Verification usage.**
+
+- Grep gates: no digest field outside the §21.2 registry; no
+  transcription status field anywhere (§6.10 vocabulary is UI
+  state plus the digest; never a document field); the filtering
+  services contain no provider call; the derivation call appears
+  only at the §34.6 and §31.6 points and in the manual
+  re-derivation endpoint; no `visitId` spelling anywhere.
+- Cross-section checks: mirrors §6.10 (attribution/status), §21.2
+  (`branchDigest` field, `visits[]` row keys), §31.6 (accept gate),
+  §34.4 (output schema), §35.5/§35.8 (Mode-1 no-AI gate), §38/§39
+  (analytics/search vocabulary), §54 (Unassigned panel), §58.
+- §6.11 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; the manual re-derivation endpoint
+  registers in §31.6.
 
 ---
 
@@ -1883,6 +2219,7 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `ARCHIVED_TTL_SECONDS`            | 2592000 (30 days)                            | §31, §62                    |
 | `LOG_RETENTION_DAYS`              | 30                                           | §26 (logger)                |
 | `SWEEPER_INTERVAL_MS`             | 3600000 (1 hour, default)                    | §31, §62                    |
+| `OFFICIAL_TOKEN_PREFIX`           | `'±'`                                        | §35, §37, §53, §58, §64     |
 
 ### 11.4 Domain constants
 
@@ -1967,7 +2304,9 @@ owned sections: data structures in Part B (§18–§25), backend internals
 in Part C (§26–§40), frontend internals in Part D (§41–§59), and
 cross-cutting mechanics in Part E (§60 universal UX, §61 sanitization,
 §62 sweeper & retention, §63 verification gates, §64 performance &
-official-± resolution, §65 deployment). Every pointer below forwards
+official-± resolution, §65 deployment). Delivery lands in Part F
+(§66 implementation phases, §67 risks & mitigation, §68 glossary,
+§69 open questions & assumptions). Every pointer below forwards
 to its low-level home; §12 never duplicates what those sections own.
 
 The rules of this document apply here as everywhere: naming follows
@@ -4126,11 +4465,11 @@ like §19 and §20.
 - **Owned elsewhere — deliberately not repeated here.** Status
   transitions and their guards, the archive/restore/delete flows,
   and the report delete cascade = §31; the capture & attribution
-  contract (per-visit recording tabs, the attribution priority
-  chain, the per-branch content status vocabulary, the branch digest
-  used by filtering, the unassigned-accept gate) = §6.10/§6.11
-  (reserved anchors, §6.9); audio documents, upload and removal
-  material and bindings = §22/§32; transcription rows = §23; chat
+   contract (per-visit recording tabs, the attribution priority
+   chain, the per-branch content status vocabulary, the branch digest
+   used by filtering, the unassigned-accept gate) = §6.10/§6.11;
+   audio documents, upload and removal
+   material and bindings = §22/§32; transcription rows = §23; chat
   conversations = §24/§36; content generation and correction writes
   to the content slots = §34/§35; export fidelity = §37/§58; the
   sweeper and windows = §62; field validators = §29; wizard steps
@@ -4138,7 +4477,9 @@ like §19 and §20.
   ownership guard = §3.2.3/BR-13; the retention constants = §11.
 - **Explicitly out of scope §21.** No endpoint, no transition or
   guard rule (§30–§31 own them), no retention arithmetic (§62), no
-  digest or attribution artifact (§6.10/§6.11), no capture-contract
+  attribution or digest-composition rules (§6.10/§6.11 own the value
+  contract; the `branchDigest` field itself is registered in §21.2),
+  no capture-contract
   rules (§6.10, §52), no new constant (§11 unchanged), no new package
   — the model layer is `mongoose` (^9.7.4 in the §13.3 manifest,
   nothing to install), and no seed data (§18.8, §25, §40).
@@ -4156,6 +4497,7 @@ like §19 and §20.
 | `visits` | Array | yes (default `[]`) | the capture block — each entry is `{ visitNo: Number (required, sequential within the report), branchName: String (required), clockIn: String (required — `HH:mm`, §6.5), clockOut: String (required — `HH:mm`) — the day clock rule: on a Type-1 (single-visit) day the visit pair is the day pair, auto-set by the wizard (§52.5); on a Type-2 day every visit carries its own required pair (§6.3 field 4; OQ-002 closed by amendment, §21.7) }`; stored in chronological capture order (§6.4); Type-1 days hold one entry, Type-2 two or more (BR-03); a branch visited twice appears as two entries while the snapshot holds one member (§6.4); `branchName` copies the same `Branch.name` as the matching snapshot member, at the same capture moment, so equality holds by construction and the two blocks are never edited independently; time values follow the `HH:mm` zero-padded format of §6.5 (validated by the §29 validators, never composed in the schema) |
 | `raw` | String | no (null until first generation) | the original generated content, written once at first generation and never rewritten (BR-11, §18.7); no version chain exists beside it (ADR-005 retired, §14.3) |
 | `latest` | String | no (null until first generation) | the single current-content slot, initialized to `raw` at first generation; every edit, correction, and revert overwrites it (BR-11); accepted content is this slot fixed at accept (§21.5) |
+| `branchDigest` | Mixed | no (null until first generation; null = stale) | the §6.11 branch-digest document (schemaVersion 1) — the item-level itemization of `latest` (attribution, statuses, ratings, unassigned items); written at generation (§34.6) in the same session as `raw`/`latest`; **nulled** by every later content or visits write (§31.5/§31.6) as the stale marker; re-derived at report accept when stale and by the manual re-derivation endpoint (§31.6) — the value contract, lifecycle and gate are §6.11's, never re-stated here; no index is declared on it (§21.3) |
 | `isArchived` | Boolean | yes (default `false`) | lifecycle flag (BR-16, F4); archived rows are hidden from default reads and appear only under explicit filters (§17.4) |
 | `archivedAt` | Date | no (null while active) | set when the report is archived; cleared on restore; the retention-window anchor and the TTL index target (§21.3, §21.6) |
 | `createdAt` / `updatedAt` | Date | auto | §18.2 timestamps |
@@ -4171,8 +4513,10 @@ the edges of §17.3 are served from the child side — each Audio row
 carries `{ report, visitNo }`, so a visit's clips and their
 transcriptions resolve by exact-key query over the edges, never by
 array position or implicit ordering (§17.3; future §22 contract); the
-ChatConversation row carries the report ref (§24). No branch-digest or
-per-item content field exists (that artifact belongs to §6.10/§6.11);
+ChatConversation row carries the report ref (§24). The
+`branchDigest` field of the table above is the only item-level
+artifact on the row (value contract, lifecycle and gate = §6.11,
+never re-stated here);
 no `acceptedAt` and no `exportedAt` field exists — acceptance writes
 no timestamp (§21.5) and export artifacts live outside the system of
 record (§37/§58). No other field exists: nothing outside this table
@@ -4429,10 +4773,11 @@ owning subsection and repeated nowhere else:
   slots are exactly `raw` + `latest` (null until first generation);
   `clockIn`/`clockOut` appear only in the `visits` block, every
   visit carrying the required `HH:mm` pair (the closed OQ-002
-  rule, §21.7); no per-item content vocabulary, no attribution
-  basis, no rating, no unassigned-items structure, and no branch
-  digest appear here (that contract is §6.10/§6.11, reserved
-  anchors — §6.9); the stored capture fields are exactly
+  rule, §21.7); the item-level artifact is exactly the
+  `branchDigest` field (registered in §21.2; value contract §6.11),
+  and no per-item vocabulary — no attribution basis, no rating, no
+  unassigned-items structure — appears as its own field outside the
+  digest; the stored capture fields are exactly
   `reportDate`, `supervisorName`, and `visits` — `headerBranch`,
   `dayClockIn`, `dayClockOut`, and `type` never appear as fields
   (§6.4 derivation); no `acceptedAt`/`exportedAt`; no version
@@ -4650,8 +4995,9 @@ own: the chunked STT pipeline, ffmpeg/WAV preparation, retry/backoff,
 and the Addis AI call sequence (§33); report status transitions and
 guards (§31); the review/edit user flows and correction modes
 (§54, §35); provider contracts and error mapping (§16); request
-validation (§29); or the clip-level review vocabulary of the capture
-digest (reported → in_progress → completed — §6.10/§6.11 domain).
+validation (§29); or the clip-level review vocabulary
+(`reported → in_progress → completed`) — stated in §6.10, applied
+as UI/capture state in §54, and never a field in this model.
 
 Transcription rows are user-scoped (BR-13, §3.2.3). The transcription
 is *raw material*: it is the Amharic text version of the recorded
@@ -4678,8 +5024,8 @@ is one of exactly two content-bearing models (the second is Report,
 No `status` field exists, by design: transcription presence and the
 review lock are expressed exclusively through `REPORT_STATUSES`
 (`transcribed`, `reviewed` — §17.6, §21.4); the clip-level
-`reported → in_progress → completed` vocabulary is review/capture UI
-state owned by §6.10/§6.11, not a document field, and introducing a
+`reported → in_progress → completed` vocabulary of §6.10 is
+UI/capture state only — never a document field — and introducing a
 `TRANSCRIPTION_STATUSES` enum would fork the state machine of §31
 against §17.6. No `isArchived`/`archivedAt` (only Report and Branch
 are archivable, §20.4), no `deletedAt` (BR-15, §18.3), no version or
@@ -5859,11 +6205,14 @@ content-changing actions; read-only views still open).
 ### 31.5 Visit & content updates
 
 - `PUT /reports/:reportId/visits/:visitNo` — update a single row
-  (branch/time fields); re-runs §31.2-2's rules for the row.
+  (branch/time fields); re-runs §31.2-2's rules for the row;
+  clears `branchDigest` in the same session (§6.11 stale marker).
 - `DELETE /reports/:reportId/visits/:visitNo` — removes the row;
   its clips remain bound (`report, visitNo` exact — §32/§22)
   and stay attached (their visit is still a captured memory);
-  the report row is never deleted by this.
+  the report row is never deleted by this; clears `branchDigest`
+  — at the next derivation point the removed visit's items become
+  `unassignedItems` (edge case 4, §6.10).
 - `PATCH /reports/:reportId` — header fields
   (`supervisorName`, `reportDate`) — the wizard's step-1 save.
 
@@ -5880,15 +6229,31 @@ The gesture exists for BR-08's review-then-accept flow (§5.3,
   §23.4); there is no per-clip stage strip and no per-clip
   transition gate.
 - **Accept report:** `POST /reports/:reportId/accept` — only
-  from `reviewed` (guard from the table); fixes `latest` as the
-  accepted content (BR-08/BR-11); sets `completed`. Returns the
-  ReportDto. 403 on wrong state with the §27.5 semantics
-  ("Report is not ready to be completed").
-- **Correction endpoints** (wired to §35 service):
+  from `reviewed` (guard from the table); when `branchDigest` is
+  null (stale, §6.11/§21.2) it first runs the §6.11 digest
+  derivation (the §34.5 provider chain, generation parameters —
+  §11.3) for the current `latest`; provider exhaustion → 502 with
+  no state change. Gate (§6.11): a fresh digest whose
+  `unassignedItems` is non-empty → 422 with the unassigned item
+  texts (§27.5 semantics) — the UI routes to the Unassigned panel
+  (§54); nothing is dropped silently. Otherwise it fixes `latest`
+  as the accepted content (BR-08/BR-11) and sets `completed`.
+  Returns the ReportDto. 403 on wrong state with the §27.5
+  semantics ("Report is not ready to be completed").
+- **Digest re-derivation retry:** `POST /reports/:reportId/digest`
+  (access, ai tier §27.3) — re-derives a stale or missing
+  `branchDigest` on demand (the corrective path after
+  post-`completed` corrections, which never run an automatic
+  derivation — §6.11); 200 with the fresh digest; 502 on provider
+  exhaustion (+ a §36 assistant note); 409 on a fresh digest
+  (nothing to do).
+- **Correction endpoints** (wired to §35 service); every content
+  write in this list **clears `branchDigest`** in the same session
+  (the stale marker of §6.11/§21.2):
   - `PATCH /reports/:reportId/content` — Mode-1 save: replaces
     `latest` with the client's corrected content (sanitized
     §61); allowed at every status including `completed`
-    (BR-10); never touches `raw` (BR-11).
+    (BR-10); never touches `raw` (BR-11); no model call (§35.8).
   - `POST /reports/:reportId/correct` — Mode-2/3: typed
     instruction OR voice-correction clip (multipart) → the §35
     service rewrites only the relevant part (BR-09) and writes
@@ -5896,7 +6261,8 @@ The gesture exists for BR-08's review-then-accept flow (§5.3,
     flow); returns the corrected content snapshot.
   - `POST /reports/:reportId/content/revert` — single undo:
     copies `raw` → `latest` while they differ (BR-11); 200 con
-    `data: { content: latest }`.
+    `data: { content: latest }`; clears `branchDigest` because
+    the content changed (the accept re-derives, §6.11).
 
 ### 31.7 Two-path lifecycle (BR-16, mirrors §30.5)
 
@@ -5943,7 +6309,8 @@ The gesture exists for BR-08's review-then-accept flow (§5.3,
 | `PUT /reports/:reportId/visits/:visitNo` | access | visit fields | 200 | 404, 422, 403 (archived) |
 | `DELETE /reports/:reportId/visits/:visitNo` | access | — | 200 | 404 |
 | `POST /reports/:reportId/transcriptions/:transcriptionId/accept` | access | — | 200 | 404, 403 (state) |
-| `POST /reports/:reportId/accept` | access | — | 200 ReportDto | 404, 403 |
+| `POST /reports/:reportId/accept` | access (ai tier when a derivation runs, §6.11) | — | 200 ReportDto | 404, 403, 422 (unassigned gate), 502 (derivation) |
+| `POST /reports/:reportId/digest` | access (ai tier §27.3) | — | 200 fresh digest | 404, 409 (already fresh), 502 |
 | `POST /reports/:reportId/generate` | access (ai tier §27.3) | — | 200 generated content | 404, 403 (regen gate), 502 (providers) |
 | `PATCH /reports/:reportId/content` | access | content replaced | 200 `{ content }` | 404, 422 |
 | `POST /reports/:reportId/correct` | access | instruction or multipart clip | 200 corrected snapshot | 404, 502 (providers) |
@@ -6295,8 +6662,10 @@ free-text literals:
 2. **Content blocks:** the capture data — `supervisorName`,
    `reportDate` (Ethiopian date per §6.3 display; stored UTC),
    `branches[]` snapshot names, `visits[]` (branchName + clockIn/
-   clockOut), `language`, and the **reviewed transcription**
-   text (the §23 `latest` — BR-07 source of truth).
+   clockOut), `language`, the **reviewed transcription**
+   text (the §23 `latest` — BR-07 source of truth), and each
+   clip's visit binding (`Audio.visitNo`, §6.10/§21.2) so the
+   itemization of §6.11 can attribute by rule 2.
 3. **Conversation history:** when regeneration needs it, the
    §36 conversation entries projected (`role` `user`/`assistant`
    only, content) bounded per §12.8; absent on first generation.
@@ -6314,11 +6683,16 @@ Every provider call demands structured JSON (Gemini
   [{ "branchName": "string", "activities": ["string"],
   "unresolvedIssues": ["string"], "generalOpinion": "string" }],
   "daySummary": "string", "exitTime": "string",
-  "overallAssessment": "string" } }
+  "overallAssessment": "string" },
+  "branchDigest": { "…": "the §6.11 digest (schemaVersion 1), complete" },
+  "unassignedItems": [ { "text": "string" } ] }
 ```
 
 All keys render in the §6 vocabulary; the field semantics follow
-§6.3 exactly. The service parses the provider response;
+§6.3 exactly; `branchDigest` is the complete §6.11 digest document
+for the day and `unassignedItems` carries every item attributed by
+no §6.10 rule (never silently guessed). The service parses the
+provider response;
 schema-invalid/parse-failed → provider failure per §16.5
 (retry, then fallback — never silent acceptance, SC-1 gate).
 `finish_reason` must be `stop`; anything else is treated as
@@ -6345,7 +6719,9 @@ the audit trail lands with the content (§24, §36).
 
 In one §27.7 session: write `raw`/`latest` (**both** = the
 generated content, BR-11 — `raw` written once, forever
-untouched; `latest` starts equal), set the report status
+untouched; `latest` starts equal), write the `branchDigest`
+field from the same provider round (§6.11 — fresh by
+construction), set the report status
 `transcribed → reviewed` (§31.4 gateway). Response: 200 with
 the ReportDto (`withContent` semantics — content included) and
 `data.content`. Neither `acceptedAt` nor `exportedAt` is ever
@@ -6477,7 +6853,11 @@ correction. `completed` reports accept corrections the same way
 (BR-10). Staging is client-owned (the endpoints accept the full
 target content to write); the server never keeps an unaccepted
 edit beyond the request — no server-side pending-edit store
-(ADR-033).
+(ADR-033). Every content write of the accept→save flow clears the
+stored `branchDigest` in the same session (the §6.11 stale marker —
+this section's correction writes never call the provider for the
+digest; it is re-derived at the next report accept or via the
+manual retry `POST /reports/:reportId/digest`, §31.6).
 
 ### 35.6 Voice-correction instructions (Mode 3)
 
@@ -6504,7 +6884,10 @@ user's correction turn for the audit trail.
 
 ### 35.8 Verification usage
 
-- Grep gates: no AI call in Mode-1 (pure write path); the
+- Grep gates: no AI call in Mode-1 (pure write path); every
+  content write clears `branchDigest` (§6.11 stale marker); the
+  digest is re-derived only at the §31.6 accept and the manual
+  retry endpoint — never inside a correction write; the
   correction service shares the §33 STT entry (no second
   pipeline); `±` unchanged across every service output; no
   server-side staging store; `AI_CORRECTION_*` constants used;
@@ -6764,7 +7147,9 @@ the analytics data owner.
 - **Owned here (normative).** The payload contract (§38.2); the
   KPI computation rules (§38.3); the chart series (§38.4);
   rollup & date semantics (§38.5); states & edge cases (§38.6);
-  verification (§38.7).
+  verification (§38.7); the **item-filter surface** of §6.11 —
+  `GET /analytics/items` reads only stored digests (no model in
+  the loop, §6.11 filtering contract).
 - **Owned elsewhere — deliberately not repeated here.** The
   dashboard UI/KPI card mapping = §49; the report/branch fields
   aggregated = §20/§21; visibility = §3.2.3 (personal, BR-13);
@@ -6795,6 +7180,15 @@ All counts are **personally scoped** (BR-13: `user:
 req.user._id` only); counts exclude archived reports (unless a
 dimension says otherwise — none does).
 
+**Item filters (the §6.11 contract).** `GET /analytics/items`
+(access, global tier) returns digest items across reports with the
+parameters of §6.11's filtering table (`branch`, `group`, `status`,
+`dateFrom`/`dateTo`, `q`, `page`/`limit`; §27.4 envelope with
+`docs/page/limit`). It reads **only stored digests** —
+reports whose `branchDigest` is null (stale) are excluded and
+surface as the §38.6 "pending re-derivation" state; no
+derivation and no model call ever runs inside this endpoint.
+
 ### 38.3 KPI computation rules
 
 - **reportsThisMonth** — reports whose `reportDate` falls in
@@ -6824,9 +7218,10 @@ dimension says otherwise — none does).
   `branches[].name` snapshot (tombstone-safe: the snapshot
   name is aggregated even when the branch row is gone, §17.4);
   top 8 by count.
-- **issuesTrend** — issue-keyword counting over the §6.11
-  vocabulary in `latest` content for each of the last 30 days;
-  when §6.11 is pending the series is `[]` (schema fixed).
+- **issuesTrend** — issue counting over stored digests'
+  `issues[]` (the §6.11 vocabulary) by `reportDate` for each of
+  the last 30 days; reports with a stale digest are excluded
+  (the §38.6 state).
 
 ### 38.5 Rollup & date semantics
 
@@ -6852,6 +7247,14 @@ dimension says otherwise — none does).
 - A tombstoned branch's reports still count in
   statusDistribution/issuesTrend and appear under their
   snapshot name in activityByBranch (§17.4 rule).
+- **Pending re-derivation (the stale-digest state):** a report
+  whose `branchDigest` is null after a content or visits write
+  (§31.5/§31.6) is excluded from item-level results and counted
+  separately in `data.pendingRederivation` (a count, not a
+  list) — the supervisor resolves it via the review accept or
+  the manual retry `POST /reports/:reportId/digest` (§31.6);
+  the state never affects report-level KPIs other than through
+  that explicit count.
 
 ### 38.7 Verification usage
 
@@ -6915,6 +7318,11 @@ endpoint below):
   cost) — searches match report/branch fields only, and the
   §39.3 result for reports carries the matching report; further
   content search is a deferred feature (§4).
+- Digest item text (`branchDigest.*.text`) is **not**
+  text-indexed either: the §6.11 filtering `q` parameter reads
+  directly over the stored digests of the filtered window
+  (bounded per-user, §64 scale, ADR-034 pagination) — never
+  over a content text index, never via a model call (§6.11).
 
 ### 39.3 Endpoint contract
 
@@ -9199,7 +9607,10 @@ are never null in the submitted block.
 
 Upload & recording components of §46.17 (`MuiFileInput` +
 `MuiRecorder`): multiple file upload and device recording,
-**labelled per visit** (clip bindings, §32). The grid
+**labelled per visit** (clip bindings, §32) — **one recording
+tab per visit proved by §6.10's binding model, with no
+global/all tab** (a Type-1 day shows no tab: binding is
+implicit, §6.10). The grid
 mirroring = MuiDataGrid per visit of clips (mirror + file
 inputs icon). Play/re-download/delete of a clip is §32's surface,
 reused (§46.17). **Non-audio files** render the placeholder/
@@ -9456,6 +9867,7 @@ and renders; the server decides and persists (ADR-034).
 | **Voice-correction panel** | `reports/correct-voice/` — the Mode-3 MuiRecorder strip (§46.17) | Mode-2/3 hosts |
 | **Corrected-strip** | `reports/corrected-strip/` — the staged `changed[]` slots rendered read-only with server reasons + Accept / Revert | Modes 2/3 surfaces |
 | **Accept/reject strips** | the §31.6 accept actions — per-clip transcription accept; the report Accept (`reviewed → completed`) | §51/§52 surfaces |
+| **Unassigned panel** | `reports/unassigned-panel/` — the §6.11 rule-4 surface: digest items with `attributionBasis: "unassigned"` (the `unassignedItems[]`) rendered for one-tap branch assignment (moves the item into the branch's list with `user-assigned`) | §51.3, §52.8 (accept-gate routing) |
 
 Each is its own component; **no implementation is duplicated in
 reviewers/editors/wizards/chats** (ADR-033); the same component/
@@ -9475,10 +9887,21 @@ service pair serves every host (the §51.3/§52.7/§52.8 hosts).
   translated client-side.
 - **Staging rule** — a Mode-2/3 correction is **staged, not
   written**: the engine returns the partial content, the
-  Corrected-strip holds it client-side, and `latest` changes only
-  on Accept (§35.5, BR-11). Revert discards the staged copy (or
-  restores `raw` → `latest` while they differ). Staging never
+  client stages it (the Corrected-strip), `latest` is persisted
+  only on Accept (§35.5). **Revert** discards the staged copy or
+  restores `raw` → `latest` while they differ; staging never
   persists client-side (ADR-034).
+- **Item status editing (the §6.11 vocabulary)** — activities
+  and issues render editable `status` chips (`reported` /
+  `in_progress` / `completed`, §6.10) and comments an optional
+  `rating` 0–5; the review surfaces mirror the digest items by
+  `itemId`; edits persist through a Mode-1 save (§31.6 content
+  PATCH clears the digest — §6.11) — never as a separate
+  endpoint.
+- **Clip review-chips (UI state only)** — the transcription
+  review lists mark clips `reported → in_progress → completed`
+  (§6.10) feeding the §31.6 per-clip accept gesture; the chips
+  are session state — never a persisted field (§23.2).
 - **Strict boundary:** a Mode-2/3 correction touches only the
   addressed part (BR-09); whether the result is the official text
   is the server's decision (§35.3, §64) — the client never judges
@@ -9548,6 +9971,12 @@ host state — no persisted mode (ADR-034).
 - A mode surface edits one segment at a time (the §53.6
   `currentEdit`); concurrent writes are the server's concern
   (§27).
+- **Accept-gate routing (§31.6/§6.11)** — when report Accept
+  returns the unassigned-gate 422 (with the unassigned item
+  texts), the surface routes to the Unassigned panel: the
+  supervisor assigns each item to a branch (rule 4, one tap) or
+  edits the content via Modes 1–3, then Accept is retried; the
+  panel never drops an item silently.
 
 ### 54.9 Verification usage
 
@@ -9910,7 +10339,9 @@ report in paper/digital form (export is §3.1.2 F7's surface).
   content surface feeds every client format; the grid selection
   = §46.8/§50.7; the export menu affordance = §51.5; toasts =
   §60; the `±`-resolution and the official-text decision =
-  server-side §35.3/§64.
+  server-side §35.3/§64; branch-aware item filtering of what
+  the §38 item surface exports = the §6.11 filtering contract
+  (exports render report text; the format is unchanged).
 - **Explicitly out of scope §58.** No server-side export logic
   (Google Docs and the content surface = §37), no file storage
   on the client, no new constant (§11 unchanged), no path beyond
@@ -9931,6 +10362,14 @@ report in paper/digital form (export is §3.1.2 F7's surface).
   `latest` content the §37.5 surface returned, `±` tokens
   verbatim (the resolution stays §35.3/§64's), and the §43.6
   DD-MM-YY strings (never Excel numbers).
+- **Naming (OQ-006, closed here by decision; §69).** TXT and
+  XLSX downloads follow the CSV naming rule of §58.4:
+  `reports-YYYY-MM-DD.txt` and `reports-YYYY-MM-DD.xlsx`
+  (current date). The PDF path uses the browser's own
+  Save-as-PDF naming: the print document title is set to the
+  report date during print (§58.3), so the saved PDF inherits
+  that title — no client PDF library exists to force a name
+  (§13.4, ADR-034).
 
 ### 58.3 ReportPrint surface & print contract
 
@@ -9941,6 +10380,9 @@ sanitized (§61) `latest` content of the report with print styling:
   authored it (the official text — no re-layout, no wrapping by
   client logic); a header block with reportDate, supervisor name,
   and the visit summary (branch snapshot names) in print chrome.
+  The print document title is set to the report's DD-MM-YY
+  `reportDate` (OQ-006 naming rule, §58.2), so the browser's
+  Save-as-PDF filename inherits the report date.
 - **How:** `window.print()` over a hidden print container
   (CSS `@media print` styles; the A4 width, margins, the app
   chrome hidden) — the browser's Print/Save as PDF dialog; **no
@@ -9979,7 +10421,8 @@ sanitized (§61) `latest` content of the report with print styling:
   MUI grids beyond the affordance; ± tokens untouched in the print
   surface (no client resolution).
 - Cross-section checks: mirrors §21/§22 (content), §51.5/§50.7
-  (entries), §17.4 (tombstones), §61 (sanitized), §60 (toasts).
+  (entries), §17.4 (tombstones), §61 (sanitized), §60 (toasts),
+  §69 (OQ-006 closed here by decision).
 - §58 introduces no constant (§11 unchanged), no path, no package;
   it references only specification sections.
 
@@ -10089,7 +10532,10 @@ the toast/feedback primitives and the single trigger API, the
 **toast catalogue** (every message string used across the app,
 single-sourced), the empty/error copy conventions (chrome
 English, §7.6), and the error-boundary rule — extended with the
-states protocol every Part D page cites.
+states protocol every Part D page cites. Part E closes with §65
+deployment; delivery follows in Part F (§66 implementation
+phases, §67 risks & mitigation, §68 glossary, §69 open questions
+& assumptions).
 
 - **Owned here (normative).** The states protocol (§60.2); the
   toast components & trigger API (§60.3); the variant model
@@ -10230,3 +10676,1426 @@ not toasts (toasts are for recoverable flows).
   rendered as HTML).
 - §60 introduces no constant (§11 unchanged), no path, and no
   package; it references only specification sections.
+
+---
+
+## 61. Security & Reliability Requirements
+
+### 61.1 Purpose & scope
+
+§61 is the security and reliability home of the whole system: the
+threat-model-driven control map that satisfies SC-7 (§2.4), the
+rich-text HTML sanitization policy (the ADR-038 double gate), the
+data-handling rules that define what never leaves the server, and
+the reliability requirements every consumer section points to. It
+exists because the product persists and renders server-authored
+HTML in several surfaces (§46.16 MuiEditor read-only, §51 details,
+§52 Step 5, §54 correction strips, §55 chat, §58 print).
+
+- **Owned here (normative).** The threat model & controls map
+  (§61.2); the rich-text HTML sanitization policy (§61.3); the
+  sanitizer configuration & validation integration (§61.4); data
+  handling & secret hygiene (§61.5); reliability requirements
+  (§61.6); edge cases (§61.7); verification (§61.8).
+- **Owned elsewhere — deliberately not repeated here.** The fixed
+  middleware chain and rate-limit tiers = §27 (ADR-029/ADR-035);
+  authentication, dual-token session and cookie attributes = §28
+  (ADR-004); field validation = §29; upload allowlists and multer
+  limits = §32; provider credential handling and the backend-only
+  proxy = §16.3; safe logging and the deny list = §9.5 (ADR-019);
+  error shape and user-facing messages = §27.5; the sanitizer
+  runtime (`dompurify`, planned §13.5) and its editor consumer =
+  §46.16/§53; retention/confinement = §62; deployment hardening =
+  §65.
+- **Explicitly out of scope §61.** No new middleware, no new
+  environment variable (§10 unchanged), no new constant (§11
+  unchanged), and no package (only the already-approved planned
+  dependency of §13.5). Backups and disaster recovery stay out of
+  scope per §12.9; their residual risk is registered in §67.
+
+### 61.2 Threat model & controls map
+
+| Threat | Control | Owner |
+|---|---|---|
+| Stored XSS — server-authored HTML rendered in client surfaces | §61.3 double-gate sanitization (sanitize-on-write + sanitize-on-render); `dangerouslySetInnerHTML` only on already-sanitized input; toasts are never HTML | §46.16, §53, §54, §55, §58 |
+| Session hijacking / CSRF | httpOnly + `SameSite` cookies; dual-token JWT with rotation (access 15 min, refresh 7 days); no bearer material in localStorage, Redux, or client logs | §28, §27 (CORS `CLIENT_ORIGIN`, `credentials`) |
+| Operator/query injection | `express-mongo-sanitize` in the fixed chain (ADR-035), applied to every user input before query building; §29 validators as the field-level enforcement gate | §27.2, §29 |
+| Secret exposure | Keys only in `backend/.env` (§10.2); frozen env object (§10.3); backend-only proxy (§16.3); deny-list logging (§9.5); keys never in Vite env, client code, localStorage, Redux, or client logs (SC-7) | §10, §16, §9.5, §26 |
+| Upload-borne attack | Allowlist MIME types and size caps (`AUDIO_ALLOWED_MIME_TYPES`, `AUDIO_MAX_SIZE_BYTES`, `AVATAR_*`, §11.3) enforced by multer before processing; binaries stored as files with metadata-only docs (§22.5); no `filePath` ever reaches the client | §32, §28, §29 |
+| Credential brute force | bcrypt with `BCRYPT_SALT_ROUNDS` (12); the three rate-limit tiers (ADR-029); single-attempt reauth | §28, §27.3 |
+| Provider compromise / forged output | Backend-only proxy (the browser never holds provider credentials); every provider response validated against the §34/§35 schema before storage; "best effort" text never stored | §16, §34, §35 |
+| Information leak via errors | User-facing messages only (§27.5); internals, stack traces and provider names stay server-side (§42.4) | §27, §42 |
+| Infrastructure shadowing | Production static serving never shadows `/api/v1` or the health endpoint | §65.3 |
+
+### 61.3 Rich-text HTML sanitization policy (normative)
+
+Every HTML string that enters or leaves the system passes **both
+gates**; no surface may rely on only one:
+
+1. **Sanitize-on-write (server).** HTML the server persists — the
+   Mode-1 content save (`PATCH /reports/:reportId/content`,
+   §31.6) and any accepted content write — is sanitized with the
+   §61.4 configuration **before** the write, in the same request
+   path as the §29 validation. The server is the last writer of
+   stored content.
+2. **Sanitize-on-render (client).** Every render of stored HTML
+   re-sanitizes with the same §61.4 configuration before it
+   touches the DOM: `MuiEditor` read-only (§46.16), the details
+   body (§51), the generation review surface (§52 Step 5), the
+   correction strips (§54), chat messages (§55.3), and the print
+   surface (§58.3). Double sanitization of the same string is not
+   an error — it is the policy.
+
+- **`dangerouslySetInnerHTML`** is used only on already-sanitized
+  input (ADR-038, §14.4): the sanitize call happens on the value
+  before the prop is passed; no raw-HTML passthrough exists.
+- **Toast bodies are never HTML** (§60) — the catalogue strings of
+  §60.6 are plain text rendered as text.
+- **The §37.5 content surface returns raw text, not HTML** (§37.5),
+  sanitized server-side; the client formats of §58 serialize that
+  text verbatim.
+- **Degradation under both OQ-007 branches** (§21.2, §69): if the
+  `raw`/`latest` slots stay plain text at the editor phase, the
+  gates remain as defense in depth (a format no-op); if the slots
+  become rich-text HTML, the gates are the enforcement. Neither
+  branch changes this policy; the decision lands at the §66 editor
+  phase.
+- **No runtime is assumed before installation:** sections never
+  rely on the sanitizer's runtime behavior until `dompurify` is
+  installed by the §66 editor phase (§13.5); until then, the only
+  rendered content is server-authored text and the no-raw-HTML
+  rule above still holds.
+
+### 61.4 Sanitizer configuration & validation integration
+
+- **Single configuration point.** The allowlist (elements,
+  attributes, CSS properties) matches exactly the ADR-038 editor
+  scope — bold, italic, font size, text color — with no
+  `script`, `style`, event-handler attributes, `iframe`, or
+  embedded media. Server write gate and client render gate consume
+  the same configuration; the configuration lives with its
+  implementer (§46.16/§53) and §61 pins only the normative rule
+  that both gates share it.
+- **Content is preserved.** Amharic/Ethiopic text, the `±`
+  prefix tokens of §64, and plain-text structure pass through the
+  sanitizer unchanged — it strips markup, never content
+  characters. `±` is content vocabulary (§64.5), not markup.
+- **Validation layering.** §29 validators enforce shape and
+  length; the sanitizer enforces markup; both run in the §31.6
+  content write path — validators never trust sanitizer output and
+  the sanitizer never trusts validator input.
+
+### 61.5 Data handling & secret hygiene (what never leaves the server)
+
+- Provider API keys never reach client code, Vite env variables,
+  localStorage, Redux state, or client logs (SC-7, §10.2).
+- Audio binaries: the client receives only the metadata DTO of
+  §22.7 and plays through the §32 authenticated endpoint;
+  `filePath` is server-side-only and never serialized.
+- Transcription and report text never appear in logger calls
+  (§9.5, §26.7); client logs never print cookies or tokens
+  (§42.4).
+- The Google OAuth token (when OQ-004 closes) lives server-side,
+  user-scoped, and never in the browser (§37.4).
+- The refresh token is httpOnly — no JavaScript-visible refresh
+  material exists (ADR-004).
+- No `lng`/`lat` coordinate data exists anywhere (§21.2).
+
+### 61.6 Reliability requirements
+
+- **Provider calls** obey §16.5: `AI_TIMEOUT_MS`-bounded, retried
+  on the 1 s → 2 s → 4 s schedule (`AI_PROVIDER_RETRIES`,
+  `AI_PROVIDER_BACKOFF_BASE_MS`), then fallback (ADR-014). A
+  failed provider never stores "best effort" text (§16.5 accuracy
+  gate). Provider-exhaustion surfaces as 502 with the §60 copy.
+- **Upload failures** are confined before processing: multer
+  limits enforce the §11.3 caps (§32); aborted uploads leave only
+  temp files that the §62 orphan sweep reclaims.
+- **Client resilience:** the §60.8 error boundary and the offline
+  toast (§60) are the client faces of reliability; retries
+  re-run the same §42 call.
+- **Background work is logging-only:** the sweeper (§62) never
+  throws into request paths; its lifecycle is bound to the server
+  (§26.6, ADR-013).
+- **Sessions make writes atomic:** every multi-document write runs
+  in the §27.7 session template (ADR-018); a failure aborts the
+  whole write — the store never holds half-applied state.
+
+### 61.7 Edge cases
+
+- Malicious HTML already present in storage → the render gate
+  strips it before DOM insertion; the surface shows the text
+  content, never a blank page and never an error page.
+- Sanitizer-stripped-to-empty markup → treated as empty content
+  by the §21/§31.6 content rules (never "invisible executing"
+  content).
+- `±`-only or Amharic-only segments → pass through unchanged
+  (§61.4).
+- Oversized markup (huge font-size values) → bounded by the §29
+  content-length validation and the four-action toolbar scope of
+  ADR-038; no URL, no image dimensions, no `style` attributes
+  beyond the allowlist.
+- Content authored before the editor phase (plain text in
+  `raw`/`latest`) → renders through the same surfaces as text;
+  sanitize-on-render is a no-op for plain text.
+
+### 61.8 Verification usage
+
+- Grep gates: `dangerouslySetInnerHTML` appears only in the §46.16
+  sanitized surfaces (MuiEditor and its read-only renderer);
+  exactly one sanitizer configuration consumed by both gates; no
+  HTML construction of toast bodies; no `filePath` in any client
+  DTO; no provider key token in `client/`; no `GOOGLE_*` env
+  reads (§10.4 closed); deny-list terms absent from logger call
+  sites (§9.5).
+- Cross-section checks: mirrors §13.5 (`dompurify` planned),
+  §14.4 (ADR-038 standing), §27 (chain, tiers, error shape),
+  §28 (session), §29 (validators), §32 (uploads), §34/§35
+  (provider paths), §46.16/§53 (editor), §55.3 (chat render),
+  §58 (print), §62 (retention), §69 (OQ-007 branch).
+- §61 introduces no constant (§11 unchanged), no path beyond
+  §15.4/§15.5, and no package (dompurify is the approved planned
+  dependency of §13.5); it references only specification
+  sections.
+
+---
+
+## 62. Sweeper, TTL & Data Retention
+
+### 62.1 Purpose & scope
+
+§62 is the authority for *when and how* data is permanently
+removed (BR-15/BR-16 mechanics): the two-pass in-process sweeper
+(ADR-015), the `ARCHIVED_TTL_SECONDS` retention window, the TTL
+safety net, and the orphan sweep. It exists because the two-path
+lifecycle (§17.4) defers physical removal to this section; every
+DELETE endpoint in §30/§31 only archives (step 1), and removal
+happens here (step 2).
+
+- **Owned here (normative).** The retention window & TTL safety
+  net (§62.2); pass 1 — expired-archive hard delete (§62.3);
+  pass 2 — the orphan sweep (§62.4); ordering, idempotency &
+  race rules (§62.5); seeded fixtures & retention (§62.6);
+  boundaries (§62.7); the edge-case table (§62.8); verification
+  (§62.9).
+- **Owned elsewhere — deliberately not repeated here.** The
+  two-path lifecycle decisions and tombstone rule = §17.4; the
+  per-model `archivedAt` anchors and TTL declarations = §18.3,
+  §20.4, §21.3, §22.4, §23.4, §24.4; archive/restore/delete
+  endpoints = §30.5, §31.7; the sweeper timer lifecycle (start,
+  interval, clear on shutdown) = §26.6; seeded data rules = §25,
+  §40; read-path tombstone handling = §21.7, §17.4.
+- **Explicitly out of scope §62.** Log rotation (owner §9.5/§26,
+  `LOG_RETENTION_DAYS`); backups (§12.9 — residual risk §67);
+  exported artifacts (client exports are ephemeral, §58; Google
+  Docs files live in the user's Drive, §37, and are never
+  touched by the sweeper); user-account removal (none in scope,
+  §19/§28); no new constant (§11.3 already ships
+  `ARCHIVED_TTL_SECONDS` and `SWEEPER_INTERVAL_MS`).
+
+### 62.2 Retention window & TTL safety net
+
+- **Window.** Physical removal begins when `archivedAt` is older
+  than `ARCHIVED_TTL_SECONDS` (2592000 — 30 days, §11.3). The
+  same window applies to both lifecycle-bearing models — Report
+  (§21.3) and Branch (§20.4). Audio, Transcription and
+  Conversation documents have **no windows of their own**: they
+  live and die with their parent report (§17.4).
+- **Safety net.** Exactly two TTL indexes exist — Report and
+  Branch, each on `archivedAt` with `expireAfterSeconds`
+  `ARCHIVED_TTL_SECONDS` (§18.3). The index fires only when the
+  sweeper missed a deadline; it runs server-side without cascade
+  or session, so its dependents are left for the orphan sweep
+  (§18.3, §62.4). No other TTL index exists on any model.
+- **The sweeper wins races:** it deletes the parent inside a
+  transaction first, so the TTL index never fires for that
+  document (§12.2).
+
+### 62.3 Pass 1 — expired-archive hard delete
+
+The sweeper's primary pass (`jobs/`, §15.4; interval
+`SWEEPER_INTERVAL_MS`, started after the server is listening,
+§26.6) removes every expired-archived parent:
+
+- **Report removal.** For each expired `isArchived` report: one
+  session-transaction (§27.7) deletes the report row and
+  cascades its Audio documents, Transcription rows, and the
+  ChatConversation row; audio binaries are unlinked **after**
+  commit (`fs.unlink`; §31.7 order). Unlink failures are logged
+  and retried by pass 2.
+- **Branch removal.** For each expired archived branch: one
+  session-transaction deletes the branch row. Report history is
+  never touched — the embedded snapshot survives (BR-14) and
+  `branches[].branch` refs become tombstones (null joins,
+  §17.4/§21.7); the orphan sweep never deletes a report because
+  its branch is gone.
+- **Consumption rules.** Removal is per-parent in its own
+  session; the run never removes a row whose window has not
+  elapsed, and never removes active (non-archived) rows.
+- **Restore-after-deadline.** A row whose window has elapsed but
+  which the sweeper has not yet reached: restore returns 409
+  with the window message (§30.5/§31.7 semantics); the row is
+  removed on the next run. The user can no longer rescue it —
+  this is the retention contract (BR-15).
+
+### 62.4 Pass 2 — the orphan sweep
+
+- **Failed-unlink retry.** Audio documents whose binary unlink
+  failed in pass 1 (or in the §32 controller cleanup) and whose
+  parent is gone: retry the unlink, then delete the document.
+- **Sweeper-race orphans.** Dependents (Audio docs, Transcription
+  rows, Conversation rows) whose parent no longer exists — the
+  TTL index fired before the sweeper, or a manual removal path
+  left them: remove them without touching anything whose parent
+  still exists.
+- **Multer temp leaks.** Files left in the §32 temp area by
+  failed/aborted uploads that never became Audio documents:
+  unlink (bounded by the §32 temp convention).
+- **Guard rails.** The orphan sweep never deletes a report (or
+  any live parent) — it only cleans dependents and files; every
+  action is logged (§9.5) and nothing throws into request paths
+  (§61.6).
+
+### 62.5 Ordering, idempotency & race rules
+
+- **Order within a run:** pass 1 (parents) before pass 2
+  (dependents), each parent committed before the next; pass 2
+  then sees true orphans.
+- **Double-delete:** the second request targeting an already-
+  swept row → 404 with BR-13 semantics; the UI toasts the §60
+  copy and refreshes.
+- **Restore/delete racing the sweeper:** restore before the
+  deadline always wins; after the deadline the 409 of §62.3
+  applies; delete-after-sweep → 404 (same handling).
+- **Idempotency:** a run over a clean store is a no-op — log
+  lines only, no error path.
+- **Crash mid-run:** removals are per-document session-based; a
+  crash leaves completed removals committed, and the interrupted
+  parent is retried on the next run (its window is still
+  elapsed).
+- **Conflict with concurrent writes:** a report being edited
+  while its window elapses is still removed — retention is
+  deadline-based, not activity-based; the UI's open views
+  resolve through the existing 404 behavior (§51/§50).
+
+### 62.6 Seeded fixtures & retention
+
+Seeded archived rows (§25/§40 fixtures — e.g. the archived
+branch and any archived report fixtures) enter the same window
+as production rows and are swept normally once expired; there is
+no fixture exemption from retention. The §40 wipe contract
+remains the deterministic reset for the development loop (wipe
+removes the caller's mock rows immediately, §40.2); this
+explicitly closes the §40.7 cross-check on sweeper leftovers.
+
+### 62.7 Boundaries
+
+- No log-file deletion — log rotation is §9.5/§26's
+  (`LOG_RETENTION_DAYS`).
+- No backups — §12.9; the two-path lifecycle plus tombstones is
+  the only deletion safety mechanism; the no-backups residual
+  risk is registered in §67.
+- No exported artifacts — client exports produce no server
+  files (§58); Google Docs documents live in the user's Drive
+  (§37).
+- No notifications — the sweeper is silent by design; the UI
+  learns about removal through normal 404 handling (§60.7).
+- No user-account removal — no account deletion exists (§19,
+  §28).
+
+### 62.8 Edge-case table
+
+| Case | Behavior |
+|---|---|
+| Restore after deadline, before the sweep | 409 with the window message; removal on the next run (§62.3) |
+| TTL fires before the sweeper | Pass 2 removes the dependents on the next run (§62.4) |
+| Branch swept, reports still reference it | Tombstone joins; reads use the snapshot name; never an error (§17.4) |
+| Binary missing at removal | The doc is still removed with its parent; the missing file is logged, not retried |
+| Unlink permission failure | Logged; retried on the next run (§62.4); bounded by §9.5 |
+| Run overlapping an upload | Temp files are reclaimed by the multer-temp rule (§62.4); the upload controller owns its final move (§32) |
+| Window elapsed during an edit | Retention is deadline-based; removal proceeds (concurrency rule, §62.5) |
+
+### 62.9 Verification usage
+
+- Grep gates: exactly two TTL declarations in the codebase
+  (Report, Branch — `expireAfterSeconds` = `ARCHIVED_TTL_SECONDS`);
+  no `deletedAt` anywhere; the sweeper uses only
+  `SWEEPER_INTERVAL_MS` and `ARCHIVED_TTL_SECONDS` (no magic
+  durations); no hard delete outside the sweeper (`DELETE`
+  endpoints archive only, §30.5/§31.7); pass-2 matching follows
+  the §32 temp conventions.
+- Cross-section checks: mirrors §11.3, §12.2, §17.4, §18.3,
+  §20.4, §21.3, §22.4, §23.4, §24.4, §26.6, §30.5, §31.7,
+  §40.7 (now closed), §60 (404 copy).
+- §62 introduces no constant (§11 unchanged), no path beyond
+  §15.4 (`jobs/`), and no package; it references only
+  specification sections.
+
+---
+
+## 63. Testing & Verification Strategy
+
+### 63.1 Purpose & scope
+
+§63 is the enforcement map for §2.6 Definition of Done and the
+success gates of §2.4 (SC-6/SC-7): it replaces automated test
+suites — a locked exclusion (§4.3, §2.5) — with a manual,
+gate-based verification strategy, and gives every phase of §66
+its run points. Verified behavior is the product of the gates
+below, not of a test harness.
+
+- **Owned here (normative).** The gate taxonomy (§63.2); build &
+  syntax gates (§63.3); the global grep-gate inventory (§63.4);
+  cross-section owner-mirror checks (§63.5); the manual
+  acceptance matrix (§63.6); SC-8 metric discipline (§63.7);
+  verification (§63.8).
+- **Owned elsewhere — deliberately not repeated here.** The
+  build/lint commands and hygiene checklist = §9.7; the DoD
+  items = §2.6; SC-6/SC-7 gates = §2.4; per-section grep gates
+  live in each section's Verification usage (referenced at
+  §63.4); phase run points = §66.
+- **Explicitly out of scope §63.** No automated test framework
+  and no CI infrastructure (deployment ops = §65); no invented
+  quantitative targets (SC-8, §63.7); no new constant (§11
+  unchanged), no path beyond §15, no package.
+
+### 63.2 Gate taxonomy
+
+| Gate | What it proves | When |
+|---|---|---|
+| Build & syntax gates (§63.3) | The code compiles and passes lint | Every change (§9.7) and phase-gate (§66) |
+| Global grep-gate inventory (§63.4) | The spec-conventions are structurally enforced | Phase gates P5/P7/P8 (§66) |
+| Cross-section owner-mirror checks (§63.5) | A change's sections and their mirrors stay in sync | Same-change review (§9.7, §15.7) |
+| Standalone claims | A section introduces only what its Verification usage claims | Every authored section |
+| Manual acceptance matrix (§63.6) | SC-1…SC-5 behaviors with real artifacts | Named §66 phase gates |
+
+### 63.3 Build & syntax gates
+
+- `node --check` on every backend file (§9.7).
+- `npx vite build` on the client with 0 errors; delete `dist/*`
+  after the check always (§9.7).
+- `npx eslint src/` passes (§9.7).
+- Lockfiles stay in sync with the manifests after any install
+  (§13.7 rule 2); manifest changes land with their owning phase
+  (§13.5/§66).
+
+### 63.4 Global grep-gate inventory (normative)
+
+The consolidated gate set every phase gate re-runs; the owning
+section is the rule's authority:
+
+| Gate | Rule | Owner |
+|---|---|---|
+| Logger | No `console.log` in the backend — Winston only | §9.5, ADR-019 |
+| Status codes | No numeric HTTP codes — semantic `httpStatus.js` names only | §11.6, §9.7 |
+| Magic values | No literals outside §10/§11 frozen objects | §11.2, §10.3 |
+| Key doctrine | No `.id` property access; primary keys are `_id` | §9.3, §9.7 |
+| Paths to the client | No `filePath` in any client DTO | §22.7, §32 |
+| Non-existent fields | No `saveMode`, `half-day`, `lng`, `lat` anywhere | §9.3, §21.2, §52 |
+| Transition authority | Exactly one status transition-guard table | §31.4 |
+| Editor surface | The only editor implementation is `MuiEditor` (§46.16) | §53, §14.4 |
+| ± discipline | No client-side `±`-resolution; tokens verbatim | §53.3, §58, §64 |
+| Toast API | Only `showToast` triggers the toast surface | §60.3 |
+| Network layer | `fetch`/`axios` appear only in `features/apiSlice.js` | §42.7 |
+| Mock gating | No mock registration outside the §40.5 guard | §40.5 |
+| Sweeper timing | Only `SWEEPER_INTERVAL_MS`/`ARCHIVED_TTL_SECONDS` | §62 |
+| TTL count | Exactly two TTL indexes (Report, Branch) | §18.3, §62 |
+| Secret hygiene | No provider keys in `client/`; deny-list terms absent from log sites | §9.5, §61.8 |
+
+### 63.5 Cross-section owner-mirror checks
+
+Every section's Verification usage mirrors the sections it
+consumes (§11 constants, §13 packages, §15 paths, §10 env). A
+change is reviewed against the mirrors of the sections it
+touches: an endpoint change re-checks its §30–§39 owner and every
+§49–§59 consumer; a schema change re-checks §19–§24 and the
+§30/§31 contracts; a constants change re-checks §11's `Used by`
+column (§11.1). Same-change discipline binds these pairs (§15.7,
+§13.7, §14.5) — a mirror update lands in the same commit as its
+source.
+
+### 63.6 Manual acceptance matrix (SC-1 … SC-5)
+
+| Success criterion | Manual check | Run point (per §66) |
+|---|---|---|
+| SC-1 — transcription accuracy | Real Amharic audio walk through the §52 wizard: chunk-attach → transcribe → review; re-transcription available and working (§33) | P7 backend validation; DoD item 4 (§2.6) |
+| SC-2 — format & tone match | Generated output compared against the §6.8 samples (structure + tone, Type-1 and Type-2) | P7, then P8 regression |
+| SC-3 — surgical corrections | Mode-1/2/3 correction on one section; the §35 diff verification leaves unrelated sections byte-identical | P7 (service), P8 (UI) |
+| SC-4 — full loop, both types | End-to-end record → transcribe → review → generate → correct → accept → export for a Type-1 day and a Type-2 day (§6.4) | P7 |
+| SC-5 — five-format export | PDF (print), TXT, CSV, XLSX reproduce the report content; Google Docs shows the ENABLED-flag stub behavior (§37.3) or the live document | P8 |
+| SC-6/SC-7 — engineering & security gates | The §63.3/§63.4 gates pass; key locations verified | Every phase gate, full sweep at P5/P8 |
+
+### 63.7 SC-8 metric discipline
+
+This specification asserts no numeric performance or accuracy
+targets that the requirements did not supply; the only invoked
+bounds are the requirement-derived constants of §10/§11 (timings,
+sizes, tiers) and the retention window of §62. Any future
+quantitative success metric (accuracy percentage, latency target,
+throughput figure) is **registered in §69 first** and adopted only
+after registration (SC-8, §2.4; §69.2 mechanics).
+
+### 63.8 Verification usage
+
+- This section *is* the gate taxonomy: the §66 phase gates run
+  §63.3/§63.4/§63.6 at their named points; the §9.7 hygiene
+  checklist re-applies per change.
+- Grep gates: no test-framework package in either manifest
+  (§13.3/§13.4 remain test-free); the §63.4 table is the only
+  consolidated inventory (per-section gates stay with their
+  sections).
+- §63 introduces no constant (§11 unchanged), no path, and no
+  package; it references only specification sections.
+
+### 63.9 Specification-integrity audit (the standalone gate)
+
+This document is the **single source of truth**: it must remain
+fully readable and implementable with no supporting planning
+material beside it. A read-only audit verifies that, and the exit
+freeze after any pruning of working notes re-runs it. Six checks:
+
+1. **C1 — Internal links closed.** Every `§N` citation has a
+   matching heading; `§N.M` sub-citations resolve to authored
+   subsections. Zero unresolved, zero pending.
+2. **C2 — No work-note leaks.** The body contains no name or path
+   of any planning note, no repository-relative path, and no
+   document-format suffix; only the sanctioned source-of-truth
+   lines (the manifest transcripts of §13, the `httpStatus.js`
+   naming rule) may carry such tokens.
+3. **C3 — TOC injected.** The TOC placeholder marker is gone and a
+   real link list exists.
+4. **C4 — No reserved anchors.** No "reserved anchor" bullet
+   remains: every anchor promised by an earlier pass is now an
+   authored subsection (§6.10, §6.11).
+5. **C5 — No external dependence.** No paragraph or decision
+   references material that lives outside this document; pruned
+   working notes leave no dangling pointer.
+6. **C6 — Sign-off.** All of the above hold with zero pending at a
+   single run ⇒ the single-source-of-truth milestone; subsequent
+   changes to this document keep the audit green (run at every
+   §66 phase gate).
+
+The audit is exercised through the tooling kept with the planning
+notes (read-only; it never modifies this document) and through the
+grep sweeps of §63.4.
+
+---
+
+## 64. Performance & Scale (+ official-± resolution)
+
+### 64.1 Purpose & scope
+
+§64 carries the two cross-cutting mandates §12.1 assigns it: the
+**performance & scale posture** (how the system stays bounded
+without invented benchmarks) and the **`±`-token vocabulary of
+the official format** with the **official-format resolution
+decision boundary** (who resolves `±`, where, and when).
+
+- **Owned here (normative).** Performance posture (§64.2); the
+  bounded resource rules (§64.3); concurrency posture (§64.4);
+  the `±`-token vocabulary (§64.5); the resolution decision
+  boundary (§64.6); edge cases (§64.7); verification (§64.8).
+- **Owned elsewhere — deliberately not repeated here.** The
+  skeleton labels the vocabulary anchors to = §6.3; the
+  correction engine's `±` behavior = §35.3; the export-time
+  resolution implementation = §37.3; the §37.5 content surface
+  and the client formats = §37.5/§58; the editor display rule =
+  §53.3; the constants home = §11.
+- **Explicitly out of scope §64.** No streaming or realtime
+  transport (locked §12.2-3; D2 re-admission = new §66 phase);
+  no quantitative performance targets (SC-8 — bounds only);
+  no new constant beyond the single §11.3 token prefix added by
+  this pass; no path, no package.
+
+### 64.2 Performance posture
+
+The system is **synchronous request/response end-to-end**: clip
+capture → upload → server-side processing → response. There is
+no streaming transcription, no server-pushed state, no
+WebSocket/SSE today (D2, §12.2-3). Performance is governed by
+**bounds, not benchmarks**: every resource-consuming operation is
+capped by a §11/§10 constant or a rate tier, and SC-8 forbids
+inventing numeric targets. Scale is handled by the same bounds —
+a single supervisor's data volume is bounded by the constants
+below by construction.
+
+### 64.3 Bounded resource rules
+
+| Bound | Value (home) | Effect |
+|---|---|---|
+| Clip duration cap | `AUDIO_MAX_DURATION_SEC` = 900 (§11.3) | No unbounded recordings |
+| Clip size cap | `AUDIO_MAX_SIZE_BYTES` = 52428800 (§11.3) | Upload memory/storage bounded at multer |
+| STT chunk cap | `ADDIS_AI_STT_MAX_DURATION_SEC` = 60 (§11.3) | Chunked transcription keeps provider calls bounded (§33) |
+| AI call timeout | `AI_TIMEOUT_MS` (default 30000, §10.4) | Requests never hang unbounded |
+| AI retries | `AI_PROVIDER_RETRIES` = 3 at 1→2→4 s (§11.3) | Bounded retry window per §16.5 |
+| Rate tiers | global 15 min/100 · auth 15 min/20 · AI 1 min/10 (§11.3, §27) | The app-level guard before provider quotas |
+| Pagination | default 10, max 100, server-side (ADR-034, §11.3) | Lists never grow unbounded on the client |
+| Route loading | lazy per route (ADR-025, §41) | No monolithic initial bundle |
+| Retention | `ARCHIVED_TTL_SECONDS` = 2592000 (§62) | Storage stays bounded over time |
+
+### 64.4 Concurrency posture
+
+- Every write runs in the §27.7 session template (ADR-018) —
+  no torn multi-document writes under concurrent requests.
+- Reauth is single-attempt and concurrent-safe: one refresh in
+  flight, queued requests resume on it (§42.3).
+- No queues or worker pools; the only background work is the
+  single in-process sweeper timer (§62, §12.5).
+- The AI tier (1 min/10) is the primary guard against provider
+  429 storms; provider-issued limits are honored secondarily
+  with `Retry-After` (§16.5).
+- The client never aggregates full datasets — every list and
+  chart is server-driven (ADR-034, §38, §50).
+
+### 64.5 `±`-token vocabulary (normative)
+
+The `±` prefix (§35.3) marks **official/entitled text the user
+must not freely alias**: the fixed structural labels of the
+official report format. The vocabulary is:
+
+| Token (prefixed `±`) | Official text it maps to | Home |
+|---|---|---|
+| `±ቀን` | Date line of the format | §6.3 field 1 |
+| `±ብራንች` | Branch line (Type-1/Type-2 join) | §6.3 field 2 |
+| `±ስም` | Supervisor name line | §6.3 field 3 |
+| `±ስራ የገባሁበት ሰዓት` | Work-start / per-branch time-range lines | §6.3 field 4 |
+| `±የተሰሩ ስራዎች` | Completed-activities heading | §6.3 field 5 |
+| `±መፍትሄ የሚፈሉ ጉዳዮች` | Issues-heading | §6.3 field 6 |
+| `±አጠቃላይ አስተያየት` | General-opinion heading | §6.3 field 7 |
+| `±ከስራ የወጣሁበት ሰዓት` | Work-exit line | §6.3 field 8 |
+
+- The token prefix is a constant: `OFFICIAL_TOKEN_PREFIX` =
+  `'±'` (§11.3, added in the same change as this section).
+- **Vocabulary growth rule.** The set above is exhaustive. A new
+  token is added only by amending §6.3 (the label owner) and
+  this table in the same change, under the §14.5 discipline;
+  nothing else may mint tokens.
+
+### 64.6 Official-format resolution decision boundary
+
+- **The server resolves — the client never does.** `±` tokens
+  are resolved **by the backend, at export time, in the exported
+  artifact only, and only in the Google Docs path** (§37.3):
+  the service replaces each token with the official text of
+  §64.5 in the document it creates. Resolution is **format-only**
+  — stored content is never rewritten (BR-17: language
+  unchanged); no resolution is ever persisted (no `exportedAt`
+  or resolved-content field exists, §21.2).
+- **Everything else keeps tokens verbatim.** The §37.5 content
+  surface returns them as-is; the client formats of §58
+  (print/TXT/XLSX/CSV) serialize them as-is; the editor and
+  read-only surfaces render them as-is with the "leave this
+  token untouched" guidance (§53.3); the correction engine never
+  resolves, strips, or translates them and never deletes a `±`
+  block silently (§35.3).
+- **The decision boundary is single-sourced in this section.**
+  Sections reference §64 for "the official-format decision" and
+  implement the parts owned above — they never restate it.
+
+### 64.7 Edge cases
+
+- A `±` token whose field content is blank resolves to the empty
+  value (the label with a blank line) — never to fabricated
+  text (BR-19).
+- A token outside the §64.5 vocabulary (e.g. legacy content):
+  passes through verbatim everywhere — resolution never guesses
+  an expansion.
+- Tokens adjacent to punctuation or line breaks: the vocabulary
+  maps the label text; surrounding formatting is preserved by
+  the exporting surface (§37.3/§58).
+- A corrected report whose instruction addressed a `±` block:
+  handled by §35.3's explicit-naming rule — the boundary above
+  is unaffected.
+
+### 64.8 Verification usage
+
+- Grep gates: no `±` construction or resolution call anywhere in
+  `client/`; the server-side resolution exists only in the
+  §37.3 export path; the vocabulary table of §64.5 and the §6.3
+  label table are updated together (same-change); no stored
+  content transformation outside §37.3.
+- Cross-section checks: mirrors §6.3 (labels), §11.3
+  (`OFFICIAL_TOKEN_PREFIX`), §35.3 (correction protocol), §37.3
+  (resolution implementation), §37.5/§58 (verbatim surfaces),
+  §53.3 (display rule), BR-17/BR-19 (§5), SC-8 (no invented
+  targets).
+- §64 introduces exactly one constant (`OFFICIAL_TOKEN_PREFIX`
+  in §11.3, same change), no path, and no package; it references
+  only specification sections.
+
+---
+
+## 65. Deployment
+
+### 65.1 Purpose & scope
+
+§65 is the production deployment contract: the single-process
+topology, static serving with the SPA fallback, the production
+environment, runtime operations, the Node LTS binding, the
+release cadence, and the scope lines whose unknowns land in §67
+and §69. It exists because §12.10 names the runtime topology and
+§13.2 delegates the runtime binding to deployment.
+
+- **Owned here (normative).** Production topology (§65.2);
+  static serving & SPA fallback (§65.3); production environment
+  (§65.4); runtime operations (§65.5); Node LTS binding (§65.6);
+  deployment checklist & release cadence (§65.7); scope lines &
+  residual risks (§65.8); verification (§65.9).
+- **Owned elsewhere — deliberately not repeated here.** The
+  runtime architecture and ops overview = §12.9/§12.10;
+  environments and the env contract = §10 (frozen `env` object,
+  fail-fast); boot/health/shutdown = §26; sessions and cookies =
+  §28; mock gating = §40.5; the sweeper = §62; build/lint gates
+  = §9.7/§63.
+- **Explicitly out of scope §65.** No containers, no CDN, no
+  orchestration (locked §12.2; platform scope §3.1.4); no
+  staging environment until OQ-003 closes (§69); no backups
+  (§12.9 — residual risk §67); no new constant (§11 unchanged),
+  no path beyond §15, no package.
+
+### 65.2 Production topology
+
+One Express process serves the whole product:
+
+- **API:** every `/api/v1` route module of §30–§39, mounted by
+  the §26.5 registry, with the fixed middleware chain (§27) and
+  the `GET /api/v1/health` endpoint (§26.6).
+- **Client:** the built static bundle (`client/dist`, §9.7 build
+  — Vite output) served by the same Express process (§12.10,
+  §13.2). There is no separate static host.
+- **Database:** MongoDB is external to both (Atlas/local per
+  `MONGO_URI`, §10.4, §12.3); the backend connects with
+  fail-fast at boot (§26.6).
+- No reverse-proxy-dependent wiring: the deployment is a single
+  origin; the client's production API base is the same-origin
+  `/api/v1` (§10.5 note).
+
+### 65.3 Static serving & SPA fallback
+
+- Production (`NODE_ENV=production`) enables static serving of
+  the built client with the SPA fallback (unknown non-API paths
+  serve the client entry, §41 routing).
+- **The fallback never shadows `/api/v1`** — API paths resolve
+  through the §26.5 mount before any static/fallback handling;
+  the health endpoint is equally protected (§26.6, §61.2).
+- Static assets carry immutable caching where the build
+  fingerprints them; `index.html` is never fingerprinted and is
+  served fresh (standard Vite behavior).
+
+### 65.4 Production environment
+
+- The required variables of §10.4 are present and validated
+  (fail-fast at boot — no partial startup).
+- `NODE_ENV=production` flips cookie security: `Secure` cookies
+  on the §28 session pair (development allows http://localhost,
+  §10.5/§28).
+- Mock routes are not mounted in production (the §40.5 guard is
+  asserted at boot; the route module mounts only under
+  `NODE_ENV=development`).
+- `EXPORT_DOCS_ENABLED` stays `false` until OQ-004 closes
+  (§11.3, §37.3) — production ships the stub behavior.
+
+### 65.5 Runtime operations
+
+- **Health:** `GET /api/v1/health` → 200 `{ success, message,
+  data: { status, uptime } }` — unauthenticated, no database
+  touch, excluded from rate-limit tiers (§26.6).
+- **Shutdown:** the ADR-013 protocol on `SIGINT`/`SIGTERM` —
+  stop accepting connections, clear the sweeper timer (§26.6,
+  §62), close MongoDB, flush the logger, exit 0 (§26.6).
+- **Logs:** rotation at `LOG_RETENTION_DAYS` (30, §9.5/§26);
+  the deny list of §9.5 is active in production logging.
+
+### 65.6 Node LTS binding
+
+Deployment binds the runtime: the process runs on the **current
+installed LTS of the environment** (§13.2 — neither manifest
+pins a Node version). Upgrades to the LTS line are environment
+maintenance; the repo never pins a Node version.
+
+### 65.7 Deployment checklist & release cadence
+
+- Feature branches per §9.8 (`phase-N-description`); `main` is
+  the only deployable branch.
+- Per-release checklist: §9.7 build gates pass (vite build 0
+  errors, node --check, lint); the §63 gate sweep runs at the
+  P8 phase gate (§66); required env present; health check
+  returns `up`; one smoke walk of SC-4 and SC-5 (§63.6).
+- Cadence is event-driven (a §66 phase completes and clears its
+  review gate), not scheduled.
+
+### 65.8 Scope lines & residual risks
+
+- **OQ-003 blocks production sign-off** (§69): the deployment
+  target (host, domain, production MongoDB) is open; until it
+  closes, §65 is satisfied by the topology contract here, and
+  the §66 P8 deployment work runs against the development
+  environment only. Staging appears only if OQ-003 decides so.
+- **No backups** (§12.9): the two-path lifecycle and tombstones
+  (§17.4) are the only deletion safety; the data-loss exposure
+  is registered as a residual risk in §67 common-risk register.
+- **Google Docs export** ships in stub mode until OQ-004 closes
+  (§37.3) — a known, flagged gap (SC-5 partial).
+
+### 65.9 Verification usage
+
+- Grep gates: the SPA fallback matches only non-API paths (the
+  `/api/v1` mount precedes it); one origin serves both API and
+  statics; no mock route registration outside the §40.5 guard;
+  `Secure` cookie attribute gated on `NODE_ENV=production`
+  (§28).
+- Cross-section checks: mirrors §12.9/§12.10 (topology),
+  §10.4/§10.5 (env), §13.2 (Node LTS, processes), §26.5/§26.6
+  (registry, health, shutdown), §28 (cookies), §40.5 (mock
+  guard), §62 (sweeper on shutdown), §69 (OQ-003/OQ-004).
+- §65 introduces no constant (§11 unchanged), no path, and no
+  package; it references only specification sections.
+
+**End of Part E (cross-cutting).** Sections 60–65 close the
+cross-cutting specification in dependency order: universal UX
+(§60), security & reliability (§61), retention mechanics (§62),
+verification (§63), performance & official-± resolution (§64),
+and deployment (§65); delivery follows in Part F (§66–§69).
+
+---
+
+## Part F — Delivery
+
+## 66. Implementation Phases
+
+### 66.1 Purpose & scope
+
+§66 is the execution plan of the whole specification (ADR-027:
+eight phases; ADR-028: feature branches): which sections are
+built when, which dependencies are installed with which phase,
+which decisions land at which gate, and — through §66.10 — how
+the frontend is verified before any backend exists. It exists
+because §4.2's re-admission conditions (§4.5) and the §13.5
+planned dependencies both name phases in this section; §66 is
+their single home.
+
+- **Owned here (normative).** The phase protocol (§66.2); the
+  phase working files (§66.3); the frontend-task practice
+  (§66.4); the protocol chain (§66.5); same-change discipline
+  (§66.6); the D1–D5 re-admission contract (§66.7); the
+  uninstalled-behavior gate (§66.8); the eight phases (§66.9);
+  the client-side dev mock adapter (§66.10); verification
+  (§66.11).
+- **Owned elsewhere — deliberately not repeated here.** The
+  git protocol's six steps = §9.8 (consumed, never restated);
+  success/engineering gates = §2.4 SC-6/SC-7; DoD = §2.6;
+  planned dependencies and their entrance gates = §13.5; the
+  standing editor replacement path = §14.4; the open-question
+  mechanics = §69.
+- **Explicitly out of scope §66.** No new package beyond the
+  §13.5 plan (conditional NVIDIA helper at P7 per §16.4 — never
+  proactive); no new constant (§11 unchanged); no path beyond
+  §15; no automated tests (§4.3 — gates replace suites).
+
+### 66.2 Phase protocol
+
+Every phase follows the §9.8 six steps, in order:
+
+1. **Pre-Git:** check status; create the feature branch
+   (`phase-N-description`, ADR-028).
+2. **Deep codebase analysis** of everything the phase touches.
+3. **Analysis of all prior phases** (their commits and their
+   working-files records, §66.3).
+4. **Phase execution and validation:** the phase's task list
+   (the tables of §66.9) is executed as sub-tasks, each closing
+   with its listed validation.
+5. **User review and explicit approval:** a hard gate — Step 6
+   never runs without it. The reviewer is shown a diff summary
+   and the phase's exit-gate results.
+6. **Post-git:** stage, commit (`feat: phase N description`),
+   push, merge, delete the branch (§9.8).
+
+Commit message format and the no-amend rule: §9.8. A phase is
+done when its tasks, its exit gates, and the step-5 approval all
+hold — not when the code "looks finished".
+
+### 66.3 Phase working files
+
+Each phase maintains a small set of **working files** that travel
+with the work across sessions: the **task plan** (the §66.9 task
+list with per-task status), the **findings log** (everything
+learned about the codebase and its history while executing), and
+the **progress record** (what was done, what is next, what
+blocked). They exist so that work survives context loss and
+each new session starts from the record, not from memory. They
+are updated continuously — a phase begins by reading them and
+ends by updating them. They are **process artifacts**: never
+imported by runtime code, and never named or located by any
+section of this specification.
+
+### 66.4 Frontend-task practice
+
+Every frontend task (P2–P5, P8) follows the standing design
+practice: the UI is built **deliberate and distinctive** — the
+Ethiopic content typography of §43 first, then spacing, color
+and form decisions that carry the product's identity; templated
+default looks are not acceptable as a finish. A task is complete
+only when the surface reads intentional: type scale, hierarchy,
+and the shared chrome of §44/§47 applied, with every page
+enumerating the §60 states.
+
+### 66.5 The protocol chain
+
+Execution order within every sub-task: the standing operating
+instructions → this specification as the **sole behavioral
+input** → logical reasoning → implementation. Nothing outside
+the specification and the standing instructions decides
+behavior; a conflict between them and an implementation habit is
+resolved toward the specification, and a genuine gap becomes a
+§69 registration — never local prose.
+
+### 66.6 Same-change discipline
+
+A task that changes a shared source of truth changes its mirrors
+in **the same commit**: the §15.4/§15.5 tree with the sections
+that name files (§15.7); the §13.3–§13.5 manifests with installs
+and removals (§13.7); the §14.3 ADR index with owner-section
+amendments (§14.5); the schema-era sections with model changes
+(§18.9); the §11 constants with their consumers (§11.7). The
+§63.5 owner-mirror checks are the review instrument.
+
+### 66.7 Deferred-feature re-admission (D1–D5, §4.2)
+
+A re-admission follows §4.5: the item is removed from §4.2, a
+phase is added to §66.9 with the §4.2 re-admission conditions as
+its tasks, the §4.3/§13.6 exclusions it touches are amended by
+decision, and the move is recorded in the §69.4 register with
+date and amendment citation. The rows below are the carrying
+records; the conditions stay in §4.2:
+
+| Feature | Re-admission conditions (from §4.2) | Costs it would add |
+|---|---|---|
+| D1 TTS | User request with concrete use case; new phase in §66; audio-output dependency added to §13 | new phase, §13 change |
+| D2 Realtime | New phase in §66; streaming component in §12/§33; performance targets in §64 | new phase, §12/§33/§64 changes |
+| D3 Native apps | New phase in §66; separate client (§41) and store deployment; §13 change | new phase, §41/§13 changes |
+| D4 RBAC | New phase in §66; user model (§19) and auth (§28) redesign; ADR-036 reversal | new phase, §19/§28/§14 changes |
+| D5 Translation | New phase in §66; translation provider design (§16) and language policy (§7) | new phase, §16/§7 changes |
+
+### 66.8 Uninstalled-behavior gate
+
+Until a §13.5 planned dependency is installed by its phase, no
+code and no section may assume its runtime behavior (§13.5). In
+particular, before the P4 editor phase: there is no rich-text
+editing surface (content renders as text; `MuiEditor` is not
+mounted), and the sanitizer (§61) is defense-in-depth only
+(§61.3). The gate expires at the install; the install lands with
+its owning phase in the same commit (§13.7, §66.6).
+
+### 66.9 The eight phases
+
+Each phase row lists its **owning sections** (built or consumed
+in this phase), its **install & amend entries** (matching §13.5
+entrance gates and §66.6 discipline), and its **exit gate**
+(run at step 4, evidenced at step 5).
+
+**P1 — Foundations & configuration.**
+
+| Task | Sub-tasks | Owning sections |
+|---|---|---|
+| Repo standing | Verify the §15 trees match tracked files; clean untracked build artifacts; confirm manifests match §13.3/§13.4 | §15, §13 |
+| Environment | `.env` contract per §10; fail-fast boot prototype (§26.2) | §10, §26 |
+| Constants | `constants.js` + `httpStatus.js` skeletons per §11 with all §11 tables transcribed | §11 |
+| Phase records | Initialize the §66.3 working files | §66.3 |
+
+Install & amend: none (both manifests already hold the §13.3/
+§13.4 base). Exit gate: §9.7 hygiene pass; §15 tree ↔ git diff
+matches; env read only via the frozen `env` object.
+
+**P2 — Design system & theme.**
+
+| Task | Sub-tasks | Owning sections |
+|---|---|---|
+| Theme tokens | §43 palette/type/surfaces; Ethiopic content face; §44 overrides | §43, §44 |
+| Responsive system | §45 breakpoints and motion | §45 |
+| Component belt | The §46.1–§46.17 reusable components (belt first, pages later) | §46 |
+| Favicon | Content decision + asset | §43, §15.5 |
+
+Install & amend: `@fontsource/noto-serif-ethiopic` (theme phase,
+§13.5); amend §13.4 and §15.5 in the same commit. Exit gate:
+build 0 errors; MUI-only styling greps (§63.4); §46 component
+states enumerate §60.
+
+**P3 — Frontend foundation & network.**
+
+| Task | Sub-tasks | Owning sections |
+|---|---|---|
+| Entry & routing | App shell, routes and lazy loading (ADR-025); guards §41.5 | §41, §47 |
+| Network layer | `apiSlice` descriptor, reauth chain, envelope unwrap (§42) | §42 |
+| Auth pages | Landing/Login/Register against the §28 contract | §48 |
+| Mock adapter | The §66.10 adapter wired at the §42 boundary | §66.10, §40 |
+
+Install & amend: none (the adapter is a plain module, §66.10).
+Exit gate: auth flows, guards and §42.3/§42.4 rules verified
+against the adapter with §40 fixtures.
+
+**P4 — Frontend feature pages.**
+
+| Task | Sub-tasks | Owning sections |
+|---|---|---|
+| Dashboard | KPIs/charts/latest per §49 | §49, §38 contract |
+| Reports list & details | §50 grid, §51 details incl. editor read-only surface | §50, §51 |
+| Wizard | §52 steps 1–5 incl. recorder and review | §52, §53 |
+| Correction & chat | §54 Modes 1–3, §55 conversation UI | §54, §55 |
+| Branches, profile, exports, search | §56, §57, §58 (print/TXT/XLSX/CSV), §59 | §56–§59 |
+| Editor install | `MuiEditor` (TipTap + dompurify) + toolbar per ADR-038 | §46.16, §53, §14.4 |
+
+Decision point: **OQ-007** lands here (editor phase, §69): the
+`raw`/`latest` storage format (plain text vs rich-text HTML) is
+decided and the §21.2 slots, §61.3 policy and §46.16 contract
+are finalized in the same change. Install & amend:
+`@tiptap/react` + `dompurify` (§13.5 editor phase); amend §13.4,
+§15.5, and the OQ-007 row in §69 in the same commit. Exit gate:
+every page enumerates the four §60 states; §63.4 grep gates;
+SC-5 partial (client formats vs fixtures; Google Docs stays
+stub, §37.3).
+
+**P5 — Frontend integration readiness & hardening.**
+
+| Task | Sub-tasks | Owning sections |
+|---|---|---|
+| Readiness sweep | Full §63.3/§63.4 gate run; every page walked through loading/empty/error/success with fixtures | §63, §60 |
+| Manual walks | §63.6 SC-1…SC-5 fixture-driven pre-backend walks (SC-1 final only at P7) | §63.6 |
+| Hardening | §61 client-side rules (sanitize-on-render where stored HTML exists), §64 no-client-± greps | §61, §64 |
+
+Install & amend: none. Exit gate: step-5 review — the frontend
+is declared **integration-ready**: every §42 contract has a
+working consumer against the adapter, and no backend code exists
+yet.
+
+**P6 — Backend foundation & domain APIs.**
+
+| Task | Sub-tasks | Owning sections |
+|---|---|---|
+| Foundation | §26 boot/logger/health/shutdown; §27 chain, tiers, envelope, sessions | §26, §27 |
+| Models | §19–§24 with §18 conventions, indexes, TTL declarations | §19–§24, §18 |
+| Identity | §28 auth, sessions, OAuth stub; §29 validators | §28, §29 |
+| Domain APIs | §30 branches; §31 reports & status machine; §32 uploads; §33 STT; §34 generation; §35 correction; §36 chat | §30–§36 |
+| Aggregations | §37 exports (content surface + docs stub), §38 analytics, §39 search | §37–§39 |
+| Seeding | §40 mock seed/wipe endpoints | §40 |
+
+Install & amend: none planned (backend manifest is final per
+§13.3; the NVIDIA helper is P7-conditional, §16.4). §15.4 tree
+amendments land same-commit (§66.6). Exit gate: `node --check`
+passes; seed/wipe deterministic (§40.6); one transition-guard
+table (§31.4); session template on every write (§27.7).
+
+**P7 — Backend integration & transport.**
+
+| Task | Sub-tasks | Owning sections |
+|---|---|---|
+| Real transport | Client switches to the real API through §42; the §66.10 adapter is **deleted** | §42 |
+| Transport helper | Evaluate the §16.4 condition; install the NVIDIA multipart helper **only if** it holds — never proactively | §16.4, §13.5 |
+| Retention live | §62 sweeper validated: archive → window → sweep; TTL safety net; orphan pass | §62 |
+| Manual acceptance | §63.6 SC-1 real-Amharic walk; SC-3 surgical check; SC-4 full loop both types | §63.6 |
+
+Install & amend: conditional helper per §16.4 (amend §13.3 in
+the same commit if installed). Exit gate: SC-1/SC-3/SC-4 pass;
+mock-adapter grep gate clean (§66.10).
+
+**P8 — Deployment & hardening.**
+
+| Task | Sub-tasks | Owning sections |
+|---|---|---|
+| Deployment | §65 contract executed (production sign-off waits on OQ-003; dev-env deployment otherwise) | §65, §69 |
+| Security re-sweep | §61 hardening walk: XSS double-gate, secret hygiene, deny-list logging | §61 |
+| Retention soak | Sweeper across development cycles; §62.8 edge cases exercised | §62 |
+| Full gates | §63.6 full matrix incl. SC-5 five-format export; DoD items 1–4 | §63, §2.6 |
+
+Install & amend: none beyond the approved plan. Exit gate: DoD
+§2.6 complete; §63.4 full sweep; step-5 review closes the phase.
+
+### 66.10 Client-side dev mock adapter
+
+Before P7 there is no backend; the frontend is still verified
+end-to-end through a **client-side development mock adapter**:
+
+- A plain client module (no new package, §42 base untouched)
+  implementing the **§42 query contracts** over **§40 fixture
+  data** (§25 copy, report/branch DTO shapes, envelope and
+  pagination surfaces) — it mirrors the DTO transforms of
+  §17/§27 exactly, so page code cannot tell the adapter from the
+  real API.
+- **Boundaries the adapter keeps honest:** multipart uploads
+  resolve with fabricated success; generation, correction,
+  transcription and chat resolve with canned fixture responses
+  per §40/§25 — the pages and their §60 states are exercised,
+  while accuracy claims are explicitly deferred to P7 (SC-1).
+- **Gating:** the adapter is wired at the §42 boundary under a
+  dev-only condition; it never exists in a production build.
+- **Deletion gate (P7):** the adapter is removed when the real
+  transport lands; a grep gate (its module absent from the
+  client tree) closes the record. The adapter is a phase
+  artifact — it never becomes a runtime feature.
+
+### 66.11 Verification usage
+
+- Grep gates: no §66 phase table references a package outside
+  §13.5; the adapter module is absent after P7; no mock
+  behavior reachable in production builds; branch names and
+  commit messages follow §9.8.
+- Cross-section checks: mirrors §4.2/§4.5 (re-admission),
+  §9.8 (six steps), §13.5/§13.7 (planned installs), §14.4
+  (ADR-038 standing), §16.4 (conditional helper), §63 (gates at
+  run points), §69 (OQ-003/OQ-007 decision points).
+- §66 introduces no constant (§11 unchanged), no path beyond
+  §15, and no package; it references only specification
+  sections.
+
+---
+
+## 67. Risks & Mitigation
+
+### 67.1 Purpose & scope
+
+§67 is the qualitative risk register of the product: the risks
+that could harm correctness, availability, or the user's work,
+with the specification controls that already mitigate them and
+the residual exposure that remains. It exists so that mitigations
+are *owned by sections* (not by habits), and so that accepted
+residuals are visible decisions rather than accidents.
+
+- **Owned here (normative).** The risk register (§67.2); the
+  standing mitigations (§67.3); the risk-response discipline
+  (§67.4); verification (§67.5).
+- **Owned elsewhere — deliberately not repeated here.** The
+  controls cited in the register live in their owning sections
+  (e.g. §16.5 timeouts, §61 sanitization, §62 retention) and are
+  referenced, never restated; the open questions whose closure
+  changes risk (OQ-003/OQ-004) = §69.
+- **Explicitly out of scope §67.** No numeric probability/impact
+  scoring (SC-8 — qualitative only); no new control text (every
+  control is already normative in its section); no new constant
+  (§11 unchanged), no path, no package.
+
+### 67.2 Risk register
+
+| ID | Risk | Existing controls (owner) | Residual | Risk owner |
+|---|---|---|---|---|
+| R-1 | AI provider outage or drift (paid-model drift) | Fallback chain ADR-014 (§16.6); retry schedule §16.5; schema gates §34/§35 | AI actions unavailable until a provider returns; manual report authoring | §34 |
+| R-2 | Provider API contract drift (endpoint/schema changes) | Structured-output contracts §16.4; response validation §34/§35; adapters isolated | Re-point/version-pin at deploy (§16.8); brief breakage | §16 |
+| R-3 | STT chunk failure | Per-chunk failure marking; fuse of succeeded chunks (§33/§16.5) | Partial transcription → re-record or re-transcription (§33) | §33 |
+| R-4 | Provider rate-quota storms (429) | App AI tier primary guard (§27.3); `Retry-After` honor (§16.5) | Transient 502s with §60 copy; retry affordance | §27 |
+| R-5 | Session-token theft on a shared device | httpOnly + `SameSite`; dual-token rotation (ADR-004, §28) | Logged-off sessions; re-login | §28 |
+| R-6 | Reauth loops on expiry | Single-refresh rule; fail-through on the refresh call (§42.3) | Silent redirect to login (§42.3) | §42 |
+| R-7 | Orphaned files / disk growth | Orphan sweep §62.4; upload caps §32 | Disk contention until next sweep (≤ interval) | §62 |
+| R-8 | Permanent deletion after the retention window | 409 restore-window semantics (§62.3); two-path lifecycle §17.4 | Deletion is contractually permanent (BR-15) | §62 |
+| R-9 | Corrupt or missing audio binary | Documented mock behavior; play 404 + toast (§32, §60) | Recording lost; re-record | §32 |
+| R-10 | Aborted uploads | Multer limits §32; temp reclaim §62.4 | Temp bytes until reclaimed | §32 |
+| R-11 | Offline connectivity | Offline toast (§60); retry re-runs the same §42 call | Work paused until connected | §60 |
+| R-12 | Editor-choice reversal (TipTap/DOMPurify) | Standing replacement path (§14.4, §13.7) | Migration cost at the editor phase | §46 |
+| R-13 | Rich-content XSS | Double gate §61.3/§61.4; no raw HTML (§46.16, §55.3) | Residual surface minimized; defense-in-depth | §61 |
+| R-14 | MongoDB outage | Fail-fast boot (§26.6); health endpoint (§65.5) | Complete unavailability during the outage | §26 |
+| R-15 | Concurrent-write conflicts | Session template (§27.7); conflict surfacing as 422/409 + §60 toast (§31.8) | One action loses; user retries | §18 |
+| R-16 | Unbounded list growth | Server-side pagination (ADR-034); caps §11.3 | Deeper pages beyond max limits unavailable | §27 |
+| R-17 | Data loss without backups | Two-path lifecycle + tombstones (§17.4); no-backups scope (§12.9) | **Accepted exposure:** permanent loss on infrastructure failure | §12.9 |
+| R-18 | Node LTS EOL in the environment | LTS binding (§13.2/§65.6) | Upgrade lag on the host | §65 |
+| R-19 | Deployment unknowns (OQ-003) | Topology contract §65; dev-env P8 execution | Production not deployed until closure | §69 |
+| R-20 | Google OAuth open (OQ-004) | Stub + `EXPORT_DOCS_ENABLED` flag (§37.3, §28.6) | Google Docs unavailable; SC-5 partial | §37 |
+| R-21 | Export fidelity (BR-18) | Verbatim serialization; DD-MM-YY strings §58 | Browser print variations (A4/paper) | §58 |
+
+### 67.3 Standing mitigations
+
+- **Provider dependency is the top external risk**: mitigated
+  by the fallback chain (ADR-014), never by storing "best
+  effort" text (§16.5 accuracy gate).
+- **The user's work never silently disappears**: every delete is
+  a two-phase lifecycle (§17.4); the only permanent path is the
+  retention window's expiry (§62) and the accepted no-backups
+  residual (R-17).
+- **State never tears**: every multi-document write is a session
+  (ADR-018); the client surfaces conflicts, never overwrites
+  them (§31.8).
+- **The register is read at every phase gate** (§66): a phase
+  whose sections touch an R-row re-validates the control at that
+  phase's exit gate (§63).
+
+### 67.4 Risk-response discipline
+
+- No quantitative scoring (SC-8); a risk whose mitigation needs
+  a number registers the metric in §69 first (§63.7).
+- A risk with **no decided control** becomes an open question in
+  §69 — never silent prose here.
+- Register changes (new rows, dropped controls) follow the
+  §14.5 amendment discipline: the owning section changes first,
+  this table is updated in the same change.
+
+### 67.5 Verification usage
+
+- Grep gates: every register control citation resolves to an
+  authored subsection; no numeric likelihood/impact anywhere in
+  §67; §69 carries any undecided control.
+- Cross-section checks: mirrors §16.5/§16.6 (R-1…R-4), §28
+  (R-5), §42 (R-6), §62 (R-7/R-8), §32 (R-9/R-10), §61 (R-13),
+  §12.9 (R-17), §69 (R-19/R-20).
+- §67 introduces no constant (§11 unchanged), no path, and no
+  package; it references only specification sections.
+
+---
+
+## 68. Glossary
+
+### 68.1 Purpose & scope
+
+§68 is the exhaustive single-source term table of this
+specification: every domain, format, lifecycle, pipeline,
+frontend and administrative term used across §1–§67, in one
+place, with its normative home. It exists so that any reader —
+and any author of a later amendment — resolves a term's meaning
+once and cites it uniformly.
+
+- **Owned here (normative).** The glossary rules (§68.2); the
+  term table (§68.3); administrative keys (§68.4); verification
+  (§68.5).
+- **Owned elsewhere — deliberately not repeated here.** Full
+  normative definitions live in the cited homes; §68 carries
+  one-line meanings only and never restates rules.
+- **Explicitly out of scope §68.** No constants (§11 unchanged),
+  no path, no package; no new terminology is minted here.
+
+### 68.2 Glossary rules
+
+1. **Defined once.** A term appears once in §68.3; a later
+   section uses the term and references the table when it needs
+   to disambiguate — it never redefines.
+2. **Additions by amendment only.** A new term enters this table
+   in the same change that introduces it into the specification
+   (§66.6 same-change discipline); §68 never precedes its
+   terms.
+3. **The home cites, not defines.** Meaning disputes resolve to
+   the cited normative section, not to the table's one-liner.
+
+### 68.3 Term table
+
+| Term | One-line meaning | Home |
+|---|---|---|
+| Report | The day's supervision record (the product's core artifact) | §1, §21 |
+| Type-1 / Type-2 | Single-branch day / multi-visit day | §6.4 |
+| Visit | One branch visit block with `clockIn`/`clockOut`; sequential `visitNo` within the report | §21.2 |
+| Clip | One recorded audio segment bound to (`reportId`, `visitNo`) | §22, §32 |
+| Branch snapshot | `Branch.name` copied into the report at capture time | §21.2 |
+| `raw` / `latest` | First-generation content / the single current-content slot | §21.2, BR-11 |
+| Single undo | Revert `latest` to `raw` while they differ | §31.6 |
+| Transcription | Per-audio STT output row | §23 |
+| Re-transcription | Re-run STT for a clip with accept/revert | §23.4, §33 |
+| `±` token | `OFFICIAL_TOKEN_PREFIX`-marked official text | §64.5, §11.3 |
+| Official-format resolution | Server-side, export-time, artifact-only token replacement | §64.6, §37.3 |
+| `±`-display rule | Client renders tokens verbatim with "leave untouched" guidance | §53.3 |
+| Report date | The §6-format date, never the system clock | BR-01 |
+| DD-MM-YY / HH:mm | Ethiopian date / 24-hour zero-padded display conventions | §6.5, §43.6 |
+| Transliteration | English/technical words spelled in Ethiopic script | §7.2 |
+| Chrome vs content | English UI shell strings vs Amharic report content | §7.6 |
+| Fallback chain | Addis AI → Gemini → NVIDIA for generation | ADR-014, §16.6 |
+| Status machine | The five-step forward machine with explicit rewind rows | BR-06, §31.4 |
+| `REPORT_STATUSES` | draft → audio_attached → transcribed → reviewed → completed | §11.4 |
+| Archive / restore | Soft two-phase lifecycle step 1 | BR-16, §31.7 |
+| Hard delete | Sweeper pass-1 permanent removal | §62.3 |
+| Retention window | `ARCHIVED_TTL_SECONDS` = 2592000 (30 days) | §62.2, §11.3 |
+| TTL safety net | The two `expireAfterSeconds` indexes (Report, Branch) | §18.3, §62.2 |
+| Sweeper wins races | Parent-deleted-first ordering over the TTL index | §62.2 |
+| Orphan sweep | Sweeper pass 2: unlink retries, race orphans, temp reclaim | §62.4 |
+| Tombstone | Null `branch` ref after branch removal; snapshot-name reads | §17.4 |
+| Seeded fixtures | The §40 deterministic mock set, incl. the persona `ቤዛ አያሌው` | §40.3, §25.3 |
+| Metadata-only audio | Mock audio rows with no physical files | ADR-037, §40.6 |
+| Model registration | `(provider, model, reasoning)` from the locked registries | §11.4, §16.2 |
+| Chunking | 60-second wavSplitter segmentation of STT clips | ADR-007, §33 |
+| Reauth | The single-refresh-attempt client chain | §42.3 |
+| Session transaction | The §27.7 session write template | ADR-018 |
+| Dual-token JWT | httpOnly access/refresh pair with rotation | ADR-004, §28 |
+| Rate tiers | Global/auth/AI limiting windows | ADR-029, §27.3 |
+| Envelope | `{ success, message, data }` response wrapper | §5, §27.4 |
+| DTO transform | The response mapping layer | §17, §27 |
+| Server-side pagination | `docs`-surface list paging; client never aggregates | ADR-034 |
+| States protocol | loading/empty/error/success per surface | ADR-033, §60.2 |
+| `showToast` | The single toast trigger API | §60.3 |
+| Error boundary | The App-level render fallback | §60.8 |
+| `MuiEditor` | The single rich-text editor + read-only renderer | §46.16 |
+| AppShell | The shared layout chrome | §47 |
+| Wizard steps 1–5 | The creation flow steps | §52 |
+| Modes 1–3 | Content-save / typed-instruction / voice-instruction correction | §54 |
+| Surgical correction | Only addressed sections change (diff-verified) | BR-09, SC-3, §35.3 |
+| Accept → save flow | Staged corrections persist only on Accept | §35.5 |
+| Mock adapter | Client-side dev module implementing §42 contracts over §40 fixtures | §66.10 |
+| SPA fallback | Production static fallback that never shadows the API | §65.3 |
+| Health endpoint | `GET /api/v1/health`, unauthenticated, no DB touch | §26.6 |
+| Sanitize-on-write / on-render | The §61.3 double gate | §61.3 |
+| Mock-data seeding | The §25-rules-driven dev dataset | ADR-037, §40 |
+
+### 68.4 Administrative keys
+
+| Key | Meaning | Home |
+|---|---|---|
+| BR-xx | Business rule (numbered BR-01 … BR-19) | §5 |
+| ADR-xxx | Architectural decision record (ADR-001 … ADR-038) | §14 |
+| OQ-xxx | Open question (registry) | §69 |
+| D1–D5 | Deferred features (re-admissible) | §4.2 |
+| A1–A6 | Assumptions (registered) | §3.4, §69.3 |
+| SC-x / G-x / F-x | Success criteria / goals / feature list | §2.4 / §2.3 / §3.1.2 |
+| `TODO(open)` | In-code marker for an open-question point | §69.1 |
+
+### 68.5 Verification usage
+
+- Grep gates: no term in §68.3 has a second definition line
+  anywhere in the specification (the table is the only
+  one-liner set); terms used in §66 phase tables resolve to
+  rows here.
+- Cross-section checks: mirrors §6.3 (labels), §21.2 (slots),
+  §62 (sweeper rows), §64 (tokens), §66.10 (adapter) — a row
+  whose home changes is updated in the same change (§68.2).
+- §68 introduces no constant (§11 unchanged), no path, and no
+  package; it references only specification sections.
+
+---
+
+## 69. Open Questions & Assumptions (registry)
+
+### 69.1 Purpose, scope & mechanics
+
+§69 is the **single registry** of every open question and
+assumption in this specification — the only place a question is
+registered and the only place a closure is recorded (§4.5, §7
+content rules: no prose invention outside this registry).
+
+- **Owned here (normative).** The mechanics (§69.1); the open
+  questions register (§69.2); the assumptions register (§69.3);
+  the D1–D5 re-admission records (§69.4); verification (§69.5).
+- **Owned elsewhere — deliberately not repeated here.** The
+  assumption home remains §3.4 (this index mirrors it); the
+  deferred-feature home remains §4.2; stub/official texts
+  (OQ-004) live with their sections (§28.6) and are referenced.
+- **Mechanics.**
+  1. **Registry-only.** An open question is expressed only as an
+     OQ row here; a section that needs an open behavior marks
+     its point with a `TODO(open)` code comment referencing the
+     OQ number and otherwise writes no outcome.
+  2. **Closure record.** Closure is by owner decision (or by a
+     §4.2/§14.5 amendment when it touches a decision or a
+     deferred feature); the record carries the closure date and
+     the citation of the deciding amendment (§21.7 books the
+     pattern).
+  3. **Open → deferred.** A question that becomes a deferred
+     feature moves to §4.2 with a record here (§4.5).
+  4. **SC-8 metrics.** A new quantitative metric registers here
+     before any section adopts it (§2.4 SC-8, §63.7).
+  5. **Non-blocking by default.** Only OQ rows marked *blocking*
+     in §69.2 gate a phase or a section's finalization.
+- **Explicitly out of scope §69.** No new constant (§11
+  unchanged), no path, no package; §69 never decides a question
+  itself — it records decisions taken in the owning sections.
+
+### 69.2 Open Questions register
+
+| OQ | Status | Question | Owning sections | Blocks |
+|---|---|---|---|---|
+| OQ-001 | **CLOSED** (2026-08-09) | Where do generated content and version history live? | §21 | — |
+| OQ-002 | **CLOSED** (2026-08-11) | Required vs optional `clockIn`/`clockOut` at model level | §21.2, §31 | — |
+| OQ-003 | **OPEN** | Deployment target: host, domain, production MongoDB | §65, §12.10 | §65 production sign-off (P8 deployment, §66) |
+| OQ-004 | **OPEN** | Google OAuth: real integration vs stub | §28, §37 | Google Docs export; SC-5 partial (§37.3) |
+| OQ-005 | **CLOSED** (2026-08-10) | Exact dashboard KPI set & charts | §49 | — |
+| OQ-006 | **CLOSED** (2026-08-11) | Export file naming convention | §58 | — |
+| OQ-007 | **OPEN** | `raw`/`latest` storage format: plain text vs rich-text HTML | §21.2, §46.16, §53, §61 | The §66 P4 (editor) decision point |
+
+Records (closed):
+
+- **OQ-001 — CLOSED 2026-08-09.** Decided by the ADR-005
+  retirement amendment (§14.3/§14.5): no version chain. Content
+  lives on the report row as `raw`/`latest` with single undo
+  (BR-11, §21.2/§21.5).
+- **OQ-002 — CLOSED 2026-08-11.** Decided by amendment, recorded
+  at §21.7: every visit carries a required `clockIn`/`clockOut`
+  pair (day-clock rule: a Type-1 visit pair is the day pair,
+  auto-set by the wizard; §6.3 field 4, §31.2-2).
+- **OQ-005 — CLOSED 2026-08-10.** Decided at §49.3: the four
+  KPI cards (Reports this month, In progress, Completed,
+  Active branches) over the §38 payload; anything absent renders
+  no caption.
+- **OQ-006 — CLOSED 2026-08-11.** Decided by this pass's §58
+  amendment: TXT/XLSX adopt the CSV naming pattern
+  (`reports-YYYY-MM-DD.*`); the PDF path inherits the print
+  document title (set to the report date during print, §58.3).
+  No other section changes; the §58.6 cross-check mirrors here.
+
+Records (open):
+
+- **OQ-003 — OPEN.** Deployment target unknowns (host, domain,
+  production MongoDB). Until closure: §65 stands as the topology
+  contract, P8 runs against the development environment, and
+  production sign-off stays blocked (a *blocking* row). Closure
+  path: an owner decision recorded here with the §65.9
+  verification updated in the same change.
+- **OQ-004 — OPEN.** Google OAuth real vs stub. Until closure:
+  the stub of §28.6 governs ("Google sign-in is not available in
+  this version"), `EXPORT_DOCS_ENABLED` stays `false` (§11.3),
+  and the Google Docs menu item shows the "coming soon" state
+  (§37.3/§37.6). Closure path: ADR-024 amendment + §28/§37
+  rewrites in the same change (§14.5), then `EXPORT_DOCS_ENABLED`
+  flips.
+- **OQ-007 — OPEN.** Storage format of `raw`/`latest` (plain
+  text vs rich-text HTML). Both slots stay plain `String`
+  (§21.2) until the decision lands; the decision point is the
+  §66 P4 editor phase, owned by the ADR-038 cohort
+  (§46.16/§53/§54/§61); the §61.3 sanitization policy holds on
+  both branches. Closure: recorded here with the §21.2 slots and
+  §46.16 contract finalized in the same change.
+
+### 69.3 Assumptions register
+
+The operative index of the §3.4 boundaries table (its rows are
+the home; this table is the operational form — kept in sync by
+the same change that touches §3.4):
+
+| # | Assumption (index form) |
+|---|---|
+| A1 | One web app — client + backend, no satellite tools |
+| A2 | One person per account; no shared accounts |
+| A3 | Branch and record scope = the registering user (§3.2.3) |
+| A4 | A report is per date (format date, not the clock); multi-clip days allowed (BR-01/BR-02) |
+| A5 | Both format types supported: Type-1 single branch, Type-2 multi-visit with per-branch ranges |
+| A6 | Amharic first-class; English/technical terms transliterated; UI stays English (§1.7/§7) |
+
+**Extension rule.** A new assumption is written in §3.4 first and
+mirrored here in the same change; §69 never invents an
+assumption that §3.4 does not state.
+
+### 69.4 D1–D5 re-admission records
+
+Re-admission mechanics live in §4.5/§66.7; this register carries
+the records:
+
+| Feature | Status | Re-admission record |
+|---|---|---|
+| D1 TTS | Deferred (§4.2) | None to date |
+| D2 Realtime | Deferred (§4.2) | None to date |
+| D3 Native apps | Deferred (§4.2) | None to date |
+| D4 RBAC | Deferred (§4.2; ADR-036 governs) | None to date |
+| D5 Translation | Deferred (§4.2) | None to date |
+
+A re-admission appends date + amendment citation to the row,
+removes the item from §4.2, and adds the phase to §66.9 in the
+same change; an open question that closes into a deferred
+feature books its move here instead (§4.5, §69.1 rule 3).
+
+### 69.5 Verification usage
+
+- Grep gates: every `TODO(open)` in code/tests resolves to a
+  §69.2 OQ number; no unresolved question is argued in prose
+  without a row; closure records carry date + amendment
+  citation; §3.4 and §69.3 mirror each other; no numeric metric
+  in any section without a §69 registration (SC-8).
+- Cross-section checks: mirrors §2.4 (SC-8), §4.2/§4.5 (D rows),
+  §14.3/§14.5 (ADR statuses cited by closure records), §21.2/
+  §21.7 (OQ-001/002/007), §28.6 (OQ-004 stub), §37.3 (OQ-004
+  flag), §49.3 (OQ-005), §58 (OQ-006), §61.3 (OQ-007 branch),
+  §66.9 (OQ-003 blocking, OQ-007 decision point).
+- §69 introduces no constant (§11 unchanged), no path, and no
+  package; it references only specification sections.
+
+**End of specification.** Sections 1–69 are complete: product
+(§1–§8), standards (§9–§11), architecture (§12–§17), data
+(§18–§25), backend (§26–§40), frontend (§41–§60), cross-cutting
+(§61–§65), and delivery (§66–§69), in the dependency order of
+§12.1 and the §66 phase plan.
