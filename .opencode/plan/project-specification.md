@@ -1557,13 +1557,17 @@ manifests) is §13; the ADR record that backs these conventions is §14.
 - **Route parameters** follow `<resource>Id`: the singular resource
   name suffixed with `Id` — a bare `:id` is never used (`:reportId`,
   `:branchId`, `:conversationId`, `:transcriptionId`, `:audioId`,
-  `:userId`).
+  `:userId`). Embedded-row route segments follow the row's key name
+  instead of `<resource>Id` — the segment names an embedded row, not
+  a resource: `/reports/:reportId/visits/:visitNo/...` (§21.2).
 - **Document reference fields** use the plain model name — no suffix:
   `user`, `branch`, `report`, `audio`, `transcription`,
   `conversation` (`branches[].branch` in a report's embedded
   snapshot, §20). `Id`-suffixed names are reserved for route
   parameters only (§12.11-1); document fields never carry the `Id`
-  suffix.
+  suffix. Embedded row keys are plain row keys too — never
+  `Id`-suffixed (`visits[].visitNo`): a row key is a sequential
+  number within its parent, not a durable identifier.
 - **AI selection fields** are `provider`, `model`, `reasoning`
   (§16.2) — the per-request/message triple carries plain names, same
   no-suffix doctrine; provider-native wire keys (`thinkingLevel`,
@@ -1838,12 +1842,19 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `PAGINATION_MAX_LIMIT`            | 100                                          | §30                         |
 | `ADDIS_AI_STT_MAX_DURATION_SEC`   | 60                                           | §33                         |
 | `BCRYPT_SALT_ROUNDS`              | 12                                           | §28                         |
+| `AVATAR_MAX_SIZE_BYTES`           | 5242880 (5 MB)                               | §28, §29                    |
+| `AVATAR_ALLOWED_MIME_TYPES`       | `['image/jpeg', 'image/png', 'image/webp']`  | §28, §29                    |
 | `ACCESS_TOKEN_TTL_MIN`            | 15                                           | §28                         |
 | `REFRESH_TOKEN_TTL_DAYS`          | 7                                            | §28                         |
 | `AI_TEMPERATURE`                  | 0.2                                          | §34                         |
 | `AI_MAX_OUTPUT_TOKENS`            | 2048                                         | §34                         |
 | `AI_TOP_P`                        | 0.9                                          | §34                         |
 | `AI_TOP_K`                        | 40                                           | §34                         |
+| `AI_CORRECTION_MAX_OUTPUT_TOKENS` | 2048                                         | §35                         |
+| `AI_CORRECTION_TEMPERATURE`       | 0.15                                         | §35                         |
+| `AI_CONVERSATION_HISTORY_MAX_ENTRIES` | 20                                        | §34, §36                   |
+| `CHAT_MESSAGE_MAX_LENGTH`         | 4000                                         | §36                         |
+| `EXPORT_DOCS_ENABLED`             | `false`                                      | §37                         |
 | `AI_CORRECTION_MAX_OUTPUT_TOKENS` | 2048                                         | §35                         |
 | `AI_CORRECTION_TEMPERATURE`       | 0.15                                         | §35                         |
 | `AI_PROVIDER_RETRIES`             | 3                                            | §16                         |
@@ -2243,7 +2254,7 @@ referenced.
 
 | # | Decision                                                                                           | Applied in                                             |
 | - | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 1 | Route parameters use the `<resource>Id` form (`:reportId`, `:branchId`, `:transcriptionId`, `:conversationId`); a bare `:id` is never used | §9.3; route definitions (§30–§39, §49–§54) |
+| 1 | Route parameters use the `<resource>Id` form (`:reportId`, `:branchId`, `:transcriptionId`, `:conversationId`, `:visitNo` for a report's embedded visit rows); a bare `:id` is never used | §9.3; route definitions (§30–§39, §49–§54) |
 | 2 | Backend errors (including 422) are surfaced through **toasts**; `setError` is never used for server errors | §9.6, §12.4, §12.6, §42, §60 |
 | 3 | Every document's primary key is **`_id`**; code never uses `id` (`report._id`, never `report.id`) | §9.3, §12.6, §41–§42 |
 | 4 | Environment lookup chain: live process environment → pre-defined `.env` → `backend/.env` and `client/.env` → default → fail-fast (required) | §10.2–§10.4, §12.10 |
@@ -3374,7 +3385,7 @@ the authoritative edge list):
 | User — Branch | 1 — N | `user` on Branch | §3.2.3, §20 |
 | User — Report | 1 — N | `user` on Report | §3.2.3, §21 |
 | Branch — Report | N — M via snapshot | `branches[].branch` + snapshot `name` | §20, BR-14 |
-| Report — Audio | 1 — N clips | `{ report, visitId }` on Audio (exact keys) | BR-01/BR-02, §22 |
+| Report — Audio | 1 — N clips | `{ report, visitNo }` on Audio (exact keys) | BR-01/BR-02, §22 |
 | Audio — Transcription | 1 — 1 | transcription ref | §22, §23, §33 |
 | Report — ChatConversation | 1 — N | conversation refs | §24, §36 |
 
@@ -3388,10 +3399,10 @@ filters and pickers while the branch exists), `name` is the immutable
 display snapshot (`§17.4` tombstone rules).
 
 **Visit–audio–transcription binding (source side).** Each Audio row
-carries `{ report, visitId }`, written once at upload: `report`
-joins the report, `visitId` is the **exact key** of the visit this
-clip belongs to (`visits[].visitId`, §21.2). A visit's source resolves
-by exact-key query — `Audio.where({ report, visitId })`, then each
+carries `{ report, visitNo }`, written once at upload: `report`
+joins the report, `visitNo` is the **exact key** of the visit this
+clip belongs to (`visits[].visitNo`, §21.2). A visit's source resolves
+by exact-key query — `Audio.where({ report, visitNo })`, then each
 clip's 1:1 transcription ref (§33) — never by array position, clip
 count, or ordering assumption. This is the future §22 contract: the
 binding has a single write site; the report row keeps no audio or
@@ -3485,7 +3496,7 @@ audio addition, removal, or content edit (BR-10).
 |---|---|
 | `draft` | report row only (no audio required) |
 | `audio_attached` | report + at least one `Audio` row |
-| `transcribed` | report + audio rows + transcription(s) with `raw` (and `latest`, both initialized equal); per-visit source resolved via the exact-key edges (`audio.{ report, visitId }` → 1:1 transcription, §17.3) — the presence check is the query, never a stored ref on the row |
+| `transcribed` | report + audio rows + transcription(s) with `raw` (and `latest`, both initialized equal); per-visit source resolved via the exact-key edges (`audio.{ report, visitNo }` → 1:1 transcription, §17.3) — the presence check is the query, never a stored ref on the row |
 | `reviewed` | transcription content locked by the review decision (accept/revert, BR-11) |
 | `completed` | accepted content fixed at accept (BR-08, BR-11); report exported (§37) — the export is a deliverable, never a persisted artifact on any row (§21.5, §37/§58) |
 
@@ -3929,8 +3940,8 @@ the §18 conventions exactly like §19.
   §20, §30, §62); retention windows and the sweeper = §62; the
   `branches[]` document fieldset on reports = §21; capture digest and
   branch header lines (Type-1 `branch: x`, Type-2 `x / y / z`) =
-  §6.11/§21; pickers, Reports UI, and global search behavior = §54,
-  §39, §56; the ownership guard = §3.2.3/BR-13.
+  §6.11/§21; pickers, Reports UI, and global search behavior =
+  §46.6/§52, §50, §39/§59; the ownership guard = §3.2.3/BR-13.
 - **Explicitly out of scope §20.** No endpoint, no transition or
   guard rule (§30–§31 own them), no retention arithmetic (§62), no
   new constant (§11 unchanged), no new package — the model layer is
@@ -4109,7 +4120,7 @@ like §19 and §20.
   conversations = §24/§36; content generation and correction writes
   to the content slots = §34/§35; export fidelity = §37/§58; the
   sweeper and windows = §62; field validators = §29; wizard steps
-  and Reports UI = §52, §50–§54; search = §39; analytics = §56; the
+  and Reports UI = §52, §50–§54; search = §39; analytics = §38/§49; the
   ownership guard = §3.2.3/BR-13; the retention constants = §11.
 - **Explicitly out of scope §21.** No endpoint, no transition or
   guard rule (§30–§31 own them), no retention arithmetic (§62), no
@@ -4128,7 +4139,7 @@ like §19 and §20.
 | `supervisorName` | String | yes | the `ስም` header value — the user's `fullName` virtual (§19.4) captured into the capture form at capture time (§6.3 field 3); the captured value wins: a later profile rename never rewrites report history; generation prints this stored value |
 | `status` | String | yes (default `draft`) | member of `REPORT_STATUSES` (§11.4, BR-06, §17.2); the value always comes from the constants file, never a literal (§17.7 gates); reports enter the machine at `draft` because the wizard is the only creation path (BR-05) |
 | `branches` | Array | yes (default `[]`) | the relationship block — the §18.7 snapshot: each entry is `{ branch: ObjectId (ref Branch, required), name: String (required) }`, the live join key and the immutable display snapshot copied at capture time (§3.2.3, BR-14); drives pickers, branch filters, and tombstone rendering (§17.3, §17.4); Type-1 days hold one member, Type-2 hold several (BR-03, ADR-010); the shape is never extended without §21/§6.11 coordination (§20.9) |
-| `visits` | Array | yes (default `[]`) | the capture block — each entry is `{ visitId: Number (required, sequential within the report), branchName: String (required), clockIn: String or null — OQ-002 open, clockOut: String or null — OQ-002 open }`; stored in chronological capture order (§6.4); Type-1 days hold one entry, Type-2 two or more (BR-03); a branch visited twice appears as two entries while the snapshot holds one member (§6.4); `branchName` copies the same `Branch.name` as the matching snapshot member, at the same capture moment, so equality holds by construction and the two blocks are never edited independently; time values follow the `HH:mm` zero-padded format of §6.5 (validated by the §29 validators, never composed in the schema) |
+| `visits` | Array | yes (default `[]`) | the capture block — each entry is `{ visitNo: Number (required, sequential within the report), branchName: String (required), clockIn: String or null — OQ-002 open, clockOut: String or null — OQ-002 open }`; stored in chronological capture order (§6.4); Type-1 days hold one entry, Type-2 two or more (BR-03); a branch visited twice appears as two entries while the snapshot holds one member (§6.4); `branchName` copies the same `Branch.name` as the matching snapshot member, at the same capture moment, so equality holds by construction and the two blocks are never edited independently; time values follow the `HH:mm` zero-padded format of §6.5 (validated by the §29 validators, never composed in the schema) |
 | `raw` | String | no (null until first generation) | the original generated content, written once at first generation and never rewritten (BR-11, §18.7); no version chain exists beside it (ADR-005 retired, §14.3) |
 | `latest` | String | no (null until first generation) | the single current-content slot, initialized to `raw` at first generation; every edit, correction, and revert overwrites it (BR-11); accepted content is this slot fixed at accept (§21.5) |
 | `isArchived` | Boolean | yes (default `false`) | lifecycle flag (BR-16, F4); archived rows are hidden from default reads and appear only under explicit filters (§17.4) |
@@ -4143,7 +4154,7 @@ and the type (Type-1/Type-2) are derived deterministically from
 `visits` per §6.4 — they are never stored as copies. No audio,
 transcription, or conversation references exist on the report row:
 the edges of §17.3 are served from the child side — each Audio row
-carries `{ report, visitId }`, so a visit's clips and their
+carries `{ report, visitNo }`, so a visit's clips and their
 transcriptions resolve by exact-key query over the edges, never by
 array position or implicit ordering (§17.3; future §22 contract); the
 ChatConversation row carries the report ref (§24). No branch-digest or
@@ -4351,7 +4362,46 @@ construction (data-consistent: the join key stays the live
   never extended without §21/§6.11 coordination, because report
   history and the capture contract depend on them (§20.9, §18.7).
 
-### 21.12 Verification usage
+### 21.12 Design rationale (why the report schema is shaped this way)
+
+The shape above is deliberate; each choice below is justified by its
+owning subsection and repeated nowhere else:
+
+1. **`supervisorName` is a snapshot, not a join.** A report is a
+   historical artifact: the printed name must read exactly as it did
+   on the day it was written, and a later profile rename never
+   rewrites report history — the same snapshot doctrine as
+   `branches[].name` (→ the `supervisorName` row of §21.2; §17.4
+   tombstone doctrine).
+2. **`reportDate` is a business date, not `date`.** It is the
+   report's `ቀን` business identity, distinct from the lifecycle
+   timestamps (`createdAt`/`updatedAt`); a `date` name would invite
+   query-time confusion, and the list sort depends on the
+   distinction (→ the `reportDate` row of §21.2; the §21.3 index).
+3. **Day start/exit are derived, never stored.** Day start = the
+   first visit's `clockIn`; day exit = the last visit's `clockOut`
+   (the requirement's own definition, §6.3 field 8). Storing them
+   would be a second source of truth that contradicts `visits[]`
+   after an edit (→ §21.7, §6.4; OQ-002 keeps the clock fields
+   nullable).
+4. **No `audio[]` / `transcription` ref on the report.** The edges
+   are child-side — `Audio.{ report, visitNo }` and a 1:1
+   `Transcription.audio` — so presence is the query, never a stored
+   parent array that must be rewritten on upload, re-transcription,
+   or deletion and can go stale (→ §22.1, §17.3).
+5. **`visitNo` is a sequential row key, not a durable id.** A visit
+   is an embedded row, and its key is the sequential number within
+   its report; routes mirror the key (`/visits/:visitNo`), and the
+   name never carries the `Id` suffix (→ the `visits` row of §21.2;
+   §9.3).
+6. **Activities, issues, and opinion stay inside the content
+   slots.** The format defines them as prose blocks (§6.3 fields
+   5–7); nothing queries them as fields (search is full-text, §39);
+   §35's surgical protocol is text-anchored by design; a structured
+   per-branch content model is deliberately reserved at §6.10/§6.11
+   — never guessed early (→ the `raw`/`latest` rows of §21.2; §6.9).
+
+### 21.13 Verification usage
 
 - Grep gates: `status` values always resolve to `REPORT_STATUSES`
   (§11.4) — no literal status strings anywhere in §21;
@@ -4400,7 +4450,7 @@ contracts (§16); or the captured-visits contract (§6.10, §52).
 Audio rows are user-scoped (BR-13, §3.2.3): every row binds to the
 authenticated, server-assigned user (`req.user._id.toString()`,
 §17.2). The row is the **child-side join key holder** of the
-Report—Audio edge (§17.3): it carries `{ report, visitId }`, written
+Report—Audio edge (§17.3): it carries `{ report, visitNo }`, written
 once at upload, and a nullable 1:1 `transcription` ref — the exact-key
 source binding of §17.3. The report row keeps no audio or
 transcription field (§21.2); nothing in this section re-introduces it.
@@ -4419,7 +4469,7 @@ only binary contact point (§12.9, §12.10).
 | `_id` | ObjectId | auto | the only key; never `id` (§12.11-3) |
 | `user` | ObjectId | yes | owner-scoping (BR-13, §3.2.3, §18.7); all queries throughout §30–§39 resolve the owning user server-side |
 | `report` | ObjectId | yes | the owning report — child-side join key of the Report—Audio edge (§17.3); document reference fields carry the plain model name — no `Id` suffix (§9.3); set once at upload inside the §32 session, never moved between reports |
-| `visitId` | Number | yes | the exact visit key this clip belongs to — equals a member of `visits[].visitId` of the owning report at the upload moment (§21.2, §17.3); written once at insert, together with `report`, in the same session (single write site per §17.3); a report's visit removal detaches or cascades the visit's clips in the same write session (§17.4, §18.5) |
+| `visitNo` | Number | yes | the exact visit key this clip belongs to — equals a member of `visits[].visitNo` of the owning report at the upload moment (§21.2, §17.3); written once at insert, together with `report`, in the same session (single write site per §17.3); a report's visit removal detaches or cascades the visit's clips in the same write session (§17.4, §18.5) |
 | `transcription` | ObjectId | no (null until transcribed) | the 1:1 Audio—Transcription edge (§17.3); set in the same session that creates the transcription (STT completion, §33) and re-pointed by re-transcription in the same session (§23.4, ADR-030); deleted with this row when the audio is removed (§17.4) |
 | `filePath` | String | yes | server-internal absolute-ish path under `backend/uploads/audio/` (§12.9, §15.4) — gitignored (§12.9, §32); never exposed by any transform (§22.7) and never logged (§9.5); the physical file is unlinked after commit, non-transactionally, with failures retried by the orphan sweep (§17.4, §31, §62) |
 | `mimeType` | String | yes | member of `AUDIO_ALLOWED_MIME_TYPES` (§11.3) — the recorded browser MIME per the client recording priority (§53); schema enum constrained to the constant (§18.2); never `audio/webm` for STT chunks (chunk MIME is the §33 pipeline's own rule) |
@@ -4435,7 +4485,7 @@ archivable (§20.4, §21.6); no archivable model may evade the §20/§21
 rule list. No `deletedAt` exists (BR-15, §18.3). No ordering field
 exists: within a visit the clips' chronological order is
 `createdAt`, and the §17.3 contract forbids any array-position or
-ordering assumption as a *binding* — `Audio.where({ report, visitId })`
+ordering assumption as a *binding* — `Audio.where({ report, visitNo })`
 is exact-key.
 
 ### 22.3 Keys, indexes & TTL
@@ -4444,7 +4494,7 @@ is exact-key.
   owner-scoping index (§18.3, BR-13); every clip query resolves the
   owning user first.
 - **Exact-key source query.** `schema.index({ user: 1, report: 1,
-  visitId: 1 })` — serves the §17.3 per-visit source resolution and
+  visitNo: 1 })` — serves the §17.3 per-visit source resolution and
   the clip group reads of the review UI (§54); declared via
   `schema.index(..)` (§18.3), no field-level `unique: true` (a visit
   legitimately holds several clips).
@@ -4469,7 +4519,7 @@ observes it through presence queries, never through a state stored on
 this row.
 
 - **Creation.** Insert happens inside the §32 upload session: the
-  `report`/`visitId` bindings are written at insert (the single write
+  `report`/`visitNo` bindings are written at insert (the single write
   site, §17.3) and the owning report is validated as existing and
   owned by the session user in the same transaction (BR-13, §17.4).
   The physical binary write follows the session commit; a failure is
@@ -4523,7 +4573,7 @@ this row.
   (§18.4, §18.2).
 - `filePath` is stripped from every serialized output — it is a
   server-internal value (§22.5); the DTO exposes the metadata surface
-  only (`_id`, `report`, `visitId`, `mimeType`, `sizeBytes`,
+  only (`_id`, `report`, `visitNo`, `mimeType`, `sizeBytes`,
   `durationSec`, timestamps).
 - Exposed refs keep the §9.3 plain-name doctrine; route parameters
   keep the `Id` suffix (`:audioId`, §12.11-1) — the two namespaces
@@ -4533,7 +4583,7 @@ this row.
 
 Audio seeds are **metadata-only** clips — real binaries are never
 written by seeding (ADR-037, §25). Seeded rows carry valid
-`report`/`visitId`/`mimeType`/`sizeBytes`/`durationSec` values that
+`report`/`visitNo`/`mimeType`/`sizeBytes`/`durationSec` values that
 satisfy §17.6 presence and the §22 registry; injection and wipe are
 session-aware (§18.5) and arrive exclusively through the §25/§40
 mechanisms — never hard-coded in the model (§18.8).
@@ -4542,7 +4592,7 @@ mechanisms — never hard-coded in the model (§18.8).
 
 Changes are additive-only (§18.9, §14.5); a documented destructive
 schema change is applied through the §25/§40 wipe mechanism in
-development (§12.10). The binding fields (`report`, `visitId`,
+development (§12.10). The binding fields (`report`, `visitNo`,
 `transcription`) are load-bearing for the §17.3 source contract; a
 change to their shape requires §17.3/§21.2 coordination (§18.9) and
 an amendment record (§14.5).
@@ -4552,7 +4602,7 @@ an amendment record (§14.5).
 - Grep gates: no `status`, no `isArchived`, no `archivedAt`, no
   `deletedAt` on this model; no TTL declaration beyond §18.3's two;
   `mimeType` values always resolve to `AUDIO_ALLOWED_MIME_TYPES`; the
-  binding fields are exactly `report` + `visitId` (no `reportId`
+  binding fields are exactly `report` + `visitNo` (no `reportId`
   anywhere — §9.3); `transcription` appears only as the nullable 1:1
   ref; no array-position or ordering vocabulary as a binding (§17.3).
 - Cross-section checks: mirrors §17.2/§17.3 (exact-key edges, child
@@ -4973,7 +5023,7 @@ scripts):
   snapshot, and `visits[]` per §21.2 (OQ-002's nullable clock fields
   used as null in at least one fixture).
 - **Audio** — metadata-only rows bound to the reports (valid
-  `report`/`visitId`/`mimeType`/`sizeBytes`/`durationSec`; no
+  `report`/`visitNo`/`mimeType`/`sizeBytes`/`durationSec`; no
   `transcription` ref on the `audio_attached` fixture, refs set on the
   transcribed+ fixtures).
 - **Transcriptions** — `raw` = `latest` rows for the transcribed,
@@ -5027,6 +5077,1974 @@ scripts):
 ---
 
 ## Part D — Frontend (HLD/LLD)
+
+## 26. Backend Foundation
+
+### 26.1 Purpose & scope
+
+§26 owns the backend process foundation: the `config/env.js`
+frozen configuration, the Winston logger, server boot and
+graceful shutdown (ADR-013), the Express app wiring with the
+fixed middleware chain (ADR-035), the single route registry
+(`routes/index.js`), and the health endpoint. It exists because
+§12.2-7/§12.2-8/§12.10 define the process-level contract that
+every Part C section (§27–§40) hangs on, and §15.4 freezes the
+file tree.
+
+- **Owned here (normative).** Config boot and fail-fast (§26.2);
+  the logger (§26.3); the Express app and middleware wiring
+  (§26.4); the route registry (§26.5); boot, health, and graceful
+  shutdown (§26.6); verification (§26.7).
+- **Owned elsewhere — deliberately not repeated here.** The
+  middleware behaviors = §27 (rate limits, sanitize, transform,
+  error handler); auth middleware = §28; validators = §29; per-
+  domain route/controller/service design = §30–§39; the constant
+  values = §11; the file tree = §15.4; env-var additions = §10.3.
+- **Explicitly out of scope §26.** No endpoint beyond the health
+  endpoint, no provider call, no new constant (§11 unchanged —
+  `LOG_RETENTION_DAYS` exists), no new path beyond §15.4, no
+  package.
+
+### 26.2 Config boot & fail-fast
+
+`backend/config/env.js` is the **only file reading `process.env`**
+(§10.3) and exports a frozen `env` object (ADR-020). Lookup
+chain per §10.3: process env → pre-defined `.env` → `backend/.env`
+→ default → **fail-fast** when a required variable is missing.
+Required without default: `MONGO_URI`, `JWT_ACCESS_SECRET`,
+`JWT_REFRESH_SECRET`, `ADDIS_API_KEY`, `GEMINI_API_KEY`,
+`NVIDIA_API_KEY`, `NVIDIA_API_URL` (§10.4). The env object exposes
+exactly the §10.4 variables plus the frozen defaults — a key not
+in §10.4 cannot be read here (grep gate: no other `process.env`
+read anywhere, §12.6). `env` is frozen with `Object.freeze` on
+export; mutation attempts fail in strict mode (ADR-020).
+
+### 26.3 Logger (Winston)
+
+`backend/utils/logger.js`: Winston with transports — console
+(development, simple format), rotating file `logs/` daily with
+`LOG_RETENTION_DAYS` (30) retention, both gitignored (§9.5).
+Child loggers labeled `Server`, `DB`, `Auth`, `AI-Addis`,
+`AI-Gemini`, `AI-Nvidia` for the §16 provider calls. Safe-
+logging policy (ADR-019): passwords, JWT values, cookies, API
+keys, audio content, and full transcription/report texts are
+**never** logged; provider logs carry only provider, model,
+status code, latency, request/response ids. `console.log` is
+banned (§9.5); logger methods are the only logging surface. The
+logger is imported by `server.js`, `app.js`, and every controller/
+service; the global handler (§27.5) logs through it.
+
+### 26.4 Express app & middleware wiring
+
+`backend/app.js` builds the Express app; it **registers no route
+directly** (§12.2-7) — only `routes/index.js` does. Order (fixed,
+ADR-035 — never reordered, never dropped):
+
+```
+helmet → cors → compression → cookie-parser → express-mongo-sanitize → rate-limit
+```
+
+wired in that order, then the `/api/v1` registry mount (§26.5),
+then the not-found handler and the global error handler (both
+§27.5). CORS per §12.3: origin `CLIENT_ORIGIN`
+(`http://localhost:3000`), `credentials: true` — httpOnly cookies
+travel with requests. `app.js` also mounts nothing else: no
+static asset serving (uploads are service-internal, §32; avatar
+serving is not an Express route — §28 owns the avatar files and
+its access bookkeeping), no provider proxy routes (backend-only
+proxy = service layer, §16).
+
+### 26.5 Route registry (`routes/index.js`)
+
+`backend/routes/index.js` is the **single route registry**
+(§12.2-7): it imports every per-domain module of §30–§39
+(`branch.routes.js`, `report.routes.js`, `audio.routes.js`,
+`transcription.routes.js`, `chat.routes.js`, `auth.routes.js`,
+`export.routes.js`, `analytics.routes.js`, `search.routes.js`,
+`mock.routes.js`) and mounts them under `/api/v1` in the order
+listed in §15.4/§30–§39. `app.js` calls exactly one function
+(`app.use('/api/v1', routes)`) — adding a route module anywhere
+else violates the registry (grep gate: one `/api/v1` mount in
+`app.js`). Names are kebab-case; params use `<resource>Id`.
+
+### 26.6 Boot, health & graceful shutdown
+
+`backend/server.js`: connect to MongoDB (log via the `DB`
+logger; fail-fast on connection failure after the §26.2 check),
+then `app.listen(PORT)` (4000 in development), log `Server`
+listening. Health endpoint (mounted under `/api/v1`, defined in
+`routes/index.js`): `GET /api/v1/health` → 200
+`{ success: true, message: 'OK', data: { status: 'up', uptime } }`
+— unauthenticated, excluded from rate-limit tiers (§27.3), never
+touches the database.
+
+**Graceful shutdown (ADR-013):** on `SIGINT`/`SIGTERM` —
+stop accepting connections (`server.close()`), clear the sweeper
+timer (§12.5/§62), close the MongoDB client, flush the logger,
+exit 0; forced exit after a timeout (default 10 s, dev-only log).
+The sweeper timer's interval = `SWEEPER_INTERVAL_MS` (§12.5)
+started after the server is listening.
+
+### 26.7 Verification usage
+
+- Grep gates: no `process.env` reads outside `config/env.js`; no
+  `console.log` in `backend/`; one `/api/v1` mount; the
+  middleware order in §26.4 matches §27.2 exactly; `raw`/`latest`
+  texts never appear in logger calls.
+- Cross-section checks: mirrors §10 (env), §11.3 (`LOG_RETENTION_DAYS`,
+  `SWEEPER_INTERVAL_MS`), §12.2/§12.5/§12.10 (registry, sweeper,
+  shutdown), §15.4 (tree), §16 (logger child labeling), §27
+  (chain behaviors), §28 ($JWT secrets consumer).
+- §26 introduces no constant (§11 unchanged), no new path beyond
+  §15.4, and no package; it references only specification sections.
+
+---
+
+## 27. Global Backend Concerns
+
+### 27.1 Purpose & scope
+
+§27 owns the cross-cutting backend behaviors every endpoint
+shares: the fixed security middleware chain (ADR-035), the
+three rate-limit tiers (ADR-029), the API envelope and the error
+handler (ADR-016), the response transform layer (ADR-017,
+DTO mapping), pagination (ADR-034), and the session-transaction
+template (ADR-018). Since §30–§39 specify endpoints, they
+reference this section instead of repeating these mechanics.
+
+- **Owned here (normative).** Middleware chain and its behaviors
+  (§27.2); rate-limit tiers (§27.3); envelope, DTOs and the
+  transform layer (§27.4); errors and the global handler (§27.5);
+  pagination (§27.6); transactions (§27.7); verification (§27.8).
+- **Owned elsewhere — deliberately not repeated here.** Middleware
+  installation = §26.4; auth middleware = §28; validators and 422
+  shape rules = §29; constants = §11.3; provider proxy behavior =
+  §16; the client's toast mapping of errors = §60.
+- **Explicitly out of scope §27.** No endpoint, no route, no
+  constant (§11 unchanged — `RATE_LIMIT_*` exist), no package.
+
+### 27.2 Fixed middleware chain (ADR-035)
+
+Installed in §26.4 order, never reordered. Behavior notes:
+
+- **helmet** — HTTPS header hardening, defaults.
+- **cors** — origin `CLIENT_ORIGIN`, `credentials: true`
+  (§12.3); the AI/export flows never need extra origins (no
+  provider keys reach the browser, §16).
+- **compression** — gzip for responses.
+- **cookie-parser** — read `accessToken`/`refreshToken` httpOnly
+  cookies (§28).
+- **express-mongo-sanitize** — strips `$`/`.` operator keys from
+  bodies/queries before validation.
+- **rate-limit** at §27.3.
+
+Auth middleware runs after the chain, per-route (not global),
+via the domain route modules (§28.4). No other middleware is
+added; if one is ever needed it goes through §10.3/§14.5
+amendment (this list is closed).
+
+### 27.3 Rate-limit tiers (ADR-029)
+
+Three tiers from `RATE_LIMIT_*` constants (§11.3); every endpoint
+belongs to exactly one tier; the health endpoint is exempt:
+
+| Tier | Window | Max | Applied to |
+|---|---|---|---|
+| global | `RATE_LIMIT_GLOBAL_WINDOW_MIN` (15 min) | `RATE_LIMIT_GLOBAL_MAX` (100) | all non-auth, non-AI endpoints — branches, reports read/write, audio metadata, exports, analytics, search, mock |
+| auth | `RATE_LIMIT_AUTH_WINDOW_MIN` (15 min) | `RATE_LIMIT_AUTH_MAX` (20) | `auth/*` endpoints (§28) |
+| ai | `RATE_LIMIT_AI_WINDOW_MIN` (1 min) | `RATE_LIMIT_AI_MAX` (10) | generation (§34), correction (§35), chat (§36) — the provider-calling endpoints |
+
+Violation → 429 `TOO_MANY_REQUESTS` through the standard error
+envelope (ADR-016 shape, §27.5). The AI tier caps provider
+calls; `Retry-After` from a provider maps into the AI tier's
+rejection (per-provider retry counts are §33–§36, not the
+tier).
+
+### 27.4 Envelope, DTOs & transform layer (ADR-016/017)
+
+- **Envelope** (every response): `{ success, message, data }`.
+  Successes: `success: true`, `message` plain end-user language,
+  `data` = the DTO (§27.4) or `null`. Errors: `success: false`,
+  `message` = user-facing text, `data: null` (§27.5).
+- **Paginated list data** (ADR-034): `data: { docs, page, limit,
+  totalDocs, totalPages }` via `mongoose-paginate-v2` — `docs`
+  is a `docs` array **not** named `data` (the transform layer
+  maps the plugin output), defaults `PAGINATION_DEFAULT_PAGE` (1)
+  / `PAGINATION_DEFAULT_LIMIT` (10), max `PAGINATION_MAX_LIMIT`
+  (100).
+- **Transform layer (ADR-017):** every controller maps its model
+  output through a per-domain DTO function (`toDto`/`toListDto`)
+  consuming only the schema `toJSON` transform output (§18.4).
+  Fields: entities serialize exactly the model's serialized
+  surface (§19–§24) — `filePath` never, `password` never by
+  `select: false`, `stt.*` subfields on transcription only,
+  derived values never stored. DTOs add no fields that are not
+  in the models' serialized surfaces. `docs` list DTOs strip
+  heavy fields (`raw`/`latest` full texts, `messages`) unless the
+  endpoint's contract names them explicitly (§30–§39).
+
+### 27.5 Errors & the global handler
+
+- **`CustomError`** (`backend/utils/errors.js`): carries
+  `statusCode`, semantic `status` name from `httpStatus.js`
+  (§11.6), `message` (user-facing, plain language), optional
+  `details` (validation field errors only). Status codes come
+  strictly from the `httpStatus` constants: 400 `BAD_REQUEST`, 401
+  `UNAUTHORIZED`, 403 `FORBIDDEN` (state/lifecycle blockers, e.g.
+  accept denied at a non-`reviewed` status — §31), 404
+  `NOT_FOUND`, 409 `CONFLICT` (dup-key 11000, dup email,
+  archive/restore violations), 422 `UNPROCESSABLE_ENTITY`
+  (validation, §29), 429 `TOO_MANY_REQUESTS` (§27.3), 502
+  `BAD_GATEWAY` (AI provider failures mapped by §16.5).
+- **Global handler:** single `(err, req, res, next)` at the end
+  of the app (§26.4). Logs via the §26.3 logger (`error` child
+  by source when derivable); it never logs the error's message
+  verbatim if it could contain user text (safe policy — logs the
+  error class, status, and reference). Stack trace rendered only
+  in development. Response envelope per §27.4 with
+  `message` falling back to a generic phrase for unknown
+  statuses.
+- **No layer responds directly:** controllers forward with
+  `next(error)`; validators forward 422 (§29); services never
+  respond. Not-found handler (any unmatched `/api/v1/*` path):
+  `{ success: false, message: 'Route not found', data: null }`
+  with 404.
+
+### 27.6 Pagination
+
+Read endpoints that list entities use `mongoose-paginate-v2`
+(ADR-034): `page` (default 1), `limit` (default 10, max 100,
+higher values clamp), and `sort` per endpoint contract. Filter
+dimensions are per-domain (§30, §31, §38, §39 name theirs);
+pagination mechanics are here. Invalid `page`/`limit` (non-
+positive, non-numeric) → 422 via the §29 rule chain. List DTOs
+never return full entity sets (heavy fields stripped, §27.4);
+the client never holds cross-page datasets.
+
+### 27.7 Transaction template (ADR-018)
+
+Write handlers (create, update, archive/restore/delete, cascade,
+upload metadata, transcription write, correction accept,
+re-transcription, message append, mock seed/wipe) use the
+canonical template:
+
+```
+startSession → startTransaction → writes (session-aware models) → commitTransaction
+→ catch → abortTransaction → finally → endSession
+```
+
+- Every model hook/static that writes accepts `{ session }` and
+  joins the caller's transaction (§18.5); no implicit/embedded
+  sessions. Controllers never split a logical write across
+  sessions.
+- Read-only endpoints never open transactions; reads are
+  `.lean({ virtuals: true })`.
+- TTL index deletions (§18.3) are the single documented exception
+  (server-side, cannot use a session); the orphan sweep (§62)
+  cleans leftovers.
+
+### 27.8 Verification usage
+
+- Grep gates: all responses use `res.json` with the §27.4
+  envelope or the error handler (no raw `res.send` bodies); no
+  controller responds inside a try/catch (only `next(error)`);
+  every rate tier applied via the `rateLimit` factory with
+  constant values, never literals; pagination only through the
+  plugin; no `pageSize`/`email`-style literals (§11).
+- Cross-section checks: mirrors §11.3/§11.6 (constants), §12.2
+  (stack/registry), §16.5 (provider failure mapping to 502),
+  §18.4/§18.5 (transforms/sessions), §29 (422 shape), §62
+  (sweeper's orphan pass), §60 (client toast mapping).
+- §27 introduces no constant (§11 unchanged), no path, and no
+  package; it references only specification sections.
+
+---
+
+## 28. Authentication & User Domain
+
+### 28.1 Purpose & scope
+
+§28 owns the auth surface (register, login, logout, refresh,
+current-user, profile, avatar) and everything the `req.user`
+identity provides to the other domains. It exists because §3.2.2
+(Self-service registration, ADR-009), §19 (single account type,
+ADR-036), §12.7 (dual-token JWT, ADR-004) and the ownership rule
+BR-13 require one authoritative identity contract.
+
+- **Owned here (normative).** Identity & token model (§28.2);
+  endpoints (§28.3); auth middleware and route protection (§28.4);
+  profile & avatar (§28.5); Google OAuth stub (§28.6); states,
+  edge cases (§28.7); verification (§28.8).
+- **Owned elsewhere — deliberately not repeated here.** The User
+  schema, hashing, and index = §19; envelope/errors/rate tiers =
+  §27; validators = §29; the client's reauth loop = §42; profiles
+  UI = §57; `BcryptSaltRounds`/token TTLs = §11.3.
+- **Explicitly out of scope §28.** No role/permission model
+  (ADR-036), no user deletion (§19 — users have no delete path),
+  no new constant (§11 unchanged — `ACCESS_TOKEN_TTL_MIN`,
+  `REFRESH_TOKEN_TTL_DAYS`, `BCRYPT_SALT_ROUNDS` exist), no
+  package.
+
+### 28.2 Identity & token model (ADR-004/036)
+
+- **Identity:** everything scopes by `req.user._id.toString()`
+  (BR-13) — branches, reports, audios, transcriptions,
+  conversations, analytics, search, mock. There is exactly one
+  account type; no `role` field anywhere (§19).
+- **Two httpOnly cookies** set with attributes: `accessToken`
+  (15 min, path `/api/v1`, `SameSite=Lax`, `Secure` in
+  production), `refreshToken` (7 days, path `/api/v1/auth`,
+  `SameSite=Lax`, `Secure` in production). Values are JWTs signed
+  with `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`; payload =
+  `{ sub: user._id, type: 'access'|'refresh' }`.
+- **Rotation:** every refresh issues a new refresh token and
+  invalidates the presented one (a rotation-token use set stored
+  in-memory is acceptable; no server-side session store beyond
+  it). Forced logout (§28.3) clears cookies; there is no
+  server-side blacklist for access tokens within their 15-minute
+  window (documented acceptance).
+- **No delegation:** `req.user` is always the authenticated
+  owner; BR-13 ownership queries never trust client-supplied
+  user ids.
+
+### 28.3 Endpoints (all under `/api/v1/auth`, auth tier §27.3)
+
+| Method+Path | Auth | Request | Success | Errors |
+|---|---|---|---|---|
+| `POST /auth/register` | none | `{ email, password, confirmPassword }` | 201 `{ data: { user: UserDto } }` — cookies set; auto-login (ADR-009) | 409 duplicate email; 422 validation |
+| `POST /auth/login` | none | `{ email, password }` | 200 `{ data: { user: UserDto } }` + cookies | 401 invalid credentials (identical message for unknown email/ wrong password — no user enumeration) |
+| `POST /auth/refresh` | refresh cookie | — | 200 `{ data: { user: UserDto } }` + rotated refresh cookie | 401 expired/absent/unusable refresh token |
+| `POST /auth/logout` | optional | — | 200 `{ success: true, message, data: null }`; clears both cookies | — |
+| `GET /auth/me` | access | — | 200 `{ data: { user: UserDto } }` | 401 |
+| `GET /auth/sessions` | access | — | 200 `{ data: { sessions: [...] } }` — active refresh tokens (issued-after `exp` bookkeeping); no secrets | 401 |
+| `DELETE /auth/sessions/:sessionId` | access | — | 200; invalidates that rotation token | 401, 404 |
+
+Validation chains: §29 (`user.validator.js`). Passwords hash via
+the §19 `pre('save')` hook with `BCRYPT_SALT_ROUNDS`; login uses
+`comparePassword`. `firstName`/`lastName` derive from the email
+local part per §19 at creation — never accepted from the client
+(422 if present).
+
+### 28.4 Auth middleware (`middleware/auth.js`)
+
+`authenticate` reads the `accessToken` cookie, verifies the JWT
+(secret, type `access`, expiry), loads the user by `sub`
+(`select('+password')` never — plain `.lean()`), attaches
+`req.user = { _id, email, firstName, lastName, fullName, avatar,
+position }`, else 401. `optionalAuth` (used only by `GET
+/auth/me`'s refresh-probe per §42) tolerates a missing cookie.
+Per-domain routes apply `authenticate` on the protected group of
+their route module (§30–§39); `/auth/register` and `/auth/login`
+skip it; `/auth/refresh` uses the refresh cookie directly.
+Controllers read `req.user._id` and `req.validated` and never
+parse cookies themselves (§26.4).
+
+### 28.5 Profile & avatar
+
+- `PATCH /auth/profile` (access): updates `position`, `firstName`
+  (only when not derived-locked — i.e. after any manual rename the
+  value stands, §19), `avatar` (via multipart, §29 chain). Returns
+  the fresh UserDto. The supervisor name used **at report capture
+  time** is snapshotted (§21 `supervisorName`); later profile
+  renames never rewrite stored report headers (§21.2).
+- Avatar files land in `backend/uploads/avatar/` (gitignored,
+  §19); served only through the auth'd `GET /auth/avatar` (access)
+  — never via a public static mount (§26.4). Size/MIME limits via
+  the §29 chain from `AVATAR_MAX_SIZE_BYTES` and
+  `AVATAR_ALLOWED_MIME_TYPES` (§11.3).
+
+### 28.6 Google OAuth stub (ADR-024/031)
+
+The Google OAuth flow exists as a stub: `GET /auth/google`
+responds 404 `NOT_FOUND` with the §69 open-question text in the
+message ("Google sign-in is not available in this version"). No
+Google-related env vars exist (§10.4 closed — no `GOOGLE_*`).
+ADR-024 marks real integration as an open question; the
+provider-neutral OAuth architecture (ADR-031) is limited to the
+stub route shape today, subject to §14.5 amendment when real
+integration is planned.
+
+### 28.7 States & edge cases
+
+- Login failure — 401, cookie-less response; refresh rotation
+  collision (reuse of a rotated token) → clear both cookies and
+  401 (theft heuristic, documented in §69).
+- Duplicate registration email → 409 `CONFLICT` via the dup-key
+  11000 detection (§27.5), message "This email is already
+  registered".
+- Cookie domain/path mismatches (refresh sent without access) →
+  the client's §42 reauth loop re-issues through `/auth/refresh`;
+  a wholly invalid refresh cookie → 401 and a client-side
+  redirect to the login page.
+- Profile rename before any report exists affects future
+  snapshot values; after reports exist, only new reports carry
+  the new name (BR-14 snapshot contract).
+
+### 28.8 Verification usage
+
+- Grep gates: `role` absent from any backend file; `GOOGLE_*`
+  env reads absent (§10.4); the only `/auth/*` routes are the
+  §28.3 table's; token secrets never logged (ADR-019); no
+  `password` key in any response DTO; no user-delete endpoint.
+- Cross-section checks: mirrors §19 (schema/hash), §11.3 (TTL
+  constants), §27 (envelope/tiers), §29 (validators), §42
+  (reauth), §57 (profile UI), §69 (OAuth open question).
+- §28 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 29. Validators
+
+### 29.1 Purpose & scope
+
+§29 owns the server-side validation contract: the express-validator
+rule chains per domain, the `validate()` harness, the 422 shape,
+and the `req.validated` attachment consumed by controllers. It
+exists because §12.5/§15.4 define the validator layer as the only
+place validation rules live (besides bespoke patterns, §43.7) and
+bans zod — validation is manual resolvers with the consistent
+error shape (§2.5, §9, §29).
+
+- **Owned here (normative).** The harness (`validators/validation.js`)
+  and the 422 shape (§29.2); rule-chain conventions (§29.3);
+  cross-domain rules (ids, dates, pagination, language, status,
+  tokens) (§29.4); domain chains inventory (§29.5); verification
+  (§29.6).
+- **Owned elsewhere — deliberately not repeated here.** Business
+  guards and status transitions = §30/§31 (the guard table);
+  error envelope/status semantics = §27; field defaults = §11
+  constants; audio MIME/size limits = §32; the server-reflection
+  message mirroring = §31.
+- **Explicitly out of scope §29.** No business-transition logic
+  (guards live in services, never in validators), no new constant
+  (§11 unchanged), no package.
+
+### 29.2 Harness & 422 shape (ADR-016)
+
+`validators/validation.js` exports `validate()`: runs
+`validationResult(req)`; on failure responds 422 with the
+**§27-owned shape** (envelope `{ success: false, message,
+data: null }` with `details: [{ field, message }]` listing each
+failed field — one entry per field, first failure wins per
+field), then `next()`; on success attaches
+`req.validated = { body, params, query }` via `matchedData(...)`
+(only declared fields) and calls `next()`. Chain errors do not
+abort before 422 — the harness aggregates them. `message` is
+plain end-user language ("Check the highlighted fields" + per-
+field messages in the details).
+
+### 29.3 Rule-chain conventions
+
+- One chain per domain: `validators/<domain>.validator.js`
+  (kebab-case), imported by the §30–§39 route modules, mounted
+  **before** the domain controller (`router.post('/', chain,
+  validate(), controller)`).
+- Rules reference `<entity>Id` params (`:reportId` etc.,
+  §12.11-1), sanitize inputs (escape HTML in text fields per
+  §61 policy — validators are also the sanitization gate), and
+  use values from `httpStatus`/constants only.
+- Numbers/dates: `isISO8601` (dates), `isInt` with min/max
+  (pagination, `visitNo`, `sizeBytes`), enums via `isIn` on the
+  §11.4 constant arrays (`REPORT_STATUSES` for the filter
+  dimensions, `AI_PROVIDERS`, `AI_REASONING_EFFORTS`,
+  `LANGUAGE_CODES`, `MESSAGE_ROLES`).
+
+### 29.4 Cross-domain rules (shared)
+
+- **Ids:** every `:xId` is a valid Mongo ObjectId — non-ObjectId
+  params → 422 (never 404; §12.11).
+- **Pagination:** `page` ≥ 1, `limit` 1..100 (`PAGINATION_MAX_LIMIT`),
+  else 422; defaulting happens at the controller from
+  `PAGINATION_DEFAULT_PAGE` / `PAGINATION_DEFAULT_LIMIT`.
+- **Dates:** time fields use the `HH:mm` regex (`/^([01]\d|2[0-3]):[0-5]\d$/`), report dates ISO.
+- **Status enum:** the transition-guard table is §31's; validators
+  only check enum membership, never transitions.
+- **Text security:** string fields pass the §61 escape/sanitize
+  step (rich content = report/transcription text is stored as-is
+  and sanitized at render; chrome strings are validated as plain
+  text without HTML intent).
+
+### 29.5 Domain chains inventory (`validate` lists per §30–§39)
+
+`user.validator.js` (§28), `branch.validator.js` (§30),
+`report.validator.js` (§31), `audio.validator.js` (§32),
+`transcription.validator.js` (§33/§35), `chat.validator.js`
+(§36), `export.validator.js` (§37), `analytics.validator.js`
+(§38), `search.validator.js` (§39), `mock.validator.js` (§40).
+Each owns the field-level rules of its domain contract; the
+domain sections name the specific rules inline (validators are
+the mechanical home — section text is normative, chain code is
+its mirror).
+
+### 29.6 Verification usage
+
+- Grep gates: no validator chain constructs a status transition
+  or a business guard; every route module mounts `validate()`;
+  no zod dependency; 422 shape only from `validation.js`.
+- Cross-section checks: mirrors §27.5 (envelope), §11.4 (enums),
+  §30–§39 (per-domain rules), §61 (sanitize policy), §43.7
+  (client mirror; bespoke default).
+- §29 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 30. Branch API
+
+### 30.1 Purpose & scope
+
+§30 owns the Branch endpoints — the CRUD, archive/restore, and
+permanent-delete lifecycle (BR-14 two-path deletion) for the
+branches a supervisor manages (§3.1.2 F2). It is the first
+domain API because every report flow consumes the branch
+surface: the §31 creation steps reference active branches, and
+the snapshot discipline (BR-14) starts here.
+
+- **Owned here (normative).** The branch list/filter contract
+  (§30.2); create (§30.3); update (§30.4); archive/restore
+  (§30.5); permanent delete (§30.6); ownership & edge cases
+  (§30.7); endpoints matrix (§30.8); verification (§30.9).
+- **Owned elsewhere — deliberately not repeated here.** Branch
+  schema/snapshot/tombstone = §20; envelope/errors/pagination/
+  transactions = §27; validators = §29; sweeper hard-delete =
+  §62; the branch page UI = §41.5; constants = §11
+  (`PAGINATION_*`, `ARCHIVED_TTL_SECONDS`).
+- **Explicitly out of scope §30.** No transition rule for
+  reports (§31), no digest/header composition (§6.11/§31), no
+  analytics aggregation (§38), no new constant (§11 unchanged),
+  no package.
+
+### 30.2 List & filters
+
+`GET /branches` (access, global tier §27.3) — paginated
+(§27.6). Filters:
+- `isArchived` **absent or `false`** → **active only** (default,
+  BR-14 semantic: archived hidden unless explicitly asked);
+  `isArchived=true` → archived only. Query items: `page`,
+  `limit`, `sort` (`name` asc default), `isArchived`.
+- Response: §27.4 envelope with `data: { docs, page, limit,
+  totalDocs, totalPages }`; each `docs` item is the BranchDto:
+  `{ _id, user, name, location, isArchived, archivedAt,
+  createdAt, updatedAt }` — the model's serialized surface
+  (§27.4), no additions.
+- Errors: 422 invalid filter values; 401 unauthenticated.
+
+`GET /branches/:branchId` (access) — BranchDto; 404 when not
+found **for this user** (BR-13 scoping — the query is
+`{ _id, user }`, so another user's branch never leaks a 403 or
+a 404 difference beyond the same 404).
+
+### 30.3 Create
+
+`POST /branches` (access): `{ name, location }` (both required
+strings, trimmed, `location` optional? no — required per §20:
+`location` is a required field; but the branch picker's usage:
+the creation form in §41.5 requires both). 201 CREATED with
+BranchDto. Validation: non-empty `name` (1..100 chars),
+`location` (1..200), no duplicate-name constraint (no unique
+index, §20). Transaction: single-doc session write (§27.7).
+
+### 30.4 Update
+
+`PATCH /branches/:branchId` (access): `{ name?, location? }` —
+at least one field required. Returns the fresh BranchDto.
+**Never cascades into reports** (BR-14: report snapshot
+`branches[].name` is immutable once captured; §20/§21).
+Archived branches remain updatable (rename before deletion is
+allowed; the snapshot contract is unaffected).
+
+### 30.5 Archive / Restore (BR-14 two-path step 1)
+
+- `POST /branches/:branchId/archive` (access): sets
+  `isArchived=true`, `archivedAt=now` in one session; 200
+  BranchDto. Idempotent-ish: re-archiving an archived branch →
+  409 `CONFLICT` (archive/restore lifecycle violation, §27.5).
+- `POST /branches/:branchId/restore` (access): clears both
+  (`isArchived=false`, `archivedAt=null`); 200 BranchDto;
+  restoring an active branch → 409.
+- Either is forbidden on a branch that is a tombstone (belongs
+  to another user → 404, BR-13).
+- **Archive implications:** archived branches disappear from
+  default listings (§30.2) and are hidden in the §31 branch
+  options (active-only rule referenced at §20/§31); reports
+  keep their snapshot names.
+
+### 30.6 Permanent delete (BR-14 step 2, BR-15)
+
+`DELETE /branches/:branchId` (access): **no immediate hard
+delete** — BR-15/§62 own the timing. The endpoint performs the
+archive as the deletion's step-1 (sets `isArchived=true`,
+`archivedAt` if not yet) and **returns 202-style semantics via
+OK** with `data: { archived: true, message: 'Branch archived —
+it will be permanently removed after the retention period' }`
+(precise copy is §60's catalogue; chrome per §7.6). The actual
+row removal happens only in the sweeper after
+`ARCHIVED_TTL_SECONDS` (30 days) — the only hard-delete path
+(BR-15, §62). There is no `deletedAt` anywhere (§18.3/§20).
+
+### 30.7 Ownership & edge cases
+
+- BR-13: every query carries `user: req.user._id`; a branch of
+  another user is indistinguishable from nonexistent (404).
+- Duplicate-name create is allowed (no unique index, §20 —
+  names are free-form).
+- A branch can be renamed/archived/deleted while reports
+  reference it — snapshots hold the display truth; the
+  `branches[].branch` join key returns `null` on tombstone and
+  the reads render the snapshot (never an error, §17.4).
+- Long lists: pagination is server-side only (ADR-034); the
+  client never holds more than the current page.
+
+### 30.8 Endpoints matrix
+
+| Method+Path | Auth | Request | Success | Errors |
+|---|---|---|---|---|
+| `GET /branches` | access | query `{ page, limit, sort, isArchived }` | 200 paginated BranchDtos | 401, 422 |
+| `GET /branches/:branchId` | access | — | 200 BranchDto | 401, 404 |
+| `POST /branches` | access | `{ name, location }` | 201 BranchDto | 400/422 |
+| `PATCH /branches/:branchId` | access | `{ name?, location? }` | 200 BranchDto | 400/422, 404 |
+| `POST /branches/:branchId/archive` | access | — | 200 BranchDto | 401, 404, 409 |
+| `POST /branches/:branchId/restore` | access | — | 200 BranchDto | 401, 404, 409 |
+| `DELETE /branches/:branchId` | access | — | 200 (archived→retention) | 401, 404, 409 |
+
+### 30.9 Verification usage
+
+- Grep gates: no branch route writes outside a session (§27.7);
+  no hard-delete in any branch controller (only archive); no
+  `deletedAt`; no snapshot rewrite on update; filters default to
+  active-only; DTO keys exactly the Branch serialized surface.
+- Cross-section checks: mirrors §20 (model), §27 (envelope/
+  tiers/transactions), §29 (validators), §31 (branch options in
+  report creation), §62 (sweeper), §41.5 (UI), §11 (constants).
+- §30 introduces no constant (§11 unchanged — `PAGINATION_*`
+  exist), no path beyond §15.4 (`branch.routes.js`), and no
+  package; it references only specification sections.
+
+---
+
+## 31. Report & Status API
+
+### 31.1 Purpose & scope
+
+§31 is the **largest and most-referenced backend section**: the
+Report endpoints, the status machine with the authoritative
+transition-guard table (BR-06, ADR-003), the creation steps the
+wizard mirrors (§52 references §31.2-1…§31.2-5), the cascade and
+rewind rules (§17.4), the two-path lifecycle (BR-16), and the
+accept flow (BR-08). Every Part D page (§49–§52) and Part C
+section (§32–§39) hangs on this section.
+
+- **Owned here (normative).** Report creation steps (§31.2);
+  detail/list contracts (§31.3); the status machine and the
+  transition-guard table (§31.4); visit/content update endpoints
+  (§31.5); correction & accept flows (§31.6); the two-path
+  lifecycle (§31.7); cascade/rewind and presence invariants
+  (§31.8); endpoints matrix (§31.9); verification (§31.10).
+- **Owned elsewhere — deliberately not repeated here.** Audio
+  upload = §32; transcription = §33; generation = §34;
+  correction service internals = §35; chat = §36; export = §37;
+  retention timing = §62; the wizard UI = §52; the details page =
+  §51; envelope/errors/transactions = §27.
+- **Explicitly out of scope §31.** No STT/AI provider calls
+  (§33–§35), no new constant (§11 unchanged — `REPORT_STATUSES`,
+  `ARCHIVED_TTL_SECONDS`, `SWEEPER_INTERVAL_MS` exist), no path
+  beyond §15.4, no package.
+
+### 31.2 Creation steps (§31.2-1 … §31.2-5)
+
+The five creation steps are the server side of the wizard (§52);
+the step list mirrors exactly the §11.6-4 `REPORT_FORM_FIELDS`
+creation order (ADR: the registry and this list are the same
+order, maintained together).
+
+**§31.2-1** `POST /reports` (access): `{ supervisorName,
+reportDate }` (reportDate optional Date ISO) → 201 CREATED,
+ReportDto at `draft`, `raw`/`latest` null, `visits: []`,
+`branches: []`. The report row exists before visits/audio;
+wizard step 1 maps here. No `lng`/`lat` exists anywhere (§21.2)
+— no coordinate endpoint exists, and none is planned.
+Validation: `supervisorName` 1..100.
+
+**§31.2-2** `PATCH /reports/:reportId/visits` (access): replaces
+the `visits[]` capture block (validates each entry:
+`branchId` → resolves to an **active** branch of this user, sets
+`branchName` = that branch's `name` snapshot at the same capture
+moment and updates `branches[]` members to match (§21.2
+equality by construction); `clockIn` required per §20/§31
+rule — `HH:mm`, `clockOut` optional nullable; the branch's
+active state is checked here, **not** in §30). Returns the
+ReportDto with both blocks.
+
+**§31.2-3** audio attach: upload endpoints of §32 (`POST
+/reports/:reportId/visits/:visitNo/clips`); the first clip moves
+the status per §31.4 (draft → audio_attached).
+
+**§31.2-4** transcription + review: §33 pipelines; review
+decisions are §31.6's accept-of-transcription (per-clip
+accept) and §35's corrections.
+
+**§31.2-5** generation: §34 writes `raw`/`latest`; report moves
+to `reviewed` per §31.4.
+
+Each step's guard: forward-only per §31.4; client-side mirrors
+via §52.10's save-protocol (BR-07) post through these calls.
+
+### 31.3 Detail & list
+
+- `GET /reports/:reportId` (access): 404 on not-found-for-user
+  (BR-13). Response ReportDto (list DTO): the serialized surface
+  minus heavy fields — `raw`/`latest` **excluded** unless
+  `?withContent=true` (details page fetches with the flag;
+  §51 relies on `latest`; ADR-034). Includes `branches[]`
+  (snapshot), `visits[]`, status, dates, `isArchived`.
+- `GET /reports` (access): paginated; filter dimensions: `status`
+  (enum from `REPORT_STATUSES`), `branchId` (multikey index
+  `user + branches.branch`), `isArchived` (default hidden),
+  `search` (delegated to §39), `sort` (`reportDate` desc,
+  `createdAt` tiebreak, §21 index). Data: list DTOs, heavy fields
+  absent.
+
+### 31.4 Status machine & the transition-guard table (normative)
+
+States = `REPORT_STATUSES` order. The table below **is the only
+transition authority** — §51/§52 UI actions reuse it identically
+(BR-06 note); services and validators never hold their own copy.
+
+| From | To | Guard / trigger | Owner |
+|---|---|---|---|
+| `draft` | `audio_attached` | first clip uploaded (§32.2) | §32 |
+| `audio_attached` | `transcribed` | every audio has a transcription row with `raw` set (§33.5) | §33 |
+| `transcribed` | `reviewed` | generation completed: `raw`/`latest` written, report content exists (§34.4) | §34 |
+| `reviewed` | `completed` | super.-accept (§31.6 Accept; BR-08) | §31 |
+| `completed` | *(none)* | forward-locked; content stays editable via §35/§31.6 (BR-10); Re-transcribe hidden (BR-12 end) | §31/§35 |
+| `audio_attached` | `draft` | **last audio deleted** (single explicit backward transition, ADR-003) | §32/§31 |
+| `transcribed` | `audio_attached` | **last audio deleted** | §32/§31 |
+| `reviewed` | `transcribed` | re-transcription of any clip invalidates the review lock (ADR-030; §33.6) | §33 |
+| `reviewed` | *(no other)* | generation reruns? — regeneration is allowed only from `transcribed` (the §34 regen gate: content regenerates against the reviewed transcription, but the **status index** is `reviewed`; no separate transition row needed — regen keeps status; §34.3) | §34 |
+
+**Guard principles:** never skip states forward except the listed
+steps; no implicit rewind on edits (BR-10 — edits never rewind);
+the only rewind paths are the last-audio rewind and the review
+invalidation; archive/restore (BR-16) is orthogonal to status
+(guards apply within archived reports for
+content-changing actions; read-only views still open).
+
+### 31.5 Visit & content updates
+
+- `PUT /reports/:reportId/visits/:visitNo` — update a single row
+  (branch/time fields); re-runs §31.2-2's rules for the row.
+- `DELETE /reports/:reportId/visits/:visitNo` — removes the row;
+  its clips remain bound (`report, visitNo` exact — §32/§22)
+  and stay attached (their visit is still a captured memory);
+  the report row is never deleted by this.
+- `PATCH /reports/:reportId` — header fields
+  (`supervisorName`, `reportDate`) — the wizard's step-1 save.
+
+### 31.6 Accept, corrections & content endpoints
+
+- **Accept transcription (per clip):** `POST
+  /reports/:reportId/transcriptions/:transcriptionId/accept`
+  — BR-08's review decision per clip: copies that clip's
+  transcription into the review lock (sets reviewed-state);
+  transitions only when ALL clips are accepted. The `reviewed`
+  status requires every clip accepted (§23.3 stages: initial →
+  accepting → accepting-corrected → done).
+- **Accept report:** `POST /reports/:reportId/accept` — only
+  from `reviewed` (guard from the table); fixes `latest` as the
+  accepted content (BR-08/BR-11); sets `completed`. Returns the
+  ReportDto. 403 on wrong state with the §27.5 semantics
+  ("Report is not ready to be completed").
+- **Correction endpoints** (wired to §35 service):
+  - `PATCH /reports/:reportId/content` — Mode-1 save: replaces
+    `latest` with the client's corrected content (sanitized
+    §61); allowed at every status including `completed`
+    (BR-10); never touches `raw` (BR-11).
+  - `POST /reports/:reportId/correct` — Mode-2/3: typed
+    instruction OR voice-correction clip (multipart) → the §35
+    service rewrites only the relevant part (BR-09) and writes
+    the result to `latest` on Accept (the §35 accept→save
+    flow); returns the corrected content snapshot.
+  - `POST /reports/:reportId/content/revert` — single undo:
+    copies `raw` → `latest` while they differ (BR-11); 200 con
+    `data: { content: latest }`.
+
+### 31.7 Two-path lifecycle (BR-16, mirrors §30.5)
+
+- `POST /reports/:reportId/archive` / `POST /reports/:reportId/restore`
+  — set/clear `isArchived`/`archivedAt`; 409 on state mismatch;
+  archive allowed at any status (including `completed`).
+- `DELETE /reports/:reportId` — step 1 archive (BR-15; the
+  physical removal happens in the §62 sweeper after 30 days).
+  Hard-delete cascade is §62's, always in session
+  (audio docs + `fs.unlink` after commit, transcription rows,
+  conversation row); no `deletedAt`.
+
+### 31.8 Cascade / rewind / presence invariants
+
+- **Last-audio rewind** (ADR-003): deleting the last audio of an
+  `audio_attached` report rewinds to `draft`; of `transcribed`/
+  `reviewed` to `audio_attached`; a `completed` report never
+  rewinds (deletion = storage hygiene) — the §51.4 confirm copy
+  states the consequence (§32 owns the audio endpoint; §31 owns
+  the transition).
+- **Presence map** (§17.6): `draft` = row only; `audio_attached`
+  = +≥1 Audio row; `transcribed` = + transcription(s) `raw`
+  (= `latest`); `reviewed` = content locked by review decision;
+  `completed` = accepted content fixed. No other data may
+  change status.
+- **Tombstones:** deleted branch `branch` refs → `null` join;
+  reads render `branches[].name` / `visits[].branchName`; never
+  an error; analytics/export/search honor it (§17.4).
+- **Concurrency:** every write in §31.5/§31.6 runs in the §27.7
+  session template; version/reject conflicts surface via §27.5
+  as a toast on the client (§60) — never a silent overwrite.
+
+### 31.9 Endpoints matrix (Report domain)
+
+| Method+Path | Auth | Request | Success | Errors |
+|---|---|---|---|---|
+| `POST /reports` | access | `{ supervisorName, reportDate? }` | 201 ReportDto | 401, 422 |
+| `GET /reports` | access | query filters + pagination | 200 list | 401, 422 |
+| `GET /reports/:reportId` | access | `?withContent` | 200 ReportDto | 401, 404 |
+| `PATCH /reports/:reportId` | access | `{ supervisorName?, reportDate? }` | 200 | 404, 422 |
+| `PUT /reports/:reportId/visits/:visitNo` | access | visit fields | 200 | 404, 422, 403 (archived) |
+| `DELETE /reports/:reportId/visits/:visitNo` | access | — | 200 | 404 |
+| `POST /reports/:reportId/transcriptions/:transcriptionId/accept` | access | — | 200 | 404, 403 (state) |
+| `POST /reports/:reportId/accept` | access | — | 200 ReportDto | 404, 403 |
+| `PATCH /reports/:reportId/content` | access | content replaced | 200 `{ content }` | 404, 422 |
+| `POST /reports/:reportId/correct` | access | instruction or multipart clip | 200 corrected snapshot | 404, 502 (providers) |
+| `POST /reports/:reportId/content/revert` | access | — | 200 `{ content }` | 404 |
+| `POST /reports/:reportId/archive` / `restore` | access | — | 200 | 404, 409 |
+| `DELETE /reports/:reportId` | access | — | 200 (archived→retention) | 404, 409 |
+
+### 31.10 Verification usage
+
+- Grep gates: exactly one transition-guard table in the
+  codebase (this section); no `..accept()` outside §31.6; no
+  status writes outside the §31 tables; no `lng`/`lat` anywhere
+  (§21.2 — no coordinate field, no endpoint).
+- Cross-section checks: mirrors §11 (`REPORT_STATUSES`,
+  `ARCHIVED_TTL_SECONDS`), §17.4 (§17.6 presence), §20 (active
+  branch check), §21 (fields/snapshot), §27 (envelope/tiers),
+  §29 (validators), §32–§35 (pipeline wiring), §51/§52 (UI
+  actions reuse the table), §62 (sweeper).
+- §31 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 32. Audio Upload & Storage
+
+### 32.1 Purpose & scope
+
+§32 owns the audio clip surface (BR-02): upload, list, play/
+download, delete, and the storage discipline — metadata-only
+documents with binaries on the local filesystem (§22, §12.9/§17.5)
+and the hard rule that `filePath` never reaches a client (§22.7,
+DTO gate). It is also the step-3 birth of the status machine
+(§31.4: first clip → `audio_attached`; last-clip deletion →
+rewind).
+
+- **Owned here (normative).** Upload endpoint & multer con-
+  figuration (§32.2); clip listing, play streaming, per-visit
+  binding (§32.3); clip deletion & the rewind rule (§32.4);
+  temp-cleanup and file lifecycle (§32.5); states & edge cases
+  (§32.6); endpoints matrix (§32.7); verification (§32.8).
+- **Owned elsewhere — deliberately not repeated here.** The Audio
+  model and its cascade rules = §22; the STT pipeline feeding on
+  physical files = §33; status transitions = §31.4; validators
+  = §29; constants = §11.3 (`AUDIO_MAX_*`,
+  `AUDIO_ALLOWED_MIME_TYPES`); recording UX = §53; the clip list
+  UI = §51.4/§46.17.
+- **Explicitly out of scope §32.** No STT call, no streaming of
+  any kind (D2 — files play via HTTP range, never wss/SSE), no
+  new constant, no path beyond §15.4 (`uploads/audio/`,
+  `audio.routes.js`), no package (multer already in §13).
+
+### 32.2 Upload
+
+`POST /reports/:reportId/visits/:visitNo/clips` (access, global
+tier): multipart/form-data with one file part `clip` plus a
+`language` field (default `am`, must be a `LANGUAGE_CODES`
+member). Rules:
+
+- MIME in `AUDIO_ALLOWED_MIME_TYPES`; size ≤ `AUDIO_MAX_SIZE_BYTES`
+  (50 MB); duration ≤ `AUDIO_MAX_DURATION_SEC` (900 s) verified
+  via ffprobe (informational `durationSec`; the §29 chain enforces
+  the file, the multer `limits` enforce size, ffprobe enforces
+  duration). Video MIME (`video/*`, `.mp4`) is rejected with the
+  §19.1 placeholder message (deferred D1) — 422.
+- Store under `backend/uploads/audio/` (gitignored, multer
+  destination; filename = `{$reportId}-{$visitNo}-{$timestamp}` +
+  sanitized extension, no user input in names). Bindings
+  `{ report, visitNo }` written in the same §27.7 session that
+  inserts the Audio doc (`visitNo` must equal a member of the
+  owning report's `visits[].visitNo` — 422 otherwise; audio can
+  be bound to a removed visit only until the visit's own
+  removal, never after re-use).
+- Response 201: AudioDto — `{ _id, report, visitNo, mimeType,
+  sizeBytes, durationSec, createdAt, updatedAt }` (all fields,
+  no `filePath`). First clip of the report triggers
+  `draft → audio_attached` (§31.4, §32 session).
+- `video` clips rejected; silent `audio/webm` uploads accepted
+  for storage (metadata-only) but the §33 pipeline never feeds
+  webm — chunk MIME is §33's own rule (uploaded webm is
+  converted by the pipeline).
+
+### 32.3 Listing & playback
+
+- `GET /reports/:reportId/visits/:visitNo/clips` (access):
+  200 list of AudioDtos, ordered by `createdAt` asc (§22 —
+  within a visit, chronological by creation, never array
+  position). Empty list → `docs: []` (no 404).
+- `GET /audios/:audioId` (access): metadata AudioDto; 404 for
+  not-owned.
+- `GET /audios/:audioId/play` (access): streams the physical
+  file with `Accept-Ranges`/HTTP range support and the stored
+  `mimeType` (browser audio element; no resumable-S3, no
+  signed URL — plain authenticated range streaming). Headers:
+  `Content-Type: mimeType`, `Accept-Ranges: bytes`,
+  `Cache-Control: private`. 404 when the file is missing (the
+  doc's binary already cleaned — edge §32.5), 403 for
+  not-owned.
+
+### 32.4 Deletion & the rewind rule
+
+`DELETE /audios/:audioId` (access): removes the Audio doc + its
+transcription (cascade in-session, §22/§23) and, after commit,
+`fs.unlink`s the physical file (failure → orphan-sweep retry,
+§62). Status consequences per §31.4 — this endpoint applies the
+appropriate rewind when the deleted clip was the report's last:
+`audio_attached → draft`, `transcribed`/`reviewed →
+audio_attached`; `completed` never rewinds (deletion is storage
+hygiene only). Response 200 `{ data: null, message }` (message =
+§60 catalogue copy — "Clip deleted" with the rewind sentence in
+the §51.4 confirm dialog). A `completed` report's deletion
+stays within the session and never touches status.
+
+### 32.5 Temp-cleanup & file lifecycle
+
+- Multer temp/partial failure: uncommitted files (validation
+  failure, session abort) are removed by the controller's
+  cleanup in the same request (finally); anything leaked beyond
+  a request is the orphan sweep's second pass (§62).
+- Files are not served by any public mount (§26.4); avatar files
+  share the discipline (§28.5).
+- The Audio doc's binary is never re-uploaded; transcriptions
+  reference audio doc ids, not paths.
+
+### 32.6 States & edge cases
+
+- Race: upload session aborted after multer wrote a physical
+  file — controller cleanup unlinks it; sweeper covers rest.
+- File missing (manual deletion from disk): play returns 404
+  with the toast copy; the doc remains (the sweeper cleans it
+  with the owning report's lifecycle).
+- Deleting an audio of a visit whose `visitNo` no longer exists
+  on the report: allowed (binding is exact-key, §22) — the
+  report row itself is never deleted by this path.
+
+### 32.7 Endpoints matrix
+
+| Method+Path | Auth | Request | Success | Errors |
+|---|---|---|---|---|
+| `POST /reports/:reportId/visits/:visitNo/clips` | access | multipart `clip` + `language` | 201 AudioDto | 401, 404 (report/visit), 422 (MIME/size/duration/binding), 413 via multer → 422 mapping |
+| `GET /reports/:reportId/visits/:visitNo/clips` | access | — | 200 list | 401, 404 (report) |
+| `GET /audios/:audioId` | access | — | 200 AudioDto | 401, 404 |
+| `GET /audios/:audioId/play` | access | — | 200 stream | 401, 403, 404 |
+| `DELETE /audios/:audioId` | access | — | 200 | 401, 404 |
+
+### 32.8 Verification usage
+
+- Grep gates: `filePath` absent from every DTO/response (§22.7);
+  no `GridFS`/`S3`/`wss`/`/api/v1/audio` proxy anywhere (§16.3
+  gate, §4.1 D2); video MIME rejection present; rewind logic
+  only here + §31.4 (single place); `fs.unlink` only after
+  commit.
+- Cross-section checks: mirrors §22 (model, DTO), §11.3
+  (limits), §29 (validators), §31.4 (status), §33 (pipeline),
+  §53 (client limits — the same constants), §19.1 (video out),
+  §62 (orphan sweep), §27 (envelope/session template).
+- §32 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 33. STT Pipeline
+
+### 33.1 Purpose & scope
+
+§33 owns the speech-to-text pipeline — the accuracy-critical
+Amharic transcription step (ADR-001, ADR-007, SC-1): ffmpeg
+preparation, PCM-level WAV chunking via
+`utils/wavSplitter.js`, Addis AI STT (exclusively — ADR-001,
+§12.11-5), and the persistence of `raw`/`latest` on the
+Transcription doc (§23, BR-11). It also owns re-transcription
+(ADR-030) and the status entry into `transcribed` (§31.4).
+
+- **Owned here (normative).** Pipeline contract & stages (§33.2);
+  chunking (ADR-007) (§33.3); the Addis STT call (§33.4);
+  persistence & the `transcribed` gateway (§33.5);
+  re-transcription (ADR-030) (§33.6); failure handling &
+  retries (§33.7); endpoints (§33.8); verification (§33.9).
+- **Owned elsewhere — deliberately not repeated here.** Upload
+  and storage = §32; the Transcription model = §23; status
+  transitions = §31.4; provider call envelope (transport, retry
+  semantics, logging labels) = §16; constants = §11.3
+  (`ADDIS_AI_STT_MAX_DURATION_SEC`, `AI_PROVIDER_RETRIES` etc.);
+  mock STT = §25/§40; corrections = §35.
+- **Explicitly out of scope §33.** No Gemini/NVIDIA involvement
+  (ADR-001), no new constant (§11 unchanged), no new path beyond
+  §15.4 (`transcription.routes.js`), no package.
+
+### 33.2 Pipeline contract
+
+`POST /reports/:reportId/transcribe` (access, **ai tier**
+§27.3) triggers transcription for one report: the service
+(`services/stt.service.js`, the only layer calling `addis`) walks
+the report's audios in `visitNo`+`createdAt` order (§32.3),
+transcribes each (or skips audios that already have a
+transcription row), and returns progress. Chunks within one
+audio are transcribed and concatenated (§33.3/§33.4). The
+pipeline is **synchronous request/response** (no streaming, no
+queue — §4.1 D2); long clips take the request time, bounded by
+the 900 s audio cap and the 60 s chunk threshold.
+
+### 33.3 Chunking (ADR-007, accuracy-critical)
+
+- `utils/wavSplitter.js` (PCM-level, §15.4) splits a WAV-stream
+  into ≤60 s pieces (chunk break at silence when a natural
+  boundary is near; constant `ADDIS_AI_STT_MAX_DURATION_SEC`);
+  ffmpeg converts non-PCM uploads (mpeg/wav/mp4/webm → mono
+  16-bit 16 kHz PCM) **before** chunking. Output chunks are the
+  pipeline's own MIME (PCM or wav), never the uploaded
+  `audio/webm` type (§22 note).
+- The chunk boundary logic never reorders text; transcriptions
+  concatenate chunk results in order with single-space joins —
+  deterministic, no post-processing (§43.6 analog applies to
+  STT output as raw material).
+
+### 33.4 The Addis STT call
+
+Provider client: native `fetch` + multipart (ADR-008),
+`x-api-key: ADDIS_API_KEY`; endpoint per §16.4
+(`data` object: audio blobs `request_data`, `language_code`
+from the clip's stored `language` default `am`,
+`target_language` `am` always); timeout `AI_TIMEOUT_MS`;
+retry per §16.5 only on transport/5xx (per-provider counts);
+429 → honor `Retry-After`. **No fallback chain for STT**
+(ADR-001) — a failed chunk is marked failed, never sent to
+Gemini/NVIDIA; per-chunk failures do not abort the whole clip;
+transcription completes with the chunks that succeeded and the
+§33.7 failure record.
+
+### 33.5 Persistence & the `transcribed` gateway
+
+On success the service writes the Transcription row in the
+§27.7 session: `{ user, audio, raw, latest, language, stt:
+{ requestId, model } }` — both texts equal (BR-11), the
+`stt` subdoc from `usage_metadata.requestId` + the providers'
+model string (ADR-019-permitted audit fields only; confidence
+not persisted, §16.4/§23). The audio's `transcription` ref is
+set in the same session (§22); when **every** audio of the
+report has a transcription with `raw` set, the report moves
+`audio_attached → transcribed` (§31.4, §23.3 stage "done" is a
+UI artifact — the row state is simply both texts written).
+Re-transcribing (see §33.6) re-runs the row replace.
+
+### 33.6 Re-transcription (ADR-030)
+
+`POST /reports/:reportId/transcriptions/:transcriptionId/re-
+transcribe` (access, ai tier): deletes the transcription row
+and inserts a fresh one (`raw` = `latest` = new STT result)
+atomically in one session, re-pointing `audio.transcription`
+(§23). Availability per §31.4: at every status **except**
+`completed` (BR-12 window); at `reviewed` the re-run
+**invalidates the review lock** → report returns to
+`transcribed` (single explicit backward path alongside the
+last-audio rewind, ADR-003/ADR-030). Response: fresh
+TranscriptionDto.
+
+### 33.7 Failure handling & retries
+
+- Chunk-level failure: report still moves to `transcribed` only
+  when all chunks succeeded; otherwise the audio stays
+  pending and the response returns `data: { completed, failed:
+  [{ audioId, reason }] }`; the client's §51.4/§54 surface
+  shows the retry affordance (the endpoint can be re-called —
+  only failed/pending audios re-run; spans are idempotent).
+- Provider-level exhaustion: 502 `BAD_GATEWAY` via the §27
+  handler with user-facing message ("Transcription failed —
+  please retry"); logs = provider, model, status, timing only
+  (ADR-019).
+- An empty transcription result (all-silence) is persisted as an
+  empty-string `raw` (a valid result, not an error) and counts
+  toward `transcribed`.
+
+### 33.8 Endpoints matrix
+
+| Method+Path | Auth | Tier | Request | Success | Errors |
+|---|---|---|---|---|---|
+| `POST /reports/:reportId/transcribe` | access | ai | `{}` | 200 `{ data: { completed, failed } }` — status advanced per §31.4 | 401, 404, 403 (archived/`completed`), 422 (no audios or all already transcribed), 502, 429 |
+| `POST /reports/:reportId/transcriptions/:transcriptionId/re-transcribe` | access | ai | — | 200 TranscriptionDto | 401, 404, 403 (`completed`), 422, 502, 429 |
+| `GET /reports/:reportId/transcriptions` | access | global | — | 200 list of TranscriptionDtos (`audio` ref, `language`, `raw`, `latest`, `stt.*`) | 401, 404 |
+
+### 33.9 Verification usage
+
+- Grep gates: Addis only in STT (no Gemini/NVIDIA client in
+  `stt.service.js`); chunk length constant, never literal; no
+  streaming markers (`res.` streams absent); `raw` written once
+  (BR-11) and re-transcription visible as full row replace in
+  one session; `retry` counts from the constants.
+- Cross-section checks: mirrors §16 (transport, ADR-001/008/
+  019), §23 (model, DTO), §31.4 (status), §32 (files),
+  §25/§40 (mock STT rows), §11.3 (constants), §27 (envelope/
+  tiers/sessions), §19.1/§4.1 (no streaming).
+- §33 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 34. AI Report Generation Service
+
+### 34.1 Purpose & scope
+
+§34 owns the report-generation engine (G2, F5): the prompt
+construction per §8, the structured-output schema, the provider
+chain (ADR-014 with the fixed fallback `addis → gemini →
+nvidia`), and the write of `raw`/`latest` plus the `transcribed
+→ reviewed` gateway (§31.4). §34 is where §6 (format), §7
+(language), and §8 (AI rules) become behavior.
+
+- **Owned here (normative).** Trigger & preconditions (§34.2);
+  prompt construction (§34.3); structured-output schema & parsing
+  (§34.4); provider call & fallback (§34.5); persistence &
+  status advance (§34.6); regeneration rules (§34.7); failure
+  handling (§34.8); verification (§34.9).
+- **Owned elsewhere — deliberately not repeated here.** Provider
+  transport/retry/timing/logging = §16.5; the reviewed
+  transcription (BR-07 source) = §23/§33; format, language,
+  tone = §6–§8; validation = §31/§29; correction = §35; the
+  conversation turns = §36; constants = §11.3 (`AI_*`).
+- **Explicitly out of scope §34.** No STT (ADR-001, §33), no
+  translation (D5), no new constant, no path beyond §15.4, no
+  package.
+
+### 34.2 Trigger & preconditions
+
+`POST /reports/:reportId/generate` (access, **ai tier** §27.3).
+Preconditions enforced server-side (403/422 semantics):
+
+- status must be `transcribed` (every clip has a transcription;
+  a `reviewed` report does not regenerate without first exiting
+  review — §34.7);
+- every audio has a non-null transcription `raw` (presence map,
+  §17.6);
+- report not archived (403).
+
+The response is synchronous: 200 with the generated content and
+the report's fresh DTO only after persistence (§34.6).
+
+### 34.3 Prompt construction (per §8)
+
+The production prompt is assembled from registry data — never
+free-text literals:
+
+1. **System/context:** the §6.2 skeleton (each slot named), the
+   §6.3 field list with types, Type-1 vs Type-2 handling per
+   §6.4, tone sample per §6.6 and §8.4, and the strict
+   no-invention clause (BR-19: missing values stay blank/"not
+   specified").
+2. **Content blocks:** the capture data — `supervisorName`,
+   `reportDate` (Ethiopian date per §6.3 display; stored UTC),
+   `branches[]` snapshot names, `visits[]` (branchName + clockIn/
+   clockOut), `language`, and the **reviewed transcription**
+   text (the §23 `latest` — BR-07 source of truth).
+3. **Conversation history:** when regeneration needs it, the
+   §36 conversation entries projected (`role` `user`/`assistant`
+   only, content) bounded per §12.8; absent on first generation.
+4. **Output contract:** structured JSON per §34.4.
+
+### 34.4 Structured-output schema & parsing
+
+Every provider call demands structured JSON (Gemini
+`responseMimeType`/`responseSchema`; NVIDIA `response_format:
+{ type: 'json_object' }`; Addis via explicit prompt instruction
+— §16.4). Schema (owned here):
+
+```json
+{ "report": { "header": "string", "branchSections":
+  [{ "branchName": "string", "activities": ["string"],
+  "unresolvedIssues": ["string"], "generalOpinion": "string" }],
+  "daySummary": "string", "exitTime": "string",
+  "overallAssessment": "string" } }
+```
+
+All keys render in the §6 vocabulary; the field semantics follow
+§6.3 exactly. The service parses the provider response;
+schema-invalid/parse-failed → provider failure per §16.5
+(retry, then fallback — never silent acceptance, SC-1 gate).
+`finish_reason` must be `stop`; anything else is treated as
+failure (§16.4). Temperature `AI_TEMPERATURE`, max output
+`AI_MAX_OUTPUT_TOKENS`, `AI_TOP_P`, `AI_TOP_K` — all from §11.3.
+
+### 34.5 Provider call & fallback (ADR-014)
+
+`services/generation.service.js` uses the fixed chain
+`addis → gemini → nvidia` (§11.4 `AI_PROVIDERS` order): try a
+provider per §16.5 (transport/5xx retries × `AI_PROVIDER_RETRIES`,
+backoff `AI_PROVIDER_BACKOFF_BASE_MS`, timeout `AI_TIMEOUT_MS`),
+on exhaustion fall to the next; all exhausted → 502 via the §27
+handler ("Report generation failed — please try again"). The
+reasoning parameter is sent only when the chosen model's
+`reasoning` capability flag is on (§16.4); Addis calls carry
+`language_code`/`target_language` = `am`. The selected
+`(provider, model, reasoning)` triple is recorded on the §36
+conversation message for this generation turn (ADR-014); the
+conversation row is created lazily at its first saved turn so
+the audit trail lands with the content (§24, §36).
+
+### 34.6 Persistence & status advance
+
+In one §27.7 session: write `raw`/`latest` (**both** = the
+generated content, BR-11 — `raw` written once, forever
+untouched; `latest` starts equal), set the report status
+`transcribed → reviewed` (§31.4 gateway). Response: 200 with
+the ReportDto (`withContent` semantics — content included) and
+`data.content`. Neither `acceptedAt` nor `exportedAt` is ever
+stored (§21.2). The review lock is implicit: being at `reviewed`
+means a generation exists.
+
+### 34.7 Regeneration rules
+
+Regeneration (`POST /reports/:reportId/generate` again) is
+allowed only from `transcribed` (a report that left `reviewed`
+via re-transcription, §33.6, may regenerate); from `reviewed` it
+is refused 403 unless the report re-enters `transcribed` first
+(no implicit rewind). Regeneration **overwrites `latest`** and
+leaves `raw` alone (BR-11), and records the new turn on the §36
+conversation. At `completed`: generation is refused 403 —
+corrections are the §35 path (BR-10 keeps the report editable
+via correction, not regeneration).
+
+### 34.8 Failure handling
+
+- Provider exhaustion → 502 (never a partial write; nothing is
+  persisted on failure — `raw` stays null, status stays put).
+- Timeout mid-attempt → treated per §16.5 (retried, then
+  fallback); the single provider attempt is bounded by
+  `AI_TIMEOUT_MS`.
+- Content that fails the §6/§7 validation gates after a
+  successful provider call → the service posts an
+  **assistant note** to the §36 conversation ("content rejected
+  by validation") and surfaces a 422 with the reason; the
+  generation is not persisted (no false `reviewed`).
+
+### 34.9 Verification usage
+
+- Grep gates: the generation service is the only caller of the
+  provider chain for text output; prompts assembled from the
+  §34.3 blocks (no prompt literal outside the service file and
+  §8's fixtures); the schema JSON keys = this section's keys;
+  no Gemini/NVIDIA path in STT (§33); `AI_*` constants, never
+  literals.
+- Cross-section checks: mirrors §16 (ADR-008/014/019), §6–§8
+  (format/language/tone), §21 (raw/latest), §31.4 (status
+  gateway), §33 (transcribed input), §35 (corrections),
+  §36 (conversation turns), §27 (envelope/tiers), §11.3
+  (constants).
+- §34 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 35. AI Correction Service
+
+### 35.1 Purpose & scope
+
+§35 owns the correction engine (G3, BR-09, BR-10, BR-11): the
+three modes (Mode-1 typed Save, Mode-2 typed instruction +
+Accept/Revert, Mode-3 voice-transcribed instruction) exposed by
+§31.6's endpoints, and the **surgical partial-edit contract** —
+only the relevant part changes, unrelated correct sections stay
+identical (§2.2 G3, §2.4 SC-3). It is the machine behind the §54
+components and the §51.5 actions.
+
+- **Owned here (normative).** Mode contracts (§35.2); the
+  partial-edit rule (BR-09) and the `±`-token protocol (§35.3);
+  provider call & temperature (§35.4); accept → save flow
+  (BR-11) (§35.5); voice-correction instructions (Mode 3)
+  (§35.6); failure handling (§35.7); verification (§35.8).
+- **Owned elsewhere — deliberately not repeated here.** Endpoints
+  and their guards = §31.6; the transcription raw material for
+  Mode 3 = §33; conversation history = §36; rendering/sanitizing
+  = §61; providers/transport = §16.5; constants = §11.3
+  (`AI_CORRECTION_*`).
+- **Explicitly out of scope §35.** No generation (first-pass
+  text = §34), no new constant, no path beyond §15.4, no
+  package.
+
+### 35.2 Mode contracts
+
+| Mode | Endpoint (§31.6) | Input | Engine behavior |
+|---|---|---|---|
+| Mode-1 | `PATCH /reports/:reportId/content` | edited full content | no AI — the client's corrected text replaces `latest` directly (sanitized §61), allowed at every status incl. `completed` (BR-10) |
+| Mode-2 | `POST /reports/:reportId/correct` | typed instruction (registry-guided; may name the exact §6.3 field/§6.7 content class) | prompts for a **partial edit**: returns only the changed `branchSections[]` slots with the reason (server vocabulary), to be merged on Accept |
+| Mode-3 | `POST /reports/:reportId/correct` (multipart) | voice-correction clip → §33 STT → instruction text | same engine as Mode-2 fed from the transcription; the STT step is shared code with §33 (no second pipeline) |
+
+### 35.3 Partial-edit rule (BR-09) & `±`-token protocol
+
+- The prompt states the surgical contract verbatim: the
+  instruction touches only the addressed section/value; every
+  other §34.4 key is returned **byte-identical** to `latest`
+  (the service diff-verifies: parts not in scope must be
+  unchanged or the correction is rejected as provider failure
+  and retried — SC-3 gate).
+- **`±`-token protocol (normative):** official/entitled text the
+  user must not freely alias is marked with the `±` prefix (the
+  §22 copy vocabulary). The correction engine never resolves,
+  strips, or translates `±` tokens (resolution is §37/§64's —
+  the official-format decision), never lets a correction delete
+  a `±` block silently (a `±` block deletion is only accepted
+  when the instruction explicitly names it and the diff
+  verification confirms it), and returns tokens verbatim in
+  output. The §54/§53 surfaces render the tokens as-is with the
+  "leave this token untouched" guidance (§53.4).
+
+### 35.4 Provider call & temperature
+
+Mode-2/3 run the §34.5 provider chain mechanics (ADR-014
+fallback, ai tier, §16.5 retries) with the **correction
+parameters**: `AI_CORRECTION_TEMPERATURE` (0.15) and
+`AI_CORRECTION_MAX_OUTPUT_TOKENS` (2048) (§11.3), and the
+correction-specific structured schema = a partial of the §34.4
+schema: `{ changed: [{ section, field, content, reason }] }`.
+Reason vocab: server-returned sentences from the §22 copy rules
+("removed duplicate verb", "moved case FE paragraph") — never
+invented client-side (§54.3). `reasoning` params follow the
+model's capability flag (§16.4).
+
+### 35.5 Accept → save flow (BR-11)
+
+The corrected partial is **not written on generation**: the
+service returns the staged corrected content (the "corrected-copy
+strip" of §54 stages it client-side) and `latest` is persisted
+**only when the user Accepts** — the Accept action of §31.6
+writes the merged content to `latest` and completes the
+correction turn. **Revert** (`POST /reports/:reportId/content/
+revert`) restores `raw` → `latest` (single undo, BR-11) or
+discards the staged copy. `raw` is never rewritten via
+correction. `completed` reports accept corrections the same way
+(BR-10). Staging is client-owned (the endpoints accept the full
+target content to write); the server never keeps an unaccepted
+edit beyond the request — no server-side pending-edit store
+(ADR-033).
+
+### 35.6 Voice-correction instructions (Mode 3)
+
+The mode-3 multipart upload reuses §32's multer/file rules and
+§33's STT pipeline (`POST /reports/:reportId/correct` with a
+`clip` part when a `mode` field equals `voice`): the clip is
+transcribed (chunked per §33.3), the instruction text is the
+transcription result, and Mode-2's engine runs against it. The
+mode-3 clip is ephemeral — never stored as an Audio row, never
+added to the clip list (§32 DTO gate); the resulting
+instruction may be quoted into the §36 conversation as the
+user's correction turn for the audit trail.
+
+### 35.7 Failure handling
+
+- Provider exhaustion → 502 with "Correction failed — please
+  try again"; the staged copy survives (client-side) and retry
+  re-runs from the same instruction.
+- Schema-invalid correction output → provider failure per §16.5
+  (retry → fallback); SC-3 diff failure retries once, then
+  422 with the diff reason.
+- Mode-3 clip corrupt/unreadable → 422 (STT failure map §33.7);
+  the instruction never reaches the provider.
+
+### 35.8 Verification usage
+
+- Grep gates: no AI call in Mode-1 (pure write path); the
+  correction service shares the §33 STT entry (no second
+  pipeline); `±` unchanged across every service output; no
+  server-side staging store; `AI_CORRECTION_*` constants used;
+  the mode-3 clip never creates an Audio doc.
+- Cross-section checks: mirrors §31.6 (endpoints/guards), §33
+  (STT), §34.5 (chain), §54 (UI modes), §22 (copy vocabulary),
+  §61 (sanitize on write), §27 (envelope/tiers), §11.3
+  (constants).
+- §35 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 36. AI Chat & Conversation API
+
+### 36.1 Purpose & scope
+
+§36 owns the conversation endpoints behind the correction chat
+UI (F7): the lazy conversation row (§24 — one per report, unique
+`report` ref), the message-append contract with the
+`(provider, model, reasoning)` triple per message (ADR-014), the
+message list DTO, and the `conversation_history` projection §34/
+§35 consume. All §36 writes append inside the §27.7 session and
+validate against the §11.4 registers before insert (triple
+validated, §24).
+
+- **Owned here (normative).** Conversation row creation
+  (§36.2); the message endpoints (§36.3); the append contract
+  and validation (§36.4); the history projection (§36.5);
+  envelope/edge cases (§36.6); endpoints matrix (§36.7);
+  verification (§36.8).
+- **Owned elsewhere — deliberately not repeated here.** The
+  ChatConversation model and indexes = §24; the provider
+  transport = §16.5/§16.4; generation & correction feeding the
+  history = §34/§35; the UI = §55; `MESSAGE_ROLES` = §11.4.
+- **Explicitly out of scope §36.** No provider call (the chat
+  is a correction interface; the AI call happens in §35 — the
+  chat persists both sides of it), no new constant (§11
+  unchanged — `MESSAGE_ROLES`, `AI_PROVIDERS`, `AI_MODELS`,
+  `AI_REASONING_EFFORTS` exist), no package.
+
+### 36.2 Conversation row creation
+
+The conversation document is created **lazily at its first
+saved turn** (§24): `POST /reports/:reportId/chat/messages`
+creates the row (`{ user, report }`) when none exists, in the
+same session as the first message append — never a separate
+step, never created empty (grep gate: no preemptive
+conversation creation in §31/§34). `GET /reports/:reportId/chat`
+returns the conversation DTO; a report with no conversation yet
+responds 200 with `data: { messages: [] }` (empty, not 404).
+
+### 36.3 Message endpoints
+
+- `GET /reports/:reportId/chat` (access, global tier): the
+  conversation DTO — `{ _id, user, report, messages }`;
+  messages surface exactly `role, content, provider, model,
+  reasoning, createdAt` (§24.2 serialized surface), ordered by
+  `messages.createdAt` (index §24), never by array index. `user`
+  and `report` may be included; `content` is rendered sanitized
+  client-side (§61).
+- `POST /reports/:reportId/chat/messages` (access, **ai
+  tier** §27.3): the **user** turn (text content, ≤
+  `CHAT_MESSAGE_MAX_LENGTH` — 4 000 chars, §11.3)
+  — validated against `MESSAGE_ROLES` (`user` only for this
+  endpoint), `provider`/`model`/`reasoning` from the §11.4
+  registers (non-member → 422, never stored (§24)). The row is
+  created if needed and the message `$push`ed inside the §27.7
+  session; the response is 201 with the fresh conversation DTO.
+  The AI answer is generated by the §35 correction engine (or
+  the §34 generation note) as a second message appended by the
+  service, not by this endpoint (the endpoint never calls a
+  provider itself — SC-7 is about the browser; the server
+  always calls providers only in §33–§35 services).
+- There is **no delete/update endpoint**: conversations are
+  never individually archivable or deletable (§24) — their
+  lifetime is the owning report's (cascade on hard-delete,
+  §62).
+
+### 36.4 Append contract & validation
+
+Every append validates the message tuple (`role ∈ MESSAGE_ROLES`,
+`provider ∈ AI_PROVIDERS` with `model ∈ AI_MODELS[provider]`,
+`reasoning ∈ AI_REASONING_EFFORTS`) via the §29 chat validator
+then §24.2's registry checks at save; `content` length ≤
+`CHAT_MESSAGE_MAX_LENGTH` (§11.3); the validator references the constant — no literal. $push is the only message
+write; no in-place updates, no array reordering (§24.2 caveats).
+
+### 36.5 History projection
+
+The `conversation_history` consumed by §34.3/§35.2 is a
+projection of this collection: entries with `role` `user`/
+`assistant` only (`system` notes are excluded from prompts),
+content + createdAt, bounded to the recent
+`AI_CONVERSATION_HISTORY_MAX_ENTRIES` entries (§11.3; §12.8
+window). The projection is computed server-side in
+the generation/correction service; the chat DTO is never sent
+to the client in prompt form.
+
+### 36.6 Envelope & edge cases
+
+- Empty conversation read → `{ messages: [] }` (200).
+- Message-length violations → 422 with field error.
+- Concurrent appends to the same report (two tabs): each append
+  is transactional; the unique `report` index + session make
+  row creation race-safe (second creator receives 409 on the
+  index conflict — mapped to 422 retry semantics by §29, or a
+  natural re-read by the client).
+- A deleted report's conversation: cascade removes it (§62);
+  the client's §51 would already be gone.
+
+### 36.7 Endpoints matrix
+
+| Method+Path | Auth | Tier | Request | Success | Errors |
+|---|---|---|---|---|---|
+| `GET /reports/:reportId/chat` | access | global | — | 200 `{ data: { _id, user, report, messages } }` (empty allowed) | 401, 404 |
+| `POST /reports/:reportId/chat/messages` | access | ai | `{ content, provider, model, reasoning }` | 201 conversation DTO with appended message | 401, 404, 422, 409 (row race) |
+
+### 36.8 Verification usage
+
+- Grep gates: no message update/delete endpoint; no conversation
+  creation outside §36.2 (no preemptive rows in other services);
+  the chat route never imports a provider client (only §33–§35
+  services do); `MESSAGE_ROLES`/register validation references
+  constants; no `reasoning_content` anywhere (§24).
+- Cross-section checks: mirrors §24 (model), §34.3/§35.2
+  (history consumers), §55 (UI), §61 (sanitize), §27 (tiers/
+  sessions), §11.4 (registers), §62 (cascade).
+- §36 introduces no constant (§11 unchanged — the 4 000-cap
+  note points at §11's amendment channel), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 37. Export API
+
+### 37.1 Purpose & scope
+
+§37 owns the **backend-side** export surface: the Google Docs
+export (BR-18, ADR-006, §2.4 SC-5) into the user's own Google
+Drive via `drive.file` scope with the user's own OAuth token,
+and the authenticated proxy through which the client-side export
+formats (§58) receive the report's current content. It exists
+because ADR-006 reserves Google Docs for the backend (only the
+backend may hold provider tokens; SC-7).
+
+- **Owned here (normative).** Export content readiness (§37.2);
+  Google Docs export (§37.3); the OAuth token contract (§37.4);
+  the content-retrieval surface for §58 (§37.5); states & edge
+  cases (§37.6); verification (§37.7).
+- **Owned elsewhere — deliberately not repeated here.** The
+  client-side PDF/TXT/CSV/XLSX flows = §58; retention of
+  exported artifacts = §62; naming rules = §58 (OQ-006); the
+  content that exports = §21/§22 (official text, `±` resolution
+  = §64/§35.3).
+- **Explicitly out of scope §37.** No client PDF generation,
+  no conversion of content language (BR-17/D5), no new
+  constant, no package (Google APIs absent from §13 — the stub
+  holds; ADR-024 keeps real Google integration open in §69).
+
+### 37.2 Export content readiness
+
+Export requires `latest` (a generated report — `raw`/`latest`
+non-null); a `draft`/`audio_attached` report's export call
+returns 422 ("Nothing to export yet"). Export reproduces the
+current accepted content (BR-18) at the moment of the request;
+nothing is persisted (no `exportedAt` field anywhere, §21.2).
+
+### 37.3 Google Docs export
+
+`POST /reports/:reportId/export/docs` (access, global tier):
+creates a Google Docs document in the **user's own Drive** with
+the report's `latest` content (sanitized §61 server-side before
+transmission) and `drive.file` scope. On success:
+`200 { data: { documentId, url } }` (url = docs.google.com
+document link). On missing/invalid token → 401-ish mapping via
+ADL-024's stub: the flow requires the user's Drive OAuth token,
+which **does not exist yet** (ADR-024 open) — the endpoint is
+specified against a `drive` service interface whose
+implementation is deferred:
+
+- The `drive` service is the **only** Google-boundary module;
+  it consumes a user-scoped OAuth token obtained through §28's
+  OAuth architecture (ADR-031) when implemented; today the
+  endpoint resolves to the §69 open question and the client
+  shows the §58 copy ("Google Docs export is coming soon"),
+  guarded by a constant `EXPORT_DOCS_ENABLED` (`false`, §11) —
+  when the flag flips true the service becomes live without
+  page changes.
+- `±` tokens in `latest` are resolved **at export by the
+  backend** (the §64 official-format decision boundary): the
+  service replaces `±`-marked tokens with the corresponding
+  official text from the §22 copy vocabulary **only in the
+  exported artifact**, never in stored content (BR-17: language
+  unchanged; the resolution is format-only).
+
+### 37.4 OAuth token contract
+
+No Google env vars exist (§10.4 closed). When the open question
+closes, the token arrives via §28's OAuth flow (ADR-031,
+provider-neutral), stored server-side scoped to the user (no
+bearer storage in the browser, SC-7), and refreshed through the
+provider — this contract is written now; the implementation
+flags off (§37.3).
+
+### 37.5 Content-retrieval surface for §58
+
+`GET /reports/:reportId/export/content` (access, global tier):
+returns `{ data: { content: latest, reportDate, supervisorName,
+branchNames } }` — the exact current content the browser-side
+PDF/TXT/CSV/XLSX flows format (§58). `±` tokens are returned
+**as-is** for the client formats (§58 prints them verbatim;
+resolution happens only in the backend Google Docs path §37.3).
+Content is returned raw-text (not HTML), sanitized per §61.
+
+### 37.6 States & edge cases
+
+- No `latest` → 422 (title copy per §60); archived reports may
+  still export (read-only view, §51); `completed` status is not
+  required (editable reports export their current `latest`,
+  BR-10/BR-18).
+- Google flag off → the §58 menu item disabled with "coming
+  soon" tooltip; flag on → live path per §37.3.
+- Drive quota/unauthorized → 502 mapping with the §60 toast
+  copy; the client retries via the same button.
+
+### 37.7 Verification usage
+
+- Grep gates: the only Google API references live in
+  `services/drive.service.js` behind the `EXPORT_DOCS_ENABLED`
+  constant; no `GOOGLE_*` env reads; no `exportedAt` write; `±`
+  untouched in stored content and in the §37.5 surface; no
+  provider token in any client DTO.
+- Cross-section checks: mirrors §58 (client flows), §27
+  (envelope/tiers), §21.2/§22.3 (content), §61 (sanitize),
+  §64 (`±` decision), §28 (OAuth architecture), §69 (open
+  questions), §11 (`EXPORT_DOCS_ENABLED`).
+- §37 introduces no constant (§11 — `EXPORT_DOCS_ENABLED`
+  exists in §11.3 backend inventory), no path beyond §15.4, and
+  no package; it references only specification sections.
+
+---
+
+## 38. Analytics API
+
+### 38.1 Purpose & scope
+
+§38 owns the analytics payload the §49 dashboard renders — KPI
+counts and chart series computed **server-side over the report/
+branch collections** (ADR-034: the client never aggregates;
+§49.3's KPI table is this section's contract). It exists because
+F9 names a dashboard, and §3.1.2/§49 reference this section as
+the analytics data owner.
+
+- **Owned here (normative).** The payload contract (§38.2); the
+  KPI computation rules (§38.3); the chart series (§38.4);
+  rollup & date semantics (§38.5); states & edge cases (§38.6);
+  verification (§38.7).
+- **Owned elsewhere — deliberately not repeated here.** The
+  dashboard UI/KPI card mapping = §49; the report/branch fields
+  aggregated = §20/§21; visibility = §3.2.3 (personal, BR-13);
+  constants = §11.4/§11.3.
+- **Explicitly out of scope §38.** No per-report detail data, no
+  heavy joins beyond the aggregations below, no new constant
+  (§11 unchanged), no package.
+
+### 38.2 Payload contract
+
+`GET /analytics/dashboard` (access, global tier) →
+`200 { data: { kpis, charts } }`:
+
+- **kpis** — `{ reportsThisMonth, inProgress, completed,
+  activeBranches, trends? }` where trends (optional object,
+  `reportsThisMonthDelta`, `completedDelta` etc.) may be present
+  or absent — §49.3 renders no caption when absent (no invented
+  numbers).
+- **charts** — `{ statusDistribution: [{ status: <member of
+  REPORT_STATUSES>, count }], activityByBranch: [{ name, count }
+  ] (top N = 8, ordered desc), issuesTrend: [{ date,
+  count }] }` — issuesTrend emits the §6.11 issue vocabulary's
+  counts for the recent 30 days (the endpoint returns
+  `[]`-series when the vocabulary is pending, §49.4's "pending
+  contract" — the schema is fixed, the values may be empty).
+
+All counts are **personally scoped** (BR-13: `user:
+req.user._id` only); counts exclude archived reports (unless a
+dimension says otherwise — none does).
+
+### 38.3 KPI computation rules
+
+- **reportsThisMonth** — reports whose `reportDate` falls in
+  the current **Ethiopian month** (per §6.3/§43 display; the
+  server normalizes: stored UTC dates are bucketed by the
+  Ethiopian calendar month at computation time — no
+  client-side calendar math, ADR-034).
+- **inProgress** — count of `draft` + `audio_attached` +
+  `transcribed` + `reviewed` (the §31 open-state set; if §31
+  ever extends the open set, this list follows it).
+- **completed** — count of `completed`.
+- **activeBranches** — count of `isArchived: false` branches of
+  this user (§20 surface).
+- Sum constraint: `inProgress + completed ≤ reportsThisMonth`
+  only holds when every report has a `reportDate`; reports
+  without a `reportDate` count in none of the month buckets
+  (BR-01/BR-19: missing stays missing — the KPI totals are per-
+  dimension, never reconciled into a grand total here).
+
+### 38.4 Chart series rules
+
+- **statusDistribution** — one `$group` per `REPORT_STATUSES`
+  member over non-archived reports; the five members always
+  appear (zero-count statuses are emitted with 0 — the donut
+  never drops a slice, §49.4).
+- **activityByBranch** — reports grouped by active
+  `branches[].name` snapshot (tombstone-safe: the snapshot
+  name is aggregated even when the branch row is gone, §17.4);
+  top 8 by count.
+- **issuesTrend** — issue-keyword counting over the §6.11
+  vocabulary in `latest` content for each of the last 30 days;
+  when §6.11 is pending the series is `[]` (schema fixed).
+
+### 38.5 Rollup & date semantics
+
+- Aggregations run via MongoDB `$match` + `$group` with the
+  owner filter and `isArchived: false` in `$match` — no
+  post-processing joins, no per-user aggregation maps cached
+  (the query cost is bounded by the per-user index set §21).
+- `reportDate` bucketing: server interprets the UTC date
+  through the Ethiopian calendar month boundaries (the §6.3
+  conversion at the boundary — exact mapping per §43.6 notes;
+  week boundaries are not part of this contract).
+- A `null` `reportDate` never breaks a bucket or the endpoint
+  (404-free; the month bucket simply excludes it).
+
+### 38.6 States & edge cases
+
+- Empty account (no reports): kpis all zero, charts = five
+  zero-slices + empty series — the §49 dashboard renders its
+  empty-state copy from this shape (no special "no data" 200
+  variant; the client derives the empty state from zeros).
+- Archive state: archived reports/`archivedAt` windows never
+  feed the dashboard (consistent with §50's filters).
+- A tombstoned branch's reports still count in
+  statusDistribution/issuesTrend and appear under their
+  snapshot name in activityByBranch (§17.4 rule).
+
+### 38.7 Verification usage
+
+- Grep gates: the analytics controller contains the only
+  aggregation pipelines in the backend (no `$group` elsewhere
+  for UI data); no client-side reduction over list responses
+  for KPIs (ADR-034); the payload keys match §49.3's table
+  exactly; `REPORT_STATUSES` order preserved; no literal
+  `200`-style special-casing.
+- Cross-section checks: mirrors §49 (UI), §20/§21 (fields
+  aggregated), §6.11 (vocabulary), §31 (open-state set), §17.4
+  (tombstones), §11.4 (enums), §27 (envelope).
+- §38 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+---
+
+## 39. Global Search API
+
+### 39.1 Purpose & scope
+
+§39 owns the global search endpoint — the backend of the §59
+search dialog: text search across the user's own reports,
+drafts, branches, and transcription/audio content. It is where
+the report text index question is decided (§21.4/§18.3 promise
+"§39 will prove any text index it needs").
+
+- **Owned here (normative).** Index decision & proof (§39.2);
+  the endpoint contract (§39.3); result groups & scoring
+  (§39.4); edge cases (§39.5); verification (§39.6).
+- **Owned elsewhere — deliberately not repeated here.** The
+  dialog UI = §59; list/pagination envelope = §27.4; validators
+  = §29; entity serialization = §27.4/§19–§24.
+- **Explicitly out of scope §39.** No cross-user search (BR-13),
+  no search-index daemon (single-tenant per-user, bounded), no
+  new constant, no package.
+
+### 39.2 Index decision (normative)
+
+Search is served by MongoDB **text indexes**, proven by this
+usage: a single wildcard text index per collection is **not**
+added blindly — instead exactly these scoped text indexes are
+created (proven by the §38.4/§31.3 usage patterns and the
+endpoint below):
+
+- `reports`: text index over `{ reportDate (stringified
+  searchable), supervisorName, 'branches.name',
+  'visits.branchName' }` — a compound text+standard index as
+  the composite of `user` + the text fields (the multikey
+  snapshot arrays support text over array elements).
+- `branches`: text index over `{ name, location }` (user-
+  scoped).
+- Transcription content (`transcriptions.latest`/`raw`) and
+  audio `filePath` are **not** indexed for search (content
+  search crosses into generation-prompts territory; BR-19;
+  cost) — searches match report/branch fields only, and the
+  §39.3 result for reports carries the matching report; further
+  content search is a deferred feature (§4).
+
+### 39.3 Endpoint contract
+
+`GET /search?q=...` (access, global tier): `q` 1–100 chars
+(trimmed; empty → 422). Pagination `page`/`limit` (§27.6), and
+`type` (optional: `report` | `branch`; absent = all). Response
+§27.4: `data: { docs: [{ type, entityId, title, subtitle,
+status?, matchedFields }], page, limit, totalDocs, totalPages }`
+(grouped client-side by `type`, §59.3). `title` = report date
+(`DD-MM-YY`) or branch `name`; `subtitle` = supervisor name /
+branch `location`; `matchedFields` = which indexed field(s)
+matched (for highlight, chrome copy per §7.6).
+
+### 39.4 Scoring & ordering
+
+- Ranking: text-score desc; ties by `reportDate` desc /
+  `name` asc. `$text` `$search: q` with the §29 chain sanitizing
+  `q` (no regex injection — `$text` is regex-free by design);
+  no fuzzy/typo tolerance (acceptance: exact and prefix-ish
+  text matches only — documented).
+- Type filter maps to a `type` union of index targets: `report`
+  → the reports text index; `branch` → the branches index.
+- Results respect BR-13 and `isArchived` (archived rows are
+  excluded unless `includeArchived=true` — default false,
+  matching §30.2/§31.3).
+
+### 39.5 Edge cases
+
+- Zero matches → 200 with `docs: []` and `matchedFields: []`
+  items (never 404); the §59 dialog shows the "No results"
+  state.
+- Multi-word `q` → `$text` ORs term matches; a quoted phrase in
+  `q` honors `$text` phrase syntax only if the validator allows
+  quotes (it does not — quotes are stripped before `$text`,
+  documented to avoid injection surprises).
+- Long `q` truncation at 100 chars; special regex chars have no
+  effect (documented acceptance).
+
+### 39.6 Verification usage
+
+- Grep gates: exactly the two text indexes above declared
+  (initialSchema target §18.3 — no wildcard `'$**'`); no regex
+  constructed from `q` anywhere (`RegExp` absent in
+  `search.service.js`); `filePath` never a search target; the
+  search dialog is the only consumer of this endpoint (§59.6).
+- Cross-section checks: mirrors §21.4/§18.3 (index promise
+  closed here), §59 (UI), §27.4 (envelope/pagination), §29
+  (validation), §17.4 (tombstones), §20/§21 (fields).
+- §39 introduces no constant (§11 unchanged), no path beyond
+  §15.4 (`search.routes.js`), and no package; it references only
+  specification sections.
+
+---
+
+## 40. Mock Data & Seeding
+
+### 40.1 Purpose & scope
+
+§40 owns the seed/wipe mechanism (ADR-037) — the development-
+only surface that produces mock data per §25's rules: mock
+users, branches, reports in every status, audio documents
+(metadata-only, §25/§40), mock transcriptions as documents, and
+a mock conversation, all session-safe (§18.5) and never
+hard-coded into models (§18.8/§25).
+
+- **Owned here (normative).** Seed/wipe endpoints (§40.2);
+  fixture composition (§40.3); session safety (§40.4);
+  environment gating (§40.5); states & edge cases (§40.6);
+  verification (§40.7).
+- **Owned elsewhere — deliberately not repeated here.** Mock
+  content rules and fixtures' Amharic copy = §25; the models
+  written = §19–§24; the sweeper = §62.
+- **Explicitly out of scope §40.** No production data path, no
+  seed into production, no new constant (§11 unchanged), no
+  package.
+
+### 40.2 Endpoints
+
+- `POST /mock/seed` (access; **development only** §40.5):
+  creates a deterministic fixture set for the **current user
+  only** (BR-13 — seeding writes only `user`-scoped rows):
+  branches (3 active, 1 archived), reports in each of the five
+  statuses (with visits, snapshot names), audio docs
+  (metadata-only with NO physical files — §25's metadata-only
+  rule, ADR-037; the doc carries the §25 mock-path convention),
+  a transcription linked to one audio, and a mock conversation.
+  Returns `{ data: { seeded: { branches,
+  reports, audios, transcriptions, conversations } } }`.
+- `POST /mock/wipe` (access; development only): deletes the
+  caller's own mock rows (session-safe, per user — never other
+  users'). Returns counts.
+- Both are **session-safe** (ADR-018): the whole mock write/
+  delete set commits atomically; a mid-wipe failure aborts
+  cleanly.
+
+### 40.3 Fixture composition (per §25)
+
+- Reports carry real-shaped visits/branches snapshot blocks;
+  the `raw`/`latest` on `reviewed`/`completed` fixtures = the
+  §25 mock content (Amharic, §7.6-sane: content Amharic,
+  chrome English); `audio_attached` fixtures hold audio rows,
+  `transcribed`/`reviewed` hold transcription rows with equal
+  `raw`/`latest` (BR-11 shape), `completed` fixtures hold
+  accepted content.
+- The mock conversation holds `(provider, model, reasoning)`
+  triples from the §11.4 registers (never invented strings).
+- Wipe deletes exactly what seed created for this user; rerun
+  of seed without wipe is idempotent-by-wipe (no unique-index
+  collisions beyond the user's own rows — email uniqueness
+  exempt because seeds never create users).
+
+### 40.4 Session safety
+
+Both endpoints wrap the full write/delete set in the §27.7
+template (startSession → ... → commit). The controller never
+commits incrementally; the `mock` routes mount their own
+`ensureMockEnabled` guard (§40.5) before the chain.
+
+### 40.5 Environment gating
+
+`ensureMockEnabled`: allowed **only** when `NODE_ENV` is
+`development` (asserted at boot; the constants file exposes it
+as frozen config, §26.2). Any other environment gets 404 with
+the §60 catalog copy ("Mock data is only available in
+development"). Grep gate: no mock route registration in
+production builds (the route module is conditionally mounted by
+`routes/index.js` per the env flag — not by string env checks
+strewn through code).
+
+### 40.6 States & edge cases
+
+- Seed after wipe / wipe without seed → both are no-ops that
+  return `{ seeded: zeros }` / `{ wiped: zeros }` (200, not
+  errors) — deterministic for the dev loop.
+- A mid-development user with real data: wipe removes only mock
+  rows (mock rows are flagged by the fixture signature per §25
+  — the report/branch rows carry the §25 convention; real rows
+  are untouched by wipe: wipe matches the same user + the §25
+  signature).
+- Audio mock rows carry no physical files: the §32 play
+  endpoint 404s for them (documented mock behavior — the UI
+  shows the §60 message; the §54/§51 surfaces survive).
+
+### 40.7 Verification usage
+
+- Grep gates: `mock/` never imported by models (§18.8); no seed
+  call outside `mock.routes.js`; `node --expose-gc` not needed;
+  no `isProduction` checks other than the guard; no physical
+  files written by mock (metadata-only, ADR-037).
+- Cross-section checks: mirrors §25 (content rules), §19–§24
+  (models), §18.5 (sessions), §27 (envelope), §62 (sweeper for
+  leftovers), §7.6 (copy), §13/§11 (constants).
+- §40 introduces no constant (§11 unchanged), no path beyond
+  §15.4, and no package; it references only specification
+  sections.
+
+**End of Part C (backend).** Sections 26–40 close the backend
+specification in dependency order: foundation and concerns
+(§26–§27), identity (§28), validation (§29), the domain APIs
+(§30–§31), the media pipeline (§32–§33), the AI services
+(§34–§35), conversation and export (§36–§37), and the
+aggregation surfaces (§38–§40), each standing on Parts A/B's
+locked decisions (ADR-001–038) exactly as §12.11 and the
+BR-01–BR-19 catalogue require.
+
+---
 
 ## 41. Frontend Foundation
 
@@ -6009,8 +8027,9 @@ in bold), states, and responsive behavior. Forms bind through the
 - **File:** `components/reusable/MuiDataGrid.jsx`; domain columns
   live in `components/columns/*.js` — `reports.js` (§50),
   `branches.js` (§56).
-- **Purpose:** every data table (Reports §50, Branches §56,
-  analytics-owned surfaces §56).
+- **Purpose:** every data table (the Reports list §50, the
+  Branches list §56 — the dashboard charts of §49 are not a
+  data grid).
 - **Props/contract:** `columns` (from the domain column file),
   `rows`, `loading`, `rowCount` (**= server `totalDocs`**),
   `paginationMode="server"`, `page`, `pageSize`, `onPaginationModelChange`, `onRowClick`, `checkboxSelection` (**true**),
@@ -6101,7 +8120,7 @@ in bold), states, and responsive behavior. Forms bind through the
 - **Usage:** Report Details header (§51), Reports grid/list cells
   (§50), wizard step headers (§52).
 
-### 46.14 LoadingSpinner
+### 46.14 LoadingSpinner & skeleton variants
 
 - **File:** `components/reusable/LoadingSpinner.jsx`.
 - **Purpose:** centered `CircularProgress` for full-page or
@@ -6109,6 +8128,13 @@ in bold), states, and responsive behavior. Forms bind through the
 - **Props:** `message` (optional, `text.secondary`), `minHeight`
   (**`100vh`** default; sections override, e.g. `400px`).
 - **Usage:** guards §41.5, page loads §49–§59, dialog loads.
+- **Skeleton variants (the §45.7 batch surfaces):**
+  `TableSkeleton`, `ListSkeleton`, `FormSkeleton`,
+  `MessageSkeleton` (`components/reusable/*Skeleton.jsx`) —
+  §46.14-styled placeholders for the reports list (rows), the
+  dashboard KPIs, the wizard steps (per-field), the conversation
+  (message rows), and table surfaces; pages render these at
+  their §45.7 loading slots and never duplicate skeleton markup.
 
 ### 46.15 GlobalSearchDialog
 
@@ -6176,6 +8202,15 @@ Justified by their sections; the same contract discipline applies:
   wizard step indicator (§52): the §44.5 dot style, step labels,
   `activeStep`, `onStepClick` (only to visited steps), completed
   check; responsive: step labels collapse to dots below 600px.
+- **MuiRegistrationValue** (`components/reusable/
+  MuiRegistrationValue.jsx`) — the single renderer for
+  registration-bearing values (the §21.10 registry surfaces):
+  renders the **registration text/label exactly as stored in
+  the registry** — never reformatted, never translated (the
+  label is data, §7.6); on tombstones (§17.4) the stored label
+  still renders; a missing registry key renders the §46.4
+  not-applicable dash. ADR-033: no second registration renderer
+  anywhere.
 
 ### 46.18 Verification usage
 
@@ -6323,3 +8358,1765 @@ header-strip treatment (§46.12, used per page), the guards
 - §47 introduces no constant (§11 unchanged — "Report Builder"
   is `VITE_APP_NAME`, §10.5), no path, and no package; it is
   standalone — it references only specification sections.
+
+---
+
+## 48. Pages — Auth (Landing, Login, Register)
+
+### 48.1 Purpose & scope
+
+§48 owns the three public pages and their shared behaviors — the
+only surfaces an anonymous visitor may reach (§3.2.1, §4.4): the
+Landing page (`/`), the Login page (`/login`), and the Register
+page (`/register`). All three render inside `PublicLayout`
+(§47.2) behind `PublicRoute` (§41.5). Reasons of existence: the
+supervisor must learn what the product does before signing up
+(Landing), must enter the session (Login — also the converge
+point of the guard redirect `state.from`, §41.5, and of the §42
+expiry redirect), and must create an account with no admin path
+(Register — self-service registration, F1, §19.2/§28).
+
+- **Owned here (normative).** The Landing page and its signature
+  hero (§48.2); the Login page and its form (§48.3); the Register
+  page and its form, including the post-registration decision
+  (§48.4); the shared auth behaviors — links, the Google OAuth
+  entry, presentation (§48.5).
+- **Owned elsewhere — deliberately not repeated here.** The
+  account-creation contract, auto-extraction of names, and the
+  Google OAuth flow = §19.2/§28 (Part C); cookies and reauth =
+  §42/§28; the public app-bar = §47.2; guards and redirects =
+  §41.5; form mechanics = §46.2/§9.6; toasts and the §60 protocol;
+  the 404 page = §59.
+- **Explicitly out of scope §48.** No amendment to the §19/§28
+  contracts (e.g. no extra registration fields — the form collects
+  exactly `email` and `password`); no new constant (§11/§10
+  unchanged — page copy is authored text, not code constants); no
+  path beyond §15.5 (`pages/`, `components/login/`,
+  `components/landing/`); no package.
+
+### 48.2 Landing page (`/`)
+
+**File:** `pages/Landing.jsx`; domain components in
+`components/landing/`. Renders inside PublicLayout's scrollable
+Outlet (§47.2); no reauth surface beyond the public app-bar.
+
+**Purpose & composition.** Phone-call-as-sale: a single job —
+explain the product and route to Register/Login (§4.4). Sections
+top to bottom: 1) **Hero** (the signature, §43.2); 2) **How it
+works** (a 3-step horizontal strip: Record → Verify → Deliver —
+the §1.5 loop in chrome copy); 3) **The report** (a framed
+reproduction of the §6.8 report body — read-only, sanitized
+render §61 — demonstrating the deliverable); 4) **CTA band**; 5)
+footer (product name `VITE_APP_NAME`, §10.5; copyright line).
+
+**Hero (normative, locked decision of §43.2).** The report-header
+motif: the eight-line Amharic header of §6.3 (ቀን / ብራንች / ስም /
+ስራ የገባሁበት ሰዓት / የተሰሩ ስራዎች / መፍትሄ የሚፈሉ ጉዳዮች / አጠቃላይ
+አስተያየት / ከስራ የወጣሁበት ሰዓት) typeset in the Ethiopic content
+face (§43.5) over the hairline-ruled paper panel (§43.2); the
+"spoken report" waveform trace (the §43.2 signature animation —
+disabled under `prefers-reduced-motion`, §45.8); English eyebrow
+and headline above the panel ("Daily supervision reports, spoken
+in Amharic, delivered as documents."); two CTAs: **Sign up**
+(contained, §46.3) → `/register`, and **Log in** (outlined) →
+`/login`. The header reproduction is the §6.3 fixed labels — the
+only Amharic strings in chrome, and only within this content-
+illustration (§7.6 boundary: the hero panel is content-surface
+illustration, not control copy).
+
+**Breakpoint matrix (regions × buckets):**
+
+| Region | xs <600 | sm | md | lg | lg+ |
+|---|---|---|---|---|---|
+| Hero panel | stacked full-width, header block + CTA below | same, max-width 560px centered | two-column: header text left, report panel right | same | same, max-width 1100px |
+| Report header text | 16px Ethiopic | 16px | 18px | 20px | 20px |
+| How-it-works | vertical stack | vertical stack | 3 columns | 3 columns | 3 columns |
+| Report body frame | hidden (CTA instead) | shown, stacked | shown, beside CTA band | beside | beside |
+| CTA band | full-width buttons | full-width | contained center | contained | contained |
+
+**States.** Public page — no loading/empty data states beyond the
+fixed sections; the CTAs render statically; navigation failure
+surfaces via the §60 toast only on the destination.
+
+### 48.3 Login page (`/login`)
+
+**File:** `pages/LoginPage.jsx`; form component
+`components/login/LoginForm.jsx`.
+
+**Purpose & composition.** Session entry; also the target of the
+§41.5 guard redirect (`state.from`) and the §42 expiry redirect.
+Composition: centered card (paper surface, §43.2/§44.6) inside
+PublicLayout; page header eyebrow "Welcome back" + title "Log in"
+(§46.12); the `LoginForm`; the OAuth entry; the sign-up link
+(§48.5).
+
+**`LoginForm` (full specification — the §46.2 form pattern):**
+
+| Field | Input (§46) | Start adornment | Placeholder | Required | Manual-resolver rule | Error copy |
+|---|---|---|---|---|---|---|
+| `email` | MuiTextField `type="email"` | Email icon | `you@example.com` | yes | empty → required; `^[^@\s]+@[^@\s]+\.[^@\s]+$` → format | "Email is required" / "Enter a valid email address" |
+| `password` | MuiTextField `type="password"` (internal eye toggle, §46.4) | Lock icon | — | yes | empty → required | "Password is required" |
+
+- **Submit:** MuiButton "Log in", `size="small"`, full-width, MUI
+  `loading` ("Logging in…") while `isSubmitting`; `flexShrink: 0`
+  (§46.3, §9.6).
+- **Empty-submit behavior (normative):** `handleSubmit` runs the
+  manual resolver on the empty form — both fields render
+  `error` + `helperText` (§46.4), focus moves to the first
+  invalid field (`email`), nothing is submitted, no toast fires.
+- **Success:** the §28 login contract through the §42 layer; then
+  navigate to `state.from` when present (same-site, decoded), else
+  `/dashboard`; toast "Welcome back" (decision 10, §41.2).
+- **Failure:** backend failures (wrong credentials, missing
+  account, inactive session) surface as toasts with the §27
+  `message` ("Please login again" for expiry-family errors per
+  §12.5) — `setError` is never used for server errors (§9.6,
+  §42.4). A 401 here is a login rejection, not a session expiry —
+  it follows the §28 login contract's error shape and is toasted.
+- **Validation mode:** `onBlur` (§9.6); no debounce; no `watch`.
+
+**Google OAuth entry.** The "Continue with Google" button below the
+form: Google icon **start adornment**, outline variant, full-width;
+on click it begins the §28 Google OAuth flow (currently the §28
+stub per OQ-004) and shows the MUI loading spinner until the flow
+resolves or fails; failure → toast with the §27 message. Chrome
+copy only (§7.6).
+
+**Breakpoint matrix:**
+
+| Region | xs | sm | md | lg | lg+ |
+|---|---|---|---|---|---|
+| Card | full-width, p2, no border radius | 420px centered | 420px centered | 480px centered, right of a brand panel | 480px centered |
+| Brand panel (hero motif, static) | hidden | hidden | hidden | visible left column | visible left column |
+| Field labels | above fields | above | above | above | above |
+| Submit + OAuth | stacked, full-width | stacked, full-width | stacked | stacked | stacked |
+| Sign-up link | below OAuth | below | below | below | below |
+
+**States & edge cases.** Public page: no reported data states;
+submit loading; OAuth loading; form errors inline; empty-/repeated-
+submit idempotent (no duplicate requests while `isSubmitting`);
+session-expiry redirect arriving here does **not** toast (401
+silent-rule, §42.3); "Remember me" does not exist (no such
+decision anywhere — not added).
+
+### 48.4 Register page (`/register`)
+
+**File:** `pages/RegisterPage.jsx`; form
+`components/login/RegisterForm.jsx` (same domain folder).
+
+**Purpose & composition.** Self-service registration (F1); the
+form collects **only `email` and `password`** (§3.2.2, §19.2) plus
+a confirm-password field on the client side. Composition: same
+centered card pattern; eyebrow "Create your account" + title
+"Sign up"; `RegisterForm`; OAuth entry; login link (§48.5).
+
+**`RegisterForm`:**
+
+| Field | Input (§46) | Start adornment | Placeholder | Required | Manual-resolver rule | Error copy |
+|---|---|---|---|---|---|---|
+| `email` | MuiTextField `type="email"` | Email icon | `you@example.com` | yes | empty → required; format regex | "Email is required" / "Enter a valid email address" |
+| `password` | MuiTextField `type="password"` | Lock icon | — | yes | empty → required; min 8 chars | "Password is required" / "Password must be at least 8 characters" |
+| `confirmPassword` | MuiTextField `type="password"` | Lock icon | — | yes | empty → required; `validate: (value) => value === getValues('password')` | "Please confirm your password" / "Passwords must match" |
+
+- Helper text under `email`: "Your name is taken from your email
+  (for example, beza.ayalew@gmail.com becomes Beza Ayalew)." —
+  English chrome (§7.6), matching the §19.2 auto-extraction
+  contract.
+- **Empty-submit behavior:** the manual resolver marks all three
+  fields, focus moves to `email`, nothing submits, no toast.
+- **Success (locked decision 11, §41.2):** the §28 account-creation
+  contract call; on success → toast **"Account created — please
+  log in"**; navigate to `/login`. The client never auto-enters
+  the application after registration.
+- **Failure:** 409/duplicate email → toast with the §27 message
+  (field errors are not routed through `setError`, §42.4);
+  network failures → §60 error toast; the form stays filled (no
+  `reset()` on failure), with `isSubmitting` released.
+- Password confirmation is client-only — the §28 contract never
+  receives it (§46.2 cross-field rule).
+
+**Breakpoint matrix:** identical to §48.3's (card pattern, brand
+panel from lg, stacked full-width actions).
+
+**States & edge cases.** Submit loading ("Creating account…");
+OAuth loading; inline errors; disabled submit while submitting
+(§9.6); double-click guarded by `isSubmitting`; registration from
+`state.from` is ignored — post-register always lands on `/login`.
+
+### 48.5 Shared auth behaviors (normative)
+
+- **OAuth entry** — one component (`GoogleOAuthButton`-pattern in
+  the login domain folder), reused by both pages (§46.2; spinner on
+  click; §28/OQ-004 stub contract).
+- **Cross links** — Login footer link "Don't have an account?
+  Sign up" → `/register`; Register link "Already have an account?
+  Log in" → `/login` (§44.5 link styling).
+- **Presentation** — paper background (§43.4), centered card,
+  hairline header strip (§46.12); all chrome copy English (§7.6);
+  the §43.2 paper-desk tokens; no marketing imagery beyond the
+  §48.2 hero.
+- **Error protocol** — every server error → toast (§60) with the
+  §27 plain-language message; inline errors (client rules) via
+  `helperText`; neither page calls `setError` (§9.6).
+- **Session leak** — an authenticated visitor arriving at these
+  routes is redirected by `PublicRoute` (§41.5); the pages
+  themselves perform no auth checks.
+
+### 48.6 Verification usage
+
+- Grep gates: the register form's field set is exactly `email`,
+  `password`, `confirmPassword`; no "Remember me", no name field,
+  no profile-picture capture on Register; "Account created —
+  please log in" appears exactly once; no `setError` for server
+  errors (§42.4); every field row lists an adornment (§46.2).
+- Cross-section checks: mirrors §3.2.1/§3.2.2/§4.4 (anonymous
+  surface), §19.2/§28 (account contract), §41.5 (guards and
+  `state.from`), §42.3/§42.4 (401 silence and error shape), §9.6
+  (form mechanics), §7.6 (chrome language), §43.2/§43.5 (hero and
+  faces), §45 (buckets), §46 (components), §60 (toasts).
+- §48 introduces no constant (§11 unchanged), no path beyond
+  §15.5, and no package; it is standalone — it references only
+  specification sections.
+
+---
+
+## 49. Page — Dashboard & Analytics UI
+
+### 49.1 Purpose & scope
+
+§49 owns the authenticated home page (`/dashboard`, §41.3) — the
+first view after login and the logo target (§47.5). Its job: the
+day-level state of the supervisor's reports — how many reports, at
+which statuses, across which branches — plus the two quick actions
+that start the working loop. It exists because the supervisor's
+first question on opening the app is "what is open and what did I
+finish", which the Reports list answers only after navigation.
+
+- **Owned here (normative).** The KPI set (closing the §69 OQ-005
+  open item, recorded here), the chart set (§49.4), the page
+  composition and actions (§49.2/§49.5), states and the breakpoint
+  matrix (§49.6).
+- **Owned elsewhere — deliberately not repeated here.** The
+  analytics data contract and endpoints = §38 (Part C); the KPI
+  card and chart reuse = §46.17 MuiStatCard and §44.9 charts;
+  navigation = §47; empty/success/error presentation = §60.
+- **Explicitly out of scope §49.** No endpoint shape, no analytics
+  join logic (§38), no new constant (§11 unchanged), no new path,
+  no package (@mui/x-charts already in §13.4).
+
+### 49.2 Page composition
+
+Order (top to bottom) inside AppShell's Outlet (§47.3), with the
+per-page header first (§46.12): eyebrow "Overview", title
+"Dashboard", subtitle "Your supervision reports at a glance";
+`actions` slot hosts the primary action — "New report" (contained,
+§46.3) → `/reports/new` (§52). Then: **KPIs** — Row of four
+`MuiStatCard`s (§46.17); **Charts** — the §49.4 chart trio in a
+responsive Grid (`size` prop, §46.2); **Latest reports** — a
+compact read-only list (reportDate, branch snapshot names,
+`MuiStatusBadge`, updatedAt) of the five most recent reports,
+each row linking to `/reports/:reportId` (§51); when a row set is
+empty the section shows the §60 empty state.
+
+### 49.3 KPI set (normative — closure of OQ-005)
+
+OQ-005 (open in §69) is closed here by decision. The four cards:
+
+| Card label (chrome copy) | Value (from the §38 analytics payload) |
+|---|---|
+| Reports this month | report count for the current Ethiopian month |
+| In progress | count of `draft` + `audio_attached` + `transcribed` + `reviewed` (+ any §31 open-state set the §38 contract exposes) |
+| Completed | count of `completed` reports |
+| Active branches | count of active branches (the §20/§38 branch surface) |
+
+Every value is served by the §38 analytics endpoint via the §42
+layer — no client-side aggregation over full lists (ADR-034). KPI
+labels are chrome copy (English, §7.6); trend captions ("vs last
+month") may render when the §38 payload provides them — anything
+absent renders no caption (no invented numbers, §69).
+
+### 49.4 Charts
+
+Three charts from @mui/x-charts (§13.4) in the §44.9 styling,
+driven by the §38 payload and rendered from server aggregates —
+never from client-side datasets (ADR-034):
+
+- **Status distribution** — a donut of the five `REPORT_STATUSES`
+  counts (labels = English status names from the §11.5 mirror).
+- **Activity by branch** — a horizontal bar of report counts per
+  active branch snapshot name (top N per the §38 contract).
+- **Issues trend** — a line of issue-related count over the recent
+  days the §38 contract provides (the §6.11 vocabulary when
+  authored — pending contract).
+
+Charts degrade to the §60 empty state when their series is empty,
+and show a compact loading skeleton while pending (§49.6).
+
+### 49.5 Quick actions
+
+- **"New report"** (header action, §49.2) → `/reports/new`.
+- **"Open latest report"** — the Latest-reports section's first
+  row: navigates to its details page (§51).
+
+### 49.6 States & breakpoints
+
+- **States (ADR-033).** Loading — KPI skeletons + chart skeletons;
+  error — §60 toast on the §38 fetch failure and a compact inline
+  retry on the chart band; empty — first-run account with no
+  reports: the empty-state copy invites the first action
+  ("No reports yet — record your first day") with the New report
+  action inline (§60 voice); success — full render.
+- **Breakpoint matrix:**
+
+| Region | xs | sm | md | lg | lg+ |
+|---|---|---|---|---|---|
+| Page header | eyebrow+title stacked | same | actions inline right | inline right | inline right |
+| KPI cards | 1 column (stacked) | 2 columns | 4 columns | 4 columns | 4 columns |
+| Charts | stacked (1 column each) | 1 column | status donut + bars side by side, trend below full-width | 3 per grid row, equal thirds | equal thirds |
+| Latest reports | list rows (compact) | list rows | list rows | list rows | list rows |
+
+Icons-only below 600px for header chrome actions (§45.3); charts
+keep fixed minimum heights to avoid reflow (§45.5).
+
+### 49.7 Verification usage
+
+- Grep gates: exactly four KPI labels; no client-side aggregation
+  over report lists (ADR-034); all chart series named from the §38
+  contract; no invented metric beyond §49.3's table; no amharic
+  chart labels (§7.6).
+- Cross-section checks: mirrors §38 (analytics data owner), §46.17
+  (MuiStatCard), §44.9 (chart styling), §45 buckets, §60 states,
+  §11.5 (`REPORT_STATUSES` mirror), §69 (OQ-005 closed here).
+- §49 introduces no constant (§11 unchanged), no path, and no
+  package; it is standalone — it references only specification
+  sections.
+
+---
+
+## 50. Page — Reports List
+
+### 50.1 Purpose & scope
+
+§50 owns the Reports page (`/reports`, §41.3) — the management
+surface of the daily workflow: listing, filtering, opening,
+creating, and lifecycle actions on reports. It exists because
+BR-05 (the wizard as the only creation path) and BR-06 (the status
+machine) require a place to enter the wizard and to act on every
+state, and because the report is the unit the supervisor manages
+(§3.1.2 F6). The page is a **list/grid toggle** on one route —
+there is no separate list page (§15.8).
+
+- **Owned here (normative).** Filters and the list/grid toggle
+  (§50.3); the grid and its columns (§50.4); the card grid mode
+  (§50.5); row actions and confirm dialogs (§50.6); pagination and
+  toolbar (§50.7); states and edge cases (§50.8).
+- **Owned elsewhere — deliberately not repeated here.** List
+  queries and pagination contract = §31/§27 (Part C); transitions
+  and guards = §31; retention = §62; status presentation =
+  §46.13; grid mechanics = §46.8; columns = `components/columns/
+  reports.js` (§15.6); exports of the selection = §58; toasts and
+  empty/error/success = §60; the wizard entry = §52.
+- **Explicitly out of scope §50.** No endpoint shapes (§31), no
+  transition rules (§31), no new constant (§11 unchanged — the
+  §11.5 mirrors are consumed), no new path beyond §15.5, no
+  package.
+
+### 50.2 Page composition
+
+Inside AppShell (§47.3), with page header first (§46.12): eyebrow
+"Reports", title "Reports", subtitle "Your daily supervision
+reports"; `actions` slot: **"New report"** (contained) →
+`/reports/new` (§52). Then a **toolbar band**: the filter row
+(§50.3), the list/grid toggle (button group, §46.3), the
+`MuiDataGrid` (§50.4) or the card grid (§50.5) beneath.
+
+### 50.3 Filters & the list/grid toggle
+
+- **Status filter** — MuiSelect "Status" (options = the five
+  `REPORT_STATUSES` + "All", labels from the §11.5 mirror).
+- **Branch filter** — MuiSelect "Branch", populated from **active
+  branches only** (§20: archived branches appear only when
+  "Show archived" is on); options render the branch snapshot name.
+- **Archived toggle** — a switch/checkbox "Show archived" — the
+  explicit filter that surfaces `isArchived` rows (§17.4, §21.6);
+  when off, archived rows are never listed.
+- **Filters combine** (status + branch + archived) and serialize
+  into the §31 list query via the §42 layer; changing a filter
+  resets to page 1. Filter state lives in the page's component
+  state (ephemeral, §12.2-10) — never in the URL.
+- **Toggle** — MuiToggleButtonGroup "List" / "Cards" (§46.3):
+  List = the MuiDataGrid; Cards = the ReportCard grid (§50.5).
+  No preference is persisted (no localStorage surfaces, §53.4
+  rule — nothing is persisted client-side).
+
+### 50.4 Grid mode (MuiDataGrid)
+
+Contract §46.8 with `components/columns/reports.js` (per-domain
+column set, §15.6, ADR-034):
+
+| Column | Content | Notes |
+|---|---|---|
+| Date | `reportDate` as `DD-MM-YY` (§43.6) | falls back to `—` while uncaptured |
+| Branch(es) | `branches[].name` snapshot values, joined, ellipsized (§45.5) | tombstone-safe (§17.4/§20) |
+| Supervisor | `supervisorName` (snapshot, §21.2) | captured value, never live profile |
+| Status | `MuiStatusBadge` (§46.13) | from `status` |
+| Updated | `updatedAt`, `DD-MM-YY` | |
+| Actions | View / Edit / Archive-or-Restore / Delete (§46.8) | per §50.6 |
+
+Row click (with `disableRowSelectionOnClick`) opens details
+(`/reports/:reportId`, §51); Edit re-enters the wizard at the
+status-matched step (§52.3); checkboxes enable the selection-based
+actions (§50.7).
+
+**Responsive column priority (below 900px):** Supervisor, then
+Updated, then Branch collapse in that order (icons retain their
+tooltips, §45.3/§46.8).
+
+### 50.5 Card grid mode
+
+`components/report/ReportCard.jsx` (the `report/` domain folder,
+§15.5): the §44.6 card, containing reportDate (title line),
+branch snapshot names (ellipsized), `MuiStatusBadge`, supervisor
+name (caption), Updated caption, and the same action icon row as
+§50.4 (§46.8 icon styling). Grid: responsive Grid (`size` prop,
+§46.2) — 1 column xs, 2 columns sm, 3 columns md, 3–4 columns
+lg+; cards are not selectable (selection is a grid-mode feature,
+§50.7).
+
+### 50.6 Row actions & confirm dialogs
+
+- **View** — icon `VisibilityIcon` (`sx={{ color: 'primary.main'
+  }}`), tooltip "View", navigates to `/reports/:reportId`.
+- **Edit** — `EditIcon` (`warning.main`), tooltip "Edit",
+  re-enters the wizard (§52).
+- **Archive / Restore** — toggling `isArchived` (§21.6);
+  MuiConfirmDialog copy: "Are you sure you want to archive this
+  report?" / "Restore this report?"; confirmColor `primary`; the
+  §31 guard governs availability (a `completed` report archives
+  — §21/§31 — nothing here invents a restriction).
+- **Delete** — permanent delete (the §31 hard-delete cascade,
+  §17.4); MuiConfirmDialog confirmColor `error`, copy "Delete
+  this report permanently? This cannot be undone."; on success →
+  toast (§60) and the row leaves the cache (tag invalidation,
+  §42.6).
+- After a mutation the cache updates via the §42.6 invalidation
+  tags (`Reports`) — no manual refetch (ADR-033).
+
+### 50.7 Toolbar, pagination & selection
+
+- Grid toolbar (§46.8 GridToolbar): columns toggle, filter,
+  density, and **CSV export** operating on the **selected rows**
+  (the §58 export surface). When cards mode: no toolbar (the
+  PDF/CSV export entry for card rows lives on the details page,
+  §51).
+- Pagination per §46.7/§46.8: server-driven (`page`, `limit`
+  from the §11.5 `PAGINATION_*` mirrors; `pageSizeOptions
+  [10, 25, 50, 100]`).
+
+### 50.8 States & edge cases
+
+- **Loading** — the grid overlay loading state (§46.8) / card
+  skeletons.
+- **Empty** — the custom `noRowsOverlay` (§46.8): "No reports yet
+  — create your first report" (with the New report action
+  available in the header).
+- **Empty filtered** — "No reports match these filters." and a
+  "Clear filters" text button (chrome copy, §7.6).
+- **Error** — §60 toast + inline retry over the grid.
+- **Edge cases (enumerated).** An archived branch name still
+  renders through the snapshot (tombstone rule, §17.4/§20);
+  branch filter selections reset when the branch is archived or
+  deleted (active-only rule, §20); delete on the last page
+  re-fetches the current page (tag invalidation covers the cache —
+  page index clamps server-side per §31); deep links to a report
+  that was deleted land on the §59 404 or a §60 toast per the
+  §31 detail contract.
+
+### 50.9 Verification usage
+
+- Grep gates: no client-side paging math (ADR-034 — `totalDocs`/
+  `totalPages` only); action icons colored via `sx` (§44.2); the
+  toggle button group labels "List"/"Cards"; no archived branch in
+  the active filter options; no `reportId` document field (only the
+  route params and cache keys, §9.3).
+- Cross-section checks: mirrors §15.8 (the list/grid forward gate),
+  §31 (guard reuse and delete), §17.4/§21.6 (archive visibility),
+  §20 (branch snapshot), §11.5 (status/pagination mirrors), §46.7/
+  46.8/46.13 (components), §58 (selection export), §60 (states).
+- §50 introduces no constant (§11 unchanged), no path beyond §15.5,
+  and no package; it is standalone — it references only
+  specification sections.
+
+---
+
+## 51. Page — Report Details
+
+### 51.1 Purpose & scope
+
+§51 owns `/reports/:reportId` (§41.3, §50.4 View action) — the
+single-report surface and the **hub** of the status machine
+(§12.4: details → wizard → transcription review → report review
+are thin views over the §30–§35 services). It exists because a
+report's artifacts (header, visits, clips, transcriptions,
+conversation §24, content slots §21.2) exceed any list surface, and
+because almost every lifecycle action happens here: edit, accept,
+archive/restore/delete, export, correction, and the per-report
+conversation.
+
+- **Owned here (normative).** The page composition and header
+  (§51.2); the content/editor surface and corrections entry (§51.3);
+  the metadata sections — visits, clips, transcription state,
+  conversation launcher (§51.4); the action toolbar and lifecycle
+  flows (§51.5); states, edge cases, and the reject/accept rules
+  (§51.6).
+- **Owned elsewhere — deliberately not repeated here.** The status
+  machine, guards, and the accept/reject transitions = §31 (Part C)
+  — this page renders actions **per the §31 transition-guard
+  table**, reused identically (BR-06); export flows = §58; modes =
+  §54 (transcription) and §51.3 (report body); chat = §55; wizard
+  re-entry = §52; DTOs and fetch = §31/§42; sanitization = §61;
+  toast and state protocol = §60.
+- **Explicitly out of scope §51.** No transition rule, no delete-
+  cascade shape (§31), no new constant (§11 unchanged), no path
+  beyond §15.5 (`pages/`, `components/report/`), no package.
+
+### 51.2 Composition & header
+
+Inside AppShell (§47.3), page header first (§46.12): eyebrow
+"Report", title "Daily Report — {`reportDate` as `DD-MM-YY`}"
+(falls back to "New report" while uncaptured), subtitle =
+`supervisorName` snapshot (§21.2, the `ስም` value — called by its
+chrome label "Supervisor"); `actions` slot per §51.5. Below the
+header, a **status band**: `MuiStatusBadge` (§46.13) + the
+Type-1/Type-2 label derived per §6.4 (§21.2 — **derived, never
+stored**): "Type-1" (single visit) / "Type-2" (two or more) +
+report `status` in English chrome copy. Then the body sections
+(§51.3) and metadata sections (§51.4).
+
+### 51.3 Content surface & corrections entry
+
+- **Before first generation** (`raw`/`latest` null, §21.2): the
+  body renders the §60 empty state — "This report has no generated
+  content yet" — with the primary action **"Continue in wizard"**
+  (§52 re-entry at the status-matched step).
+- **After generation:** the body is `MuiEditor` (§46.16) in
+  **read-only** mode rendering `latest` sanitized (§61) — the
+  read-only reference view; switching to editing happens through
+  the **Edit** action of §51.5 or the §52 wizard (BR-05 — the
+  wizard is the capture path).
+- **Corrections entry (report body):** a "Correct" action (toolbar)
+  opens the correction panel beside/below the body — the Modes
+  1–3 surface of §54 applied to the **report content**
+  (Mode-1 Save = the §35 PATCH endpoint; Mode 2/3 Accept/Revert =
+  the §35 correction flow; the raw/latest single-undo contract of
+  §21.5 applies identically at report level). The panel reuses the
+  §54 components verbatim — no second implementation (§12.4).
+  After a successful Mode-1 save or Mode-2/3 accept, the page
+  refreshes the body via tag invalidation (§42.6).
+- **Sanitized render rule:** any HTML the head renders (`latest`,
+  conversation messages) passes the §61 sanitize-on-render pipeline
+  of `MuiEditor`/mission display components — `dangerouslySetInnerHTML`
+  only post-sanitize (§46.16).
+
+### 51.4 Metadata sections
+
+- **Visits** — a compact table (per-visit): `visitNo`, `branchName`
+  (snapshot, tombstone-safe §17.4/§20), "Clock in", "Clock out"
+  (`HH:mm` or `—` when null, OQ-002, §21.2). Derived day start/
+  exit and the header line never render as stored fields (§21.2 —
+  only `visits[]` is data).
+- **Audio clips** — the clip group per visit (from the §32 audio
+  surface via §42; metadata DTO of §22.7 — **no `filePath` ever
+  reaches the browser**): `MuiAudioPlayer` (§46.17) per clip,
+  MIME/size/duration captions, and the clip's visit binding label.
+  When the report holds audio, the clip list supports the
+  **Re-transcribe** entry of §54 (visible for every clip at every
+  status **except** `completed`; at `reviewed` the §23.4/§31
+  rewind rule governs the transition — the button remains
+  available and the §31 guard applies).
+  **Last-clip deletion warning:** deleting the last audio of an
+  `audio_attached`/`transcribed`/`reviewed` report triggers the
+  §17.4 rewind — the confirm dialog names the consequence ("This
+  is the last clip — the report will return to `audio_attached`
+  (or `draft`)", per the §31 rewind declaration).
+- **Transcription state** — per clip: `raw` vs `latest` status
+  (initial equal pair, §23.2), the per-clip review state (the
+  §6.10/§6.11 vocabulary when authored — rendered as UI state
+  chips, never a `TRANSCRIPTION_STATUSES` constant), and the
+  **Restore original** action (copy `raw` → `latest`, the single-
+  undo of §23.2/BR-11).
+- **Conversation launcher** — a "Correction chat" entry that opens
+  the §55 panel (per-report conversation, §24.2 unique ref).
+
+### 51.5 Action toolbar & lifecycle flows
+
+Header `actions` (right-aligned, §46.12), enabled per the §31
+transition-guard table — the page never codes its own guard:
+
+| Action | Trigger | Flow |
+|---|---|---|
+| **Edit** | always (per §31 guard) | → `/reports/:reportId` wizard re-entry at the status-matched step (§52.3) |
+| **Correct** | when content exists | opens the report-body correction panel (§51.3/§54) |
+| **Chat** | always | opens the §55 conversation panel |
+| **Export** | when `latest` exists | the §58 export menu |
+| **Accept** | per the §31 table (the reviewed → completed path) | runs the §31 accept; on success → toast "Report completed" + status band refresh (§42.6) |
+| **Archive / Restore** | per §31/§21.6 | MuiConfirmDialog per §50.6 copy; restores re-appear as active (Edit/Correct/Export/Accept reappear) |
+| **Delete** | per §31 | MuiConfirmDialog `confirmColor="error"`, "Delete this report permanently? This cannot be undone."; on success → toast → navigate to `/reports` (§50) |
+
+**Completed-report posture (§21.5/§17.4):** at `completed` the
+report remains editable via Mode-1 Save and corrections (BR-11),
+Re-transcribe and Accept are hidden (the §31 table), and audio
+deletion is storage hygiene only (no rewind) — the §51.4 clip
+surface states this in its confirm copy.
+
+### 51.6 States & edge cases
+
+- **Loading** — page-level `LoadingSpinner` (§46.14); **error** —
+  the §31 detail contract failure → §60 toast; a 404/
+  not-found → the §59 404 surface; **success/empty** per §51.3.
+- **Edge cases (enumerated).** Unauthorized ownership (403, BR-13)
+  → §60 toast + redirect to `/reports`; archived report → a
+  read-only banner with the Edit/Correct/Export hidden per §31 and
+  only Archive/Restore/Delete visible; direct navigation to a
+  `draft` report (no wizard use) → the §51.3 empty state with the
+  wizard continuation; concurrent edits — the cache refreshes via
+  invalidation, and the §27 error surface reflects any server-side
+  version/reject (per the §31/§35 contract) as a toast, never a
+  silent overwrite; the conversation panel state is §55's.
+
+### 51.7 Verification usage
+
+- Grep gates: no guard table duplicated in this section (only
+  "per the §31 transition-guard table"); no `acceptedAt`/
+  `exportedAt` field anywhere (§21.5); no stored Type-1/Type-2
+  field (derived only, §21.2); the Accept action never renders at
+  `completed`; no `filePath` surface on the clip list (§22.7); no
+  `TRANSCRIPTION_STATUSES`.
+- Cross-section checks: mirrors §31 (guards, accept, rewind, hard
+  delete), §21.2/§21.5/§21.6 (registry, accept, archive), §17.4/
+  §17.6 (rewind and presence), §22.7/§32 (clip metadata DTO),
+  §23.2/§23.4 (raw/latest and re-transcription), §24.2/§55
+  (conversation), §54 (modes reuse), §58 (exports), §61
+  (sanitization), §60 (states), §12.4 (thin views).
+- §51 introduces no constant (§11 unchanged — `reportId` is a
+  route parameter, §9.3), no path beyond §15.5, and no package; it
+  is standalone — it references only specification sections.
+
+---
+
+## 52. Page — Report Wizard (New / Edit)
+
+### 52.1 Purpose & scope
+
+§52 owns `/reports/new` and `/reports/:reportId/wizard` (§41.3)
+— the single creation and editing path (BR-05). It exists
+because §3.1.2 F1–F5 require the supervisor to record and correct
+data through a structured flow, and BR-02 put one working loop at
+the center of the product. The wizard is **one component, two
+modes** (Add / Edit) driven by the same state machine — no
+duplicate flows (ADR-033).
+
+- **Owned here (normative).** The step model and navigation
+  (§52.2); the Add and Edit entry modes (§52.3); the step-by-step
+  content — Basic info, Visits, Audio, Transcription, Report —
+  including the field registry (§11.6) application (§52.4-§52.9);
+  validation and its stop points (§52.10); states, edge cases,
+  and the leave-guard (§52.11).
+- **Owned elsewhere — deliberately not repeated here.** DTOs and
+  the lifecycle endpoints = §30–§35 (Part C); the photo-and-type
+  derivation = §20; the transcription surface (§Modes 1–3) = §54
+  (reused, not re-implemented); sanitized generation = §21; export
+  print = §58; toasts = §60; existing components = §46.
+- **Explicitly out of scope §52.** No endpoint shapes, no
+  derivation logic, no role model (§28), no new constant (§11
+  unchanged — the §11.6 `REPORT_FORM_FIELDS` registry is
+  consumed), no new path beyond §15.5, no package.
+
+### 52.2 Step model & navigation
+
+Steps in order (labels are chrome copy, §7.6): **1. Basic info →
+2. Visits → 3. Audio → 4. Transcription → 5. Report**. The
+**step list replicates exactly the creation order of §11.6-4**
+(creation steps §31.2-1 through §31.2-5) — the wizard is the
+client side of that order; one ListItem per step (lead +
+trailing) leading to the section index (`data` from the form
+values when valid, `Sequential` stepper §46.5).
+
+- **Nav rules:** Prev/Next buttons (text buttons with start/
+  end icons); Next is blocked when the current step is
+  invalid (completion strategy §46.5); the stepper shows which
+  steps are complete; the **leave guard** of §52.11.
+- **Final CTA (Add mode):** last button = "Create" (contained;
+  loading state on submit, §46.3).
+
+### 52.3 Add vs Edit entry modes
+
+- **Add** (`/reports/new`): steps 1–3 draft → next creates the
+  report through §31.2-1; then step 4/5 appear (post-creation,
+  BR-05). After create → navigate to §51 with the new `reportId`
+  (no more autosave on the client — §31.2-1 owns creation; the
+  next buttons are the autosave protocol of BR-07 at §52.10).
+- **Edit** (`/reports/:reportId/wizard`, §50.4/§51.5 Edit):
+  enters the wizard at the **status-matched step** — draft →
+  step 1; audio_attached → step 2; transcribed → step 3;
+  reviewed → step 4; completed → step 1 (edit allowed, BR-11)
+  — computed from the §31 status index. The current report's
+  `latest` content (§21.2) fills the step forms. Editing posts
+  through the §35 PATCH (Mode-1 Save) on each completed step.
+
+### 52.4 Step 1 — Basic info
+
+Consumes `supervisorName`, `reportDate` from the §11.6 report
+registry (text + date), rendered with the §46.4 form fields
+(labels = registry amharic label text, §7.6).
+
+- **supervisorName** — initial value = the `user` display name
+  (§28), editable; Enter-name placeholder.
+- **reportDate** — `dd/mm/yyyy` text input, `maxLength=10`, with
+  the §43.6 formatter applied on change. The step collects no
+  coordinates — no `lng`/`lat` field exists in any model (§21.2,
+  §31.2-1); wizard chrome never posts one.
+- **Full day or Half day** — segmented control ("Full day",
+  "Half day") on **Edit only when the report's visits are empty**;
+  on Add it renders neutrally with the default "Full day"; its
+  timing behavior is the §20 half-day rule (this step only wires
+  the controls; the rule stays in §20).
+
+### 52.5 Step 2 — Visits
+
+The MuiDataGrid of §46.8 with the domain columns from
+`components/columns/visits.js` (§15.6): **#**, **Branch** (select
+from **active branches only**, §20), **In** / **Out**
+(`HH:mm` time inputs with the §43.6 dual binding), **Actions**
+(remove row). Inline add row via the `GGridAddRowIcon` /
+keyboard shortcut (the grid slot props, §46.8); a row's branch
+displays its snapshot name (tombstone-safe, §17.4/§20).
+
+Validation: each visit requires a branch (required), the "In"
+time is required per row (the §20/§31.2-2 required-in rule —
+"Out" may be empty, OQ-002), times are `HH:mm` (§43.6), and
+**dynamic per row**: the row's "Full day" selector (segmented
+control) is only rendered for visits with a null Out; the
+'different from Start time' warning on Out (the §20 timing rule)
+renders as a warning text under the row — the warning copy is
+chrome, the rule remains in §20.
+
+### 52.6 Step 3 — Audio
+
+Upload & recording components of §46.17 (`MuiFileInput` +
+`MuiRecorder`): multiple file upload and device recording,
+**labelled per visit** (clip bindings, §20/§32). The grid
+mirroring = MuiDataGrid per visit of clips (mirror + file
+inputs icon). Play/re-download/delete of a clip is §32's surface,
+reused (§46.17). **Video clips** render the placeholder/reject
+language of §19.1 (the step never accepts `.mp4` — §19.1 owns the
+rule).
+
+### 52.7 Step 4 — Transcription
+
+The step hosts the §54 Modes 1–3 surface (audios list / accept
+selected / instructions on selected) **within step mode** —
+reused verbatim components, same services (§23), same UI copy
+(§22.2/§22.3/§22.5) — no second implementation (§12.4, ADR-033).
+The Modes-2/3 accept/reject reading views replace the wizard's
+generic step UI — the wizard step is the §54 handler's host.
+
+### 52.8 Step 5 — Report
+
+The step hosts the **§54 report-mode** surface (Mode-1 Save =
+§35 PATCH on completion; the finished report view; navigation to
+§51 on finish). Read-only until the §21.4 generation exists;
+"Create" (Add) / "Finish" (Edit) completes the flow → §51.
+
+### 52.9 Field registry application (normative)
+
+The wizard reads **all** form labels, order, default values,
+validation config, and the creation-order step list from the
+`REPORT_FORM_FIELDS` registry (§11.6-4) — **no string label,
+order, or rule is hardcoded in the wizard implementation**. Both
+modes consume the same registry; versions (stale/current)
+behavior is §48's, referenced. Fields that are not in the registry
+(anything added in the future) render nothing until added — the
+registry is the source of truth.
+
+### 52.10 Validation & stop points
+
+Validate on demand (step completion / field blur), governed by the
+None→error protocol of §46.4 (a top summary line: "This section
+has issues, review them below" — the error summary rule).
+
+- **127-country server rule** — client-side mirrors the server
+  rule as a **warning** (not an error): "Life is bigger than 127
+  countries" — shown under country fields (rule §31.2-1, mirrored
+  here). The wizard never hardcodes the 128 rule — it reads the
+  reflection §11.6 warning copy.
+- **Server rule mirror strategy (leave-guard):** on **Next**, the
+  client posts through the §31.2/§35 calls with `saveMode` per
+  BR-07; on success → next step; on a validation failure →
+  step stays, toast (§60) shows the server's message, fields focus
+  (§46.4). This is the **Bespoke-by-default** check of §43.7 —
+  the only client rule besides bespoke patterns is the "In" time
+  required rule (§20/§31.2-2), because the server requires it for
+  the day start derivation.
+
+### 52.11 States, edge cases & leaving
+
+- **Loading** — the wizard fetching the report (Edit) shows the
+  §46.14 spinner; guard until loaded.
+- **Error on create** — §60 toast, stays on step 1 with the
+  server message applied to the fields.
+- **Leaving mid-flow** — unsaved changes are silently dropped
+  when navigating away from step 1 in Add mode (nothing exists on
+  the server yet). When a report exists (Edit; or Add past step
+  1), exiting the wizard → the server owns the saved state (BR-07
+  autosave); the browser back button / app navigation leaves
+  naturally. No confirm dialogs, no unsaved-changes prompts —
+  BR-07's autosave means there is never unsaved wizard state.
+- **Add-mode recovery:** if the user closes the browser after a
+  create but before navigation, the draft report remains a
+  `draft` (server truth, §17) — re-entry via the Reports list
+  (§50) or the §59 recent list.
+- **Registry version drift** (stale templates rendered) — §48's
+  warning surface, referenced.
+
+### 52.12 Verification usage
+
+- Grep gates: the only client-side validation rules are the "In"
+  time-required and the coordinate numeric range; no hardcoded
+  128-country rule; step labels and field labels come from the
+  registry (no labels inline in the wizard); only one wizard
+  component (Add/Edit shared); no validation code duplicated from
+  §54/§23; **no autosave on the client** (creation owns it).
+- Cross-section checks: mirrors §11.6-4 (registry order), §31.2/
+  §35 (create/patch), §31 (status-matched step mapping), §21.2
+  (latest fill), §54 (modes reuse), §31 (127-country), §20
+  (half-day/required-in timing), §43.7 (bespoke default).
+- §52 introduces no constant (§11 unchanged — `reportId` is a
+  route parameter), no path beyond §15.5, and no package; it is
+  standalone — it references only specification sections.
+
+---
+
+## 53. Component — Editor Components
+
+### 53.1 Purpose & scope
+
+§53 owns the editor-component set shared by §54 (and through it
+the §55 surfaces — conversation panels and the report/
+transcription confirm dialogs): the typing/completion affordance,
+toolbar, embedding panel, and the "back to editor" affordance,
+with strict linear-write typography guidance (BR-08).
+
+- **Owned here (normative).** The full-writing panel structure
+  (§53.2); MuiEditor and the typography rules (BR-08) (§53.3);
+  the form field wrapper for typed values and rule application
+  (§53.4); the §55 embed panel (§53.5); the state-sharing rule
+  (§53.6); verification (§53.7).
+- **Owned elsewhere — deliberately not repeated here.** The
+  content slots and field types = §21.2; the entity vocabulary =
+  §6; the conversation data = §24; the audio/recorder components =
+  §46.17; the toolbar/typography mechanics = §43/B; validation
+  and error protocol = §46.4/§60; sanitized rendering = §61.
+- **Explicitly out of scope §53.** No HTML generation, no syntax
+  transformation (§43), no route, no constant (§11 unchanged —
+  the `RULES` registry §11.6-5 is referenced), no package.
+
+### 53.2 Full-writing panel structure
+
+The panel, when typing a full answer for a question (as enabled
+in the Mode-1/2 surfaces, §54), renders in this order:
+
+1. **Question text** (§6.4, rendered from the registry — no
+   restatable copy).
+2. **Entity chips** (§21.2) — clickable chips that trigger the
+   embedding panel insert (§53.5); only the entities present in
+   the rule are listed. Corrective copy fields (§6.10) always
+   offer the input (per §21.2 registry); K-table values offer a
+   search box → server search (the §39 reflection API) — server
+   only, no client list.
+3. **MuiEditor** (§53.3) — the writing surface.
+4. **Field validation** — the §46.4 error protocol applied; the
+   error message under the editor.
+5. **Toolbar** (§53.5) — the tools of BR-08 (§43/B).
+6. **Accept / Save** — the Mode 2/3 accept strip (the actual
+   Accept/Revert wiring is §54's — this section only specifies
+   the affordance).
+
+### 53.3 MuiEditor & BR-08
+
+- **"MuiEditor"** (`components/editor/MuiEditor.jsx`): a rich-text
+  / code-style editor. Contract:
+  - Holds the `purpose` metadata; renders with `syntax`
+    highlights for HTML/code-like text; the **typed value** is
+    the entity text.
+  - **Linear-write mode (BR-08)** — an on-screen, always-on toggle:
+    title "Linear write" / subtitle "No line breaks, no empty
+    lines"; in this mode (the **default**) the editor prevents
+    typed line breaks (Enter inserts inline spacing, never a new
+    paragraph) and removes empty lines; the typing rules of BR-08
+    apply (see §43-B/§43.6 — the actual rule statement lives in
+    the typography rules §43/B).
+  - In other modes (copy/paste) the determinism outcome of §43.6
+    (structured typed values with media blocks after) applies.
+- **Typing guidance (BR-08, chrome text):** the editor shows a
+  helper line "Type naturally — we'll handle the formatting" —
+  and the "Linear write" toggle; no markdown toolbar is rendered
+  (the toolbar is §53.5's). The mode persists per editing session
+  (state shared through the §54 surface; never persisted
+  client-side, §53.4 rule).
+
+### 53.4 Form-field wrapper & rules
+
+**`FieldEditor`** (`components/editor/FieldEditor.jsx`): wraps
+each typed form field (per the registry §11.6) to apply the
+**§11.6-5 `RULES` list** at typing/leaving time (the §46.4 error
+pattern: error message under the field; the underlying rule string
+rendered as a subtle helper). The rules themselves live only in
+`RULES` — no rule logic hardcoded in the wrapper. The wrapper
+carries the ±token copy (regex) and the review-note affordance
+where the registry declares it; typing creates the field entity
+per §21.8; state lives in the panel handler (the shared
+"current edit" of §53.6). **General rule (ADR-034): nothing is
+persisted client-side** (no localStorage/IndexedDB — state is
+session-scoped memory only). This is stated here as the rule
+surfaces' boundary and is already listed in §53.1/§53.6.
+
+### 53.5 Toolbar & embedding panel
+
+The BR-08 toolbar (the allowed editing tools of §43/B; each is a
+command on the editor):
+- **Undo / Redo** (history default).
+- **Bold / Italic / Underline** (text bold/em/u).
+- **List** (ordered list), **Code** (code span), **Block** (block
+  formatting) — per §43/B rules.
+- **Entity embed** — opens **EmbedEntityPanel** (the §55
+  two-panel mode entry in the writing surface): "Add an entity"
+  button opens the **conversation search & insert** panel (§55
+  owns its data behavior; here the affordance opens the panel and
+  the insert replaces the selection with the entity reference
+  (unique ref, §24.2) — insertion writes only the reference, never
+  the resolved text).
+- **Summary line** — the linear-write mode line and the ±token
+  copy append ("±: leave this token untouched — it maps to
+  official text") rendered from the registry.
+
+### 53.6 State sharing
+
+The editor states (current entity, current draft, the mode
+"current edit") are held by the **surface handler** (§54 hosts it)
+and passed to all fields — the parent owns one `currentEdit`
+registry key; all entities read/write it. Any client state is
+session-scoped memory (ADR-034, §12.2-10) — never persisted
+(localStorage/IndexedDB are out of scope everywhere; §53.4 note).
+
+### 53.7 Verification usage
+
+- Grep gates: no second editor implementation (only MuiEditor and
+  the wrapper); the linear-write mode label exactly "Linear write";
+  no rule logic copied out of `RULES`; no localStorage/IndexedDB in
+  the editor surface; the toolbar contains exactly the BR-08 set;
+  no `purpose`-less editor render (metadata contract).
+- Cross-section checks: mirrors §21.2 (registry, entity chips),
+  §43/B (typography rules), §43.6 (determinism), §55 (embed
+  panel), §46.4/§60 (errors), §61 (sanitized rendering), §24.2
+  (unique refs), §12.2-10 (ephemeral state).
+- §53 introduces no constant (§11 unchanged — `RULES` §11.6-5 is
+  referenced), no path, and no package; it is standalone — it
+  references only specification sections.
+
+---
+
+## 54. Component — Correction Modes (Correction Modes 1–3)
+
+### 54.1 Purpose & scope
+
+§54 owns the **correction-modes components** — the shared
+correcting/correcting-copying machinery and the three modes
+(save, accept-selected, read-until-accept) that both the report
+body (§51.3) and the transcription area (§23.3) reuse. They exist
+because BR-08 alternatives are the primary editing mechanism
+(§22.3), the report body requires inline corrections (§22.2/
+§36.7), and the transcription row requires accept/reject
+selections (§23.3). The components are driven **by the server
+fold (§22.2)** — modes accept/reject a server-side copy — and the
+client only reads it read-only (BR-07; ADR-034).
+
+- **Owned here (normative).** The mode components and their reuses
+  (§54.2); the audience hooks (Complete only after → copy/
+  corrections; the ± token protocol; the delete/case vocabulary)
+  (§54.3); Mode 1 — save (copy) including the direction and the
+  per-field processing rules (§54.4); Mode 2 — accept-selected
+  (§54.5); Mode 3 — read-until-accept (§54.6); the mode state
+  machine (§54.7); states & edge cases (§54.8); verification
+  (§54.9).
+- **Owned elsewhere — deliberately not repeated here.** Copy/data
+  surfaces = §22 (server), transcriptions = §23, entity models =
+  §6/§21.2; persisted values = §17; the editor = §53; the
+  conversation/chat = §55; the `Autosuggest`/accept strips and
+  record components = §46.17; validation/error/toast = §46.4/§60.
+- **Explicitly out of scope §54.** No data surface (the copy
+  rules/endpoints = Part C §22), no new constant (§11 unchanged —
+  the §11.6 `RULES`/chapter registry reference), no new path, no
+  package.
+
+### 54.2 Mode components & reuse map
+
+| Component | Purpose | Reused by |
+|---|---|---|
+| **Modes 1&2 control panel** | `reports/edit-text-content/` (Modes 1&2 strip: the text content panel of the wizard append modes) | §52.7 (transcription step), §51.3 (report body) |
+| **Modes 3** | `reports/read-only-accept/` (the reading view) | transcription step & report body; §55 floor |
+| **Accept/reject strip** | `reports/corrected-copy-strip/` (Accept / Revert on the corrected copy) | Modes 2/3 surfaces |
+| **Transcription stages** | the §23.3 row-stage strip (stages: initial, accepting, accepting-corrected, done) | transcription step; clips in §51.4 |
+| **Autosuggest** | the §46.17 autosuggest/autocomplete insert component for values (the `search` of §55 panel/§22.3) | Modes surface; report body; §55 |
+
+Each is its own component; **no implementation is duplicated in
+reviews/editors/wizards/chats** (ADR-033); the same component/
+service pair serves every host (the §51.3/§52.7 hosts).
+
+### 54.3 Audience hooks (normative additions)
+
+- **"Complete only after" hook** — the read-only mode of a value
+  shows "Complete only after the copy [±]" caption and the
+  corresponding copy field below; the client leaves the flow
+  unchanged but when the field is `complete` the load returns the
+  `±` rule string that the a field shows as a helper (§53.4).
+- **± token protocol** — the correction copy literals are
+  `±`-prefixed (from the §22 data): the client renders the `±`
+  string as-is, never strips, never resolves it into the official
+  text (the resolution is server-side at export, §58). The typing
+  guidance of §53.5 repeats: "±: leave this token untouched".
+- **Delete & case vocabulary** — when text/copy is deleted or
+  case is normalized (the §22 rules), the copy surface shows the
+  server-provided reason tokens in English chrome copy ("removed
+  duplicate verb", "moved case FE paragraph" per the contract) —
+  the vocabulary is server-returned, never invented here.
+- **Strict correction boundary:** the correction field edits a
+  single value only; deciding the official text is player-side
+  (§64) — the mechanism extends, correctness of final text is not
+  this section's rule.
+
+### 54.4 Mode 1 — Save (copy)
+
+- The copy the user writes is the **user-typed field**: server
+  exposes the §22 default template; the client submits through the
+  §22 "validate/template" flow via §42 — **no client-side HTML
+  generation** (the server transforms). The direction is
+  one-way: corrections → copy; the server owns the transform and
+  the `±` tokens.
+- **Per-field rule processing (BR-08):** fields with rules
+  (`RULES`, §11.6-5) process through the §46.4 error protocol in
+  the writing surface — the rules apply at the field level and
+  are re-validated server-side; the client shows the rule strings
+  as helper text, never the result.
+- On save the server returns the accepted value / an error
+  (toast, §60); success → the corrected copy replaces the
+  display; the raw/latest history is §21.5's (single undo).
+
+### 54.5 Mode 2 — Accept-selected
+
+The list view of the a-field copy with per-line selection
+(strip rows: "Accept" / "Revert" per §54.2); accepts update the
+copy statuses (the one-way commit into `latest`); reverts restore
+the section from `raw` (the §21.5/§23.2 single-undo rule).
+
+### 54.6 Mode 3 — Read-until-accept
+
+The read-only pass: the user reads the whole corrected/typed
+content from the read-only surfaces (the §51.3 mode view) and
+accepts or reverts the whole striped copy. It is the same strip
+as Mode 2's, with accepts/reverts at the top-level (whole
+section), not per line. Reading is strictly read-only — BR-08
+typing happens only in Mode 1.
+
+### 54.7 Mode state machine
+
+`mode` ∈ {`mode1`, `mode2`, `mode3`}; a single lifted state per
+surface (§53.6 current edit); transitions: entering a field or
+pick → the surface's mode per the host (wizard step → 1/2;
+transcription → §23 states; report body → Modes 1–3 as the user
+chooses); leaving/saving → accept/revert per the strip; the
+surface shows its mode chip (chrome: "Save", "Accept", "Read &
+accept"). The machine is §53.6's host state — no persisted mode.
+
+### 54.8 States & edge cases
+
+- Loading (server validation pending) — the field's spinner
+  (§46.14) + disabled accept; error — §60 toast retains the typed
+  text; offline-save — server reject, the strip shows the error
+  and re-validates on retry.
+- Server-side token drift (the `±` copy no longer matches the
+  current template) → the strip renders a "Copy changed — please
+  review" inline notice and the mode returns to Mode 1; the
+  corrected copy never silently overwrites a newer copy (the §22
+  concurrency) — a toast names the conflict (ADR per §21.5).
+- A mode surface enters only one field at a time (the §53.6
+  currentEdit); concurrent serves are the server's concern
+  (§22/§27).
+
+### 54.9 Verification usage
+
+- Grep gates: no HTML generation in the client component (the
+  server transforms, ADR-034); no `±`-resolution client-side; the
+  exception strips are exactly the three modes plus the
+  transcription stages; the mode chip labels fixed ("Save"/
+  "Accept"/"Read & accept"); no second currentEdit store; no
+  validator copied into the components from `RULES`.
+- Cross-section checks: mirrors §22.2/§22.3 (copy), §23.3
+  (transcription stages), §51.3/§52.7 (hosts), §53 (editor), §55
+  (embed panel), §42 (server-call protocol), §21.5/§23.2
+  (accept/revert single undo), §60 (errors).
+- §54 introduces no constant (§11 unchanged), no path beyond §15.5,
+  and no package; it is standalone — it references only
+  specification sections.
+
+---
+
+## 55. Component — Conversation Bubble & Chat UI (UI only)
+
+### 55.1 Purpose & scope
+
+§55 owns the **client-side conversation surfaces** that the
+§51.4 launcher and the §53.5 entity insert open — the chat
+bubble, messages panel, and entity-insert panel — strictly as UI
+over the **server-side conversation of §24**. The §24 server
+owns the message store, ordering, uniqueness, and the reference
+engine for §24.2; this section owns placement, layout,
+interaction, sending, and rendering (only on the report body
+surface and the transcription surface). Explicitly **out of
+scope**: the conversation model and API = §24 (Part C); the
+tone-evaluation logic and behavior (the "tone" evaluation is a
+server-evaluated inference detail of §24) — this section renders
+the conversation verbatim.
+
+- **Owned here (normative).** The bubble UI and its hosts
+  (§55.2); the messages panel (§55.3); sending & Modes-state
+  wiring (§55.4); the entity-insert panel (§55.5); states & edge
+  cases (§55.6); verification (§55.7).
+- **Owned elsewhere — deliberately not repeated here.** Data/
+  endpoints/ordering = §24; entity vocabulary & unique refs =
+  §6.3/§24.2; playback/deletion of messages = the §24 contract;
+  the embed command in the toolbar = §53.5; sign-in/impersonation
+  tokens = §28.
+
+### 55.2 Bubble & hosts
+
+- The conversation bubble renders as a compact floating bar/
+  panel wherever the hosts (the report body §51.3, the
+  transcription surface §23.3, the report-content correction
+  surface §54) place it in the §46.17 component belt. The stack:
+  messages list (with role markers per the §24 contract), an
+  input row, and the embed/insert affordance beside the input.
+- The panel is **collapsible and dismissible**; it restores a
+  min-height (no reflow jump, §45.5); the header carries the
+  conversation name (mission label, §24.2) and a "close" icon.
+
+### 55.3 Messages panel
+
+- Renders the §24 messages verbatim: per-message role (from the
+  §24 contract — the rendered text is the server's, never
+  reconstructed), timestamp, and the read/unread state.
+- The message text passes the §61 sanitize rule before render
+  (messages are HTML/rich from the server) — no raw HTML.
+- Typing indicator, scroll-to-bottom on new, date dividers — per
+  the §45/§46.17 component set (no custom chat library — see
+  §55.6 "no package").
+
+### 55.4 Sending & wiring
+
+- Sending a message → the §24 POST; optimistic append with
+  rollback on error (§60 toast); the input is disabled while
+  awaiting server confirmation (BR-08 — one writer at a time per
+  report; §24 concurrency).
+- **Modes-state wiring:** when the Mode-2/3 strip is open in the
+  same panel, the strip narrows the input to the accept/revert
+  actions (the §54 strip is the only writer then) — no new state
+  invented; the surface's current mode (§53.6/§54.7) governs.
+
+### 55.5 Entity insert panel
+
+- The "Add entity" action of §53.5 opens the two-panel mode: left
+  = search (server search instant, §39/§22.3 — the client shows
+  the provider's results verbatim; no client list), right =
+  results insert; selecting inserts the §24.2 unique reference at
+  the caret. The panel is a thin client of the §24 reference
+  search — refs resolve server-side.
+- The panel shares the host's current-edit entity state (§53.6) —
+  no second entity store.
+
+### 55.6 States & edge cases
+
+- Loading (messages fetch) → skeleton rows; error → §60 toast +
+  inline retry; empty conversation → "Start the conversation"
+  hint with the first input focused.
+- Message from a deleted/archived branch ref → the §24 contract
+  resolves it (tombstone text per §17.4); the client renders it.
+- No unsent-draft persistence: the input's draft is lost on
+  panel close (session memory only, ADR-034; no localStorage —
+  the §53.4 rule is global).
+
+### 55.7 Verification usage
+
+- Grep gates: the conversation UI is the only surface of the §24
+  contract in the client (no second message list); no client-side
+  tone evaluation (server-only, §24); no HTML construction of
+  messages (sanitize-then-render, §61); no new library (Material
+  only, §13.4); no persist of the input draft.
+- Cross-section checks: mirrors §24 (data), §51.4 (launcher),
+  §53.5 (embed), §54.7 (mode state), §61 (sanitization), §46.17
+  (belt components), §60 (toasts).
+- §55 introduces no constant (§11 unchanged), no path, and no
+  package; it is standalone — it references only specification
+  sections.
+
+---
+
+## 56. Page — Branches
+
+### 56.1 Purpose & scope
+
+§56 owns the Branches page (`/branches`, §41.3) — the
+management surface for the supervisor's branches: listing,
+creating, editing, and the two-path lifecycle actions
+(archive → restore → permanent delete, BR-14/§30). It exists
+because branches are the report's primary dimension (§20, §30)
+and F2 names branch management as a first-class capability.
+
+- **Owned here (normative).** Page composition (§56.2); the
+  grid and its columns (§56.3); filters & toolbar (§56.4); row
+  actions and confirm dialogs (§56.5); states & breakpoints
+  (§56.6); verification (§56.7).
+- **Owned elsewhere — deliberately not repeated here.** Branch
+  schema/tombstone/snapshot = §20; endpoints, guards, and the
+  two-path deletion = §30; envelope/errors = §27; pagination =
+  §46.7/§27.6; grid mechanics = §46.8; the column set =
+  `components/columns/branches.js` (§15.6); toasts/empty states
+  = §60; the registration display component = §46.17; the
+  branch options in the report wizard/filters = §31.2-2/§50.3.
+- **Explicitly out of scope §56.** No endpoint (§30), no
+  transition rule (§30), no snapshot write (§20/§21), no new
+  constant (§11 unchanged), no new path beyond §15.5, no
+  package.
+
+### 56.2 Page composition
+
+Inside AppShell (§47.3), page header first (§46.12): eyebrow
+"Branches", title "Branches", subtitle "Your supervision
+branches"; `actions` slot: **"New branch"** (contained, §46.3)
+which opens the branch create dialog (§56.4). Below: the filter
+band and the `MuiDataGrid` (§56.3).
+
+### 56.3 Grid & columns
+
+`MuiDataGrid` per §46.8 with `components/columns/branches.js`
+(§15.6; ADR-034 — server-driven data):
+
+| Column | Content | Notes |
+|---|---|---|
+| Name | `name`, truncation per §45.4 | the report snapshot's source value |
+| Location | `location`, ellipsized | management/display only; never snapshotted into reports (§20) |
+| Status | `MuiStatusBadge` ("Active" / "Archived", §46.13) | from `isArchived` — chrome copy, §7.6 |
+| Archived | `archivedAt` as `DD-MM-YY` | `—` for active rows |
+| Created | `createdAt` as `DD-MM-YY` | |
+| Actions | Edit / Archive-or-Restore / Delete (§46.8 icon row) | per §56.5 |
+
+Responsive: below 720px the Location and Created columns drop
+(icons keep tooltips, §45.3); the grid always reads page
+slices — never a full dataset (§45.7/ADR-034).
+
+### 56.4 Filters, toolbar & the create/edit dialog
+
+- **Filter band** (inline, not URL): an "Show archived" switch
+  (default off — active-only, §30.2) and a text filter on `name`
+  (client-side matches against the current page is allowed for
+  display-only narrowing; server-side `q` goes through §39 if
+  used) — the authoritative filter remains `isArchived`.
+  Filter change resets to page 1 (server pages, §46.7).
+- **Toolbar:** `GridToolbar` subset per §46.8 (columns toggle,
+  density, filter, CSV export of selected rows through the §58
+  export surface).
+- **Create/Edit dialog** — `MuiDialog` (§46.17) with the §46.4
+  form: fields `name` (required, 1–100) and `location`
+  (required, 1–200), labels in chrome English (§7.6), validated
+  client-side per §29's mirror rules with the §46.4 error
+  pattern; submit posts §30.3/§30.4 via the §42 layer; success
+  → toast (§60) + cache invalidation (§42.6 tags: `Branches`).
+
+### 56.5 Row actions & confirm dialogs
+
+- **Edit** — `EditIcon` (`warning.main`), tooltip "Edit", opens
+  the §56.4 dialog pre-filled; allowed for archived branches
+  too (§30.4).
+- **Archive / Restore** — toggles `isArchived` (§30.5);
+  MuiConfirmDialog copy: "Archive this branch? Reports keep
+  their data." / "Restore this branch?" (confirmColor `primary`).
+  409 from the §30 API renders the §60 toast and leaves the row
+  as server truth.
+- **Delete** — the two-path step 1 (§30.6): MuiConfirmDialog
+  confirmColor `error`, copy "Delete this branch permanently?
+  This archives it; it is removed after the retention period."
+  On success → toast (§60) + tag invalidation; the row leaves
+  the active list immediately (the sweeper removes the row per
+  §62).
+- Mutations never touch report snapshots (BR-14) — the grid
+  read path is tombstone-safe (§17.4: a removed branch's
+  reports still render their snapshot names in §50/§51).
+
+### 56.6 States & breakpoints
+
+- Loading — grid overlay loading (§46.8)/skeleton rows;
+  error — §60 toast + inline retry band; empty (no branches
+  yet) — §60 empty state with the "New branch" action inline
+  ("No branches yet — add your first branch"); empty filtered —
+  "No branches match these filters." + clear-filters button
+  (chrome copy, §7.6).
+- Breakpoint matrix:
+
+| Region | xs | sm | md | lg+ |
+|---|---|---|---|---|
+| Page header | stacked | stacked | actions inline right | inline right |
+| Filter band | stack (switch above grid) | inline row | inline row | inline row |
+| Grid columns | Name, Status, Actions | Name, Status, Location, Actions | full | full |
+| Create dialog | full-width (maxWidth sm) | sm | sm | sm |
+
+### 56.7 Verification usage
+
+- Grep gates: no branch DTO field beyond the §20 serialized
+  surface; no hard-delete call in the page (only archive, §30.6);
+  no snapshot rewrite on any branch action; the archived default
+  is hidden (active-only serve, §30.2); labels chrome English
+  (§7.6).
+- Cross-section checks: mirrors §20 (model), §30 (endpoints/
+  guards), §15.6 (column set), §46.7/§46.8/§46.13/§46.17
+  (components), §27 (envelope), §60 (states), §58 (CSV export),
+  §31.2-2 (branch options source).
+- §56 introduces no constant (§11 unchanged), no path beyond
+  §15.5, and no package; it is standalone — it references only
+  specification sections.
+
+---
+
+## 57. Page — Profile
+
+### 57.1 Purpose & scope
+
+§57 owns the Profile page (`/profile`, §41.3) — the single
+account surface: identity fields, avatar, password-less profile
+data, the session list with forced logout, and the logout
+action. It exists because F1 makes profile fields and session
+control part of the register-model (§3.2.2, §19).
+
+- **Owned here (normative).** Page composition (§57.2); profile
+  fields & avatar (§57.3); sessions list & forced logout
+  (§57.4); logout (§57.5); states & breakpoints (§57.6);
+  verification (§57.7).
+- **Owned elsewhere — deliberately not repeated here.** User
+  schema/derivation = §19; auth endpoints, tokens, sessions,
+  avatar serving = §28; the avatar upload validation = §29;
+  toasts/empty states = §60; components = §46 (avatar menu,
+  MuiFileInput, MuiConfirmDialog); the login/register pages =
+  §48.
+- **Explicitly out of scope §57.** No token mechanics (cookies
+  are §28's), no role/permission UI (ADR-036), no user
+  deletion (§19 — none exists), no new constant (§11
+  unchanged — `AVATAR_MAX_SIZE_BYTES`/`AVATAR_ALLOWED_MIME_TYPES`
+  exist), no new path beyond §15.5, no package.
+
+### 57.2 Page composition
+
+Inside AppShell (§47.3), page header first (§46.12): eyebrow
+"Profile", title "Profile", subtitle "Your account details";
+`actions` slot: **"Logout"** (outlined, §46.3) — §57.5. Body:
+a profile card (§44.6) with the avatar and identity, the profile
+form (§57.3), and the sessions card (§57.4).
+
+### 57.3 Profile fields & avatar
+
+- **Identity block** — avatar (48px; sizes per §45.4) with an
+  edit affordance (camera overlay) opening `MuiFileInput`
+  (§46.17) accepting `AVATAR_ALLOWED_MIME_TYPES`, sized ≤
+  `AVATAR_MAX_SIZE_BYTES` (§29 mirror; client-side pre-check with
+  the §60 toast on violation); plus `fullName` (§19 virtual) as
+  the display title.
+- **Form** (§46.4) — `position` (free string, display-only,
+  ADR-036) and `firstName`/`lastName` (editable; the §19
+  derived names unlock after a manual rename — nothing else
+  changes) — submitted via `PATCH /auth/profile` (§28.5).
+  Success → toast (§60) + the login-surface name refresh
+  (session display name is §28's surface; snapshots in reports
+  are unaffected, BR-14).
+- Validation mirrors §29 (lengths 1–100 for names, 1–200 for
+  position) with the §46.4 error pattern; the avatar upload
+  needs no save button (files save on selection through §28.5).
+
+### 57.4 Sessions & forced logout
+
+- The sessions card lists `GET /auth/sessions` (§28.3) rows:
+  device/issued caption per the §28 token bookkeeping (chrome
+  copy English; idle tidbits minimal), each row with a **"Log
+  out"** icon action → `DELETE /auth/sessions/:sessionId` behind
+  the §46.17 MuiConfirmDialog ("End this session?"); success →
+  toast + refreshed list. The current session's row is labeled
+  "This session" (chrome) with the action disabled for it
+  (logout clears it, §57.5).
+- Empty sessions list → §60 empty state ("No other active
+  sessions").
+
+### 57.5 Logout
+
+Header "Logout" Action → `POST /auth/logout` (§28.3) → clears
+cookies server-side; the client drops the §42 auth state and
+navigates to `/login` (§41.5 guard). No confirm dialog (the
+action is reversible by logging in again — §7.6 copy keeps it
+plain).
+
+### 57.6 States & breakpoints
+
+- Loading — `GET /auth/me` + `GET /auth/sessions` pending ⇒
+  page-level `LoadingSpinner` (§46.14); error — §60 toast +
+  inline retry per card; success — full render. A failed
+  profile PATCH keeps entered values (no silent reset, ADR-033).
+- Breakpoint matrix: single column (xs) → profile card +
+  form stacked (sm) → form and sessions side by side (md+,
+  equal thirds).
+
+### 57.7 Verification usage
+
+- Grep gates: no `role` field in any DTO the page touches
+  (ADR-036); no token in the client (cookies only, §28.2); the
+  avatar input enforces only the §11.3 constants; no report
+  snapshot rewrite from this page (BR-14); "Logout" is the only
+  logout affordance (avatar menu's item opens this page).
+- Cross-section checks: mirrors §19 (schema/vitual), §28
+  (endpoints/sessions/avatar), §29 (validation), §48 (auth
+  flow), §46 (components), §60 (states), §45.4 (sizes).
+- §57 introduces no constant (§11 unchanged), no path beyond
+  §15.5, and no package; it is standalone — it references only
+  specification sections.
+
+---
+
+---
+
+## 58. Feature — Print-to-PDF & Client-side Exports
+
+### 58.1 Purpose & scope
+
+§58 owns the client-side export/print surfaces: the CSV export of
+the Reports grid selection (§50.7) and the **print-to-PDF of the
+report's read-only content** (the official text the server
+produces). It exists because supervisors must deliver the day's
+report in paper/digital form (export is §3.1.2 F7's surface).
+
+- **Owned here (normative).** The export entry points (§58.2);
+  the ReportPrint surface & what prints (§58.3); CSV export rules
+  (§58.4); states & edge cases (§58.5); verification (§58.6).
+- **Owned elsewhere — deliberately not repeated here.** The
+  report structure & content that prints = §21/§22 (the server
+  owns the official text); the grid selection = §46.8/§50.7; the
+  export menu affordance = §51.5; toasts = §60; the
+  `±`-resolution and the official-text decision = server-side
+  §22/§64.
+- **Explicitly out of scope §58.** No server-side PDF/RSS export
+  endpoint (not part of Part C — see §59's note), no file storage
+  on the client, no new constant (§11 unchanged), no path beyond
+  §15.5, no package (the print API is the browser's).
+
+### 58.2 Export entry points
+
+- **Reports grid:** GridToolbar's Export menu → "Export selected
+  as CSV" (§50.7); disabled when no rows are selected.
+- **Report details:** the §51.5 Export action → a small menu with
+  "Print / Save as PDF" (the report body), and "Export selected
+  table as CSV" when the current report has a table/section view.
+
+### 58.3 ReportPrint surface & print contract
+
+`components/print/ReportPrint.jsx` renders the **read-only**,
+sanitized (§61) `latest` content of the report with print styling:
+
+- **What prints:** the report content exactly as the server
+  authored it (the official text — no re-layout, no wrapping by
+  client logic); a header block with reportDate, supervisor name,
+  and the visit summary (branch snapshot names) in print chrome.
+- **How:** `window.print()` over a hidden print container
+  (CSS `@media print` styles; the A4 width, margins, the app
+  chrome hidden) — the browser's Print/Save as PDF dialog; **no
+  client PDF generation library** (§13.4 unchanged; ADR-034).
+- The `±` tokens print **verbatim** (resolution is server-side at
+  the export level per §22 — this print is the internal copy; the
+  official-format print decision is §64's, referenced).
+
+### 58.4 CSV export rules
+
+- The grid's export serializes the **visible/selected rows** from
+  the current grid state (columns per `components/columns/
+  reports.js`, English headers), with `\r\n` line endings and the
+  standard RFC 4180 quoting for the branch text (the ellipsized
+  branch is **not** exported truncated — the full snapshot string
+  is). Download is a client-side Blob; filename `reports.csv`
+  current date (`reports-YYYY-MM-DD.csv`).
+- No dates as Excel numbers — the DD-MM-YY strings stay strings.
+
+### 58.5 States & edge cases
+
+- No content (draft, no `latest`): the Export action is disabled
+  (§51.5) — nothing prints.
+- Print failure (browser block) → §60 info; the Export menu stays
+  open; CSV with zero selected rows → disabled affordance (never
+  a silent empty file).
+- Custom dates/branches print from the snapshot values (tombstone
+  rule §17.4) — the print shows what the record holds, not live.
+
+### 58.6 Verification usage
+
+- Grep gates: the only PDF path is `window.print()` — no pdf/js or
+  pdfkit dependency; the export builds its CSV from the selected
+  rows map, not from a destination endpoint; no `print` role in
+  MUI grids beyond the affordance; ± tokens untouched in the print
+  surface (no client resolution).
+- Cross-section checks: mirrors §21/§22 (content), §51.5/§50.7
+  (entries), §17.4 (tombstones), §61 (sanitized), §60 (toasts).
+- §58 introduces no constant (§11 unchanged), no path, no package;
+  it references only specification sections.
+
+---
+
+## 59. Feature — Global Search & 404 Page
+
+### 59.1 Purpose & scope
+
+§59 owns two app-level surfaces: the **global search** in the
+AppShell header (finding reports, drafts, branches, and content
+by title/date/branch/§24.2 references) and the **404 page** for
+unmatched or invalid routes (§14.2 fallback).
+
+- **Owned here (normative).** The search dialog surface (§59.2);
+  the result groups and navigation (§59.3); the 404 page (§59.4);
+  states & edge cases (§59.5); verification (§59.6).
+- **Owned elsewhere — deliberately not repeated here.** The
+  search API/index = §39 (server search), referenced; report
+  routes and the machinery = §41.2/§15.5; the AppShell header =
+  §47.4; toasts = §60; empty state = §60.
+- **Explicitly out of scope §59.** No client-side index (search
+  is server-side, §39); no route change on search text; no new
+  constant (§11 unchanged), no package.
+
+### 59.2 Search dialog surface
+
+- Trigger: the header search icon (and `Ctrl/Cmd + K` when the
+  header is visible) opens `GlobalSearch` — a MuiDialog containing
+  a search field with a clear button, a debounced (400ms) call to
+  the §39 search endpoint via §42, and a result list grouped by
+  kind: **Reports**, **Drafts**, **Branches**, **Individuals** (if
+  §39 exposes them) — each group shows the entity's key display
+  text (reportDate, branch name) plus its status badge where
+  applicable.
+- The dialog keeps focus in the field, closes on `Esc`, and its
+  state is wholly ephemeral (§12.2-10; never persisted, per the
+  §53.4 rule). When the header is hidden by the active layout
+  (§47.4), the search is not mounted.
+
+### 59.3 Result groups & navigation
+
+- Clicking a result navigates: reports → `/reports/:reportId`
+  (§51); drafts → the wizard (§52.3 Edit-mode entry at the
+  status-matched step); branches → `/branches/:branchId` (§41.5).
+  All navigation honors the app-level navigation model (§47).
+- When the entity is a tombstone (§17.4), the result still
+  renders and navigates — the detail page shows the tombstone
+  surface.
+
+### 59.4 404 page
+
+- The route-not-found fallback (§14.2): a MuiCard centered in
+  AppShell with **"Page not found"** (title, chrome copy §7.6),
+  a subtitle "This page doesn't exist or was moved", and a button
+  **"Back to dashboard"** (`/dashboard`). It keeps the AppShell
+  chrome (the app is reachable) — the shell never unmounts for a
+  404.
+
+### 59.5 States & edge cases
+
+- Search: empty query → no results band ("Type to search");
+  loading → skeleton rows; no matches → "No results for
+  \"{query}\"" (chrome copy); server error → §60 toast + the
+  dialog keeps the last results (only mention). Keyboard: `Esc`
+  closes, `Enter` on a highlighted result navigates. Clearing the
+  query resets the groups instantly.
+- 404 with a seeded route param mismatch (a deleted report deep
+  link): the detail-route machinery (§51.6) already handles the
+  §31 404 surface **before** the global 404 — the global 404 only
+  renders for unmatched paths.
+
+### 59.6 Verification usage
+
+- Grep gates: the search dialog is the only surface of the §39
+  search endpoint; the 404 page is the only route fallback
+  (§14.2 single `*` entry); no client-side search index; no
+  localStorage/IndexedDB for the search state.
+- Cross-section checks: mirrors §39 (search), §47 (shell/header),
+  §51.6 (detail 404), §14.2 (router), §60 (empty/error copy),
+  §12.2-10 (ephemeral state).
+- §59 introduces no constant (§11 unchanged), no path beyond §15.5,
+  and no package; it references only specification sections.
+
+**End of Part D (client).** Sections 41–59 close the client
+specification in dependency order: page shells (§44–§47), the
+page inventory (§49–§52), the editing components and conversation
+(§53–§55), and the feature surfaces (§58–§59, together
+with the profile and branches pages §56–§57), each standing on part C's engines exactly as
+§12.4 gates and BR-05–BR-08 (with the closing of OQ-005 at
+§49.3) require.
+
+# Part E — Cross-Cutting
+
+## 60. Universal UX — States Protocol, Toasts & Feedback
+
+### 60.1 Purpose & scope
+
+§60 opens Part E (cross-cutting mechanics, §60–§64 per §12.1)
+and owns the **universal UX contract** that every Part D page
+and Part C error path cites: the four-state protocol (ADR-033),
+the toast/feedback primitives and the single trigger API, the
+**toast catalogue** (every message string used across the app,
+single-sourced), the empty/error copy conventions (chrome
+English, §7.6), and the error-boundary rule — extended with the
+states protocol every Part D page cites.
+
+- **Owned here (normative).** The states protocol (§60.2); the
+  toast components & trigger API (§60.3); the variant model
+  (§60.4); placement, stacking & semantics (§60.5); the toast
+  catalogue (§60.6); empty/error/success copy conventions
+  (§60.7); error boundary (§60.8); verification (§60.9).
+- **Owned elsewhere — deliberately not repeated here.** Backend
+  error shape and status codes = §27; validation errors = §29
+  (422 shape); the component belt = §46.17; skeletons = §46.14;
+  themes = §44.5; motion = §45.6.
+- **Explicitly out of scope §60.** No server-side copy, no new
+  constant (§11 unchanged), no package (§13.4 unchanged —
+  react-toastify only).
+
+### 60.2 States protocol (ADR-033)
+
+Every page/component enumerates the same four states,
+implemented identically:
+
+1. **Loading** — §46.14 skeleton/spinner at the §45.7 slot;
+   never a blank render.
+2. **Empty** — the empty-state copy (§60.7) + the page's
+   primary action inline; never an error or a toast.
+3. **Error** — the §60.3 error toast (server errors, including
+   all backend 4xx/5xx per §27.5) + an inline retry affordance
+   on the failing region; the retry re-runs the same §42 call.
+4. **Success** — the full render, plus exactly one success
+   toast (§60.5) on user-initiated mutations.
+
+State transitions never skip: loading → (empty | error |
+success); retry re-enters loading. `setError` is never used for
+server errors (§9.6 rule) — the toast pipeline is the only error
+surface.
+
+### 60.3 Toast components & trigger API
+
+- **`AppToastContainer`** (react-toastify, §13.4) — the **single
+  mount** of the toast surface, placed in `App.jsx` (§41.4, item
+  4); one container, no second mount anywhere.
+- **`showToast(variant, title, message = options)`** is the
+  **single trigger API** — every listener (service responses,
+  §27 error mapping, page mutations) calls it; **no other toast
+  API exists** (ADR-033). The catalogue strings come from
+  §60.6.
+- **`MuiToast` feedback components** (success/error/info/
+  warning/loading variants) live in the §46.17 belt, themed
+  §44.5/§44.4.
+
+### 60.4 Variant model
+
+| Variant | Copy/tones | Icon/sx |
+|---|---|---|
+| success | green check — message from the §60.6 catalogue | `CheckCircleOutlined`, `success.main` |
+| error | red — message from §60.6 | `ErrorOutline`, `error.main` |
+| info | neutral — message from §60.6 | `InfoOutlined`, `info.main` |
+| warning | amber — message from §60.6 | `WarningAmberOutlined`, `warning.main` |
+| loading | spinner icon + message; auto-dismisses on completion; never duplicated on retry | spinner |
+
+### 60.5 Placement, stacking & semantics
+
+- Anchor: bottom-right (desktop); full-width top (xs < 600px),
+  respecting the AppShell heights; max stack 4 (older auto-
+  dismiss); auto-dismiss 5 s (success) / 8 s (error, warning);
+  manual close icon; `role=status` per density; reduced-motion
+  honored (§45.6). Window blur never auto-dismisses.
+- **Success-message rule:** exactly one success toast per
+  user-initiated mutation (create, save, accept, archive,
+  restore, delete, export, login, logout, correction save);
+  never a toast for read-only auto-refresh.
+- **Error/retry rule:** retries re-show the error toast once
+  (no duplicate spam); confirm dialogs show no toast of their
+  own (the orchestrated dialog's result toasts once).
+
+### 60.6 Toast catalogue (normative — single source)
+
+Every message string below is a single-sourced constant (one
+occurrence in the code); chrome copy in English per §7.6. Samples (the complete set is the catalogue
+file's content, verified by greps):
+
+| Key | Copy |
+|---|---|
+| `toast.report.created` | "Report created" |
+| `toast.report.completed` | "Report completed" |
+| `toast.report.archived` | "Report archived" / "Report restored" |
+| `toast.report.deleted` | "Report deleted" |
+| `toast.branch.created` | "Branch created" / "Branch updated" |
+| `toast.branch.archived` | "Branch archived — reports keep their data" / "Branch restored" |
+| `toast.branch.deleted` | "Branch deleted — it will be removed after the retention period" |
+| `toast.clip.deleted` | "Clip deleted" (+ the rewind sentence when the last clip, §51.4) |
+| `toast.transcription.ready` | "Transcription ready" |
+| `toast.generation.ready` | "Report generated — please review" |
+| `toast.correction.accepted` | "Correction accepted" / "Correction reverted" |
+| `toast.export.ready` | "Export ready" |
+| `toast.auth.loggedOut` | "You have been logged out" |
+| `toast.session.ended` | "Session ended" |
+| `toast.error.generic` | "Something went wrong — please try again" |
+| `toast.error.offline` | "You appear to be offline" |
+| `toast.search.noResults` | "No results for \"{query}\"" |
+
+Server messages (422 details, §27.5/§29) render in the toast
+body after "Please check the highlighted fields" — the field
+errors appear inline (§46.4).
+
+### 60.7 Empty/error/success copy conventions
+
+- Empty states carry chrome English copy + the page's primary
+  action (samples used across §49–§57: "No reports yet —
+  record your first day", "No branches yet — add your first
+  branch", "No results found", "No other active sessions").
+- "This section has issues, review them below" is the fixed
+  form-summary line (§52.10/§46.4).
+- Error copy never leaks backend internals (§27.5 — the
+  message is user-facing); a 404 route renders the §59 page,
+  a 403 lifecycle blocker toasts the §60.6 or context copy.
+
+### 60.8 Error boundary
+
+A single React error boundary (`react-error-boundary`, §13.4) at
+the `App.jsx` level (§41.4): on an uncaught render error it
+renders the §46.14 fallback screen ("Something went wrong" +
+"Reload" button) and logs the error reference; it never unmounts
+the AppShell chrome (§47.3 rule). Error-boundary fallbacks are
+not toasts (toasts are for recoverable flows).
+
+### 60.9 Verification usage
+
+- Grep gates: only `showToast` calls the toast API; every
+  catalogue string appears exactly once (single-sourced); no
+  toast on auto-refresh; react-toastify appears only at the
+  §41.4 mount and `showToast`; one error boundary; no `setError`
+  for server errors (§9.6).
+- Cross-section checks: mirrors §13.4 (react-toastify,
+  react-error-boundary), §41.4 (mount), §27 (server errors), §29
+  (422), §46.17 (components), §46.14 (skeletons), §45.6 (motion),
+  §49–§57 (usage), §61 (sanitization of toast bodies — never
+  rendered as HTML).
+- §60 introduces no constant (§11 unchanged), no path, and no
+  package; it references only specification sections.
