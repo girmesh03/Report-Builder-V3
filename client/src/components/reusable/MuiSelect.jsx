@@ -5,7 +5,6 @@
  * of §44.5. The dropdown paper is capped at 300px.
  */
 import { forwardRef } from "react";
-import PropTypes from "prop-types";
 import Select from "@mui/material/Select";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
@@ -79,24 +78,6 @@ const MuiSelect = forwardRef(function MuiSelect(props, ref) {
   );
 });
 
-export default MuiSelect;
+MuiSelect.displayName = "MuiSelect";
 
-MuiSelect.propTypes = {
-  options: PropTypes.arrayOf(
-    PropTypes.shape({
-      value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-      label: PropTypes.string,
-    })
-  ).isRequired,
-  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  onChange: PropTypes.func,
-  label: PropTypes.string,
-  size: PropTypes.oneOf(["small", "medium"]),
-  fullWidth: PropTypes.bool,
-  disabled: PropTypes.bool,
-  error: PropTypes.bool,
-  helperText: PropTypes.string,
-  placeholder: PropTypes.string,
-  startAdornment: PropTypes.node,
-  endAdornment: PropTypes.node,
-};
+export default MuiSelect;

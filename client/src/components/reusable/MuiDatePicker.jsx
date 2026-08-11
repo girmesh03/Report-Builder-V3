@@ -12,7 +12,6 @@
  * value arrives through a custom `onChange` (the required justification
  * for `Controller`, §46.2).
  */
-import PropTypes from "prop-types";
 import { forwardRef } from "react";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -298,33 +297,5 @@ export const MuiTimePicker = forwardRef(function MuiTimePicker(props, ref) {
 
 export default MuiDatePicker;
 
-MuiDatePicker.propTypes = {
-  value: PropTypes.shape({
-    day: PropTypes.number,
-    month: PropTypes.number,
-    year: PropTypes.number,
-  }),
-  onChange: PropTypes.func.isRequired,
-  label: PropTypes.string,
-  size: PropTypes.oneOf(["small", "medium"]),
-  views: PropTypes.arrayOf(PropTypes.oneOf(["day", "month", "year"])),
-  disabled: PropTypes.bool,
-  error: PropTypes.bool,
-  helperText: PropTypes.string,
-  startAdornment: PropTypes.node,
-  endAdornment: PropTypes.node,
-  slotProps: PropTypes.object,
-};
-
-MuiTimePicker.propTypes = {
-  value: PropTypes.object,
-  onChange: PropTypes.func.isRequired,
-  label: PropTypes.string,
-  size: PropTypes.oneOf(["small", "medium"]),
-  disabled: PropTypes.bool,
-  error: PropTypes.bool,
-  helperText: PropTypes.string,
-  startAdornment: PropTypes.node,
-  endAdornment: PropTypes.node,
-  slotProps: PropTypes.object,
-};
+MuiDatePicker.displayName = "MuiDatePicker";
+MuiTimePicker.displayName = "MuiTimePicker";

@@ -20,6 +20,8 @@ const SlideTransition = forwardRef(function SlideTransition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
 
+SlideTransition.displayName = "SlideTransition";
+
 /**
  * @param {Object} props
  * @param {boolean} props.open - Dialog visibility.

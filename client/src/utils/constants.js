@@ -91,3 +91,55 @@ export const AUDIO_ALLOWED_MIME_TYPES = Object.freeze([
   'audio/mp4',
   'audio/webm',
 ]);
+
+/**
+ * Toast — the §60.6 catalogue, single-sourced (one occurrence per
+ * string). Chrome copy in English (§7.6). The `{query}` placeholder
+ * is substituted by callers at trigger time.
+ * @type {readonly Object<string, readonly Object<string, string>>}
+ */
+export const TOAST_CATALOGUE = Object.freeze({
+  report: Object.freeze({
+    created: 'Report created',
+    completed: 'Report completed',
+    archived: 'Report archived',
+    restored: 'Report restored',
+    deleted: 'Report deleted',
+  }),
+  branch: Object.freeze({
+    created: 'Branch created',
+    updated: 'Branch updated',
+    archived: 'Branch archived — reports keep their data',
+    restored: 'Branch restored',
+    deleted: 'Branch deleted — it will be removed after the retention period',
+  }),
+  clip: Object.freeze({ deleted: 'Clip deleted' }),
+  transcription: Object.freeze({ ready: 'Transcription ready' }),
+  generation: Object.freeze({ ready: 'Report generated — please review' }),
+  correction: Object.freeze({ accepted: 'Correction accepted', reverted: 'Correction reverted' }),
+  export: Object.freeze({ ready: 'Export ready' }),
+  auth: Object.freeze({
+    loggedOut: 'You have been logged out',
+    loggedIn: 'Welcome back',
+    accountCreated: 'Account created — please log in',
+  }),
+  session: Object.freeze({ ended: 'Session ended' }),
+  error: Object.freeze({
+    generic: 'Something went wrong — please try again',
+    offline: 'You appear to be offline',
+  }),
+  search: Object.freeze({ noResults: 'No results for "{query}"' }),
+});
+
+/**
+ * Toast — auto-dismiss durations in ms (§60.5: success 5s, error and
+ * warning 8s; info follows the success cadence; loading never
+ * auto-dismisses — the caller dismisses it on completion).
+ * @type {readonly Object<string, number>}
+ */
+export const TOAST_AUTO_DISMISS_MS = Object.freeze({
+  success: 5000,
+  info: 5000,
+  error: 8000,
+  warning: 8000,
+});
