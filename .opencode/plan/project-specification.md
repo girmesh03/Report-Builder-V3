@@ -2735,6 +2735,7 @@ caret ranges preserved verbatim):
 | @mui/x-charts               | ^9.11.1           | Analytics charts                               | §49        |
 | @mui/x-chat                 | ^9.0.0-alpha.16   | AI chat panel (alpha; §55 usage)              | §55        |
 | @fontsource/inter           | ^5.3.0            | Inter font (typography)                       | §43        |
+| @fontsource/noto-serif-ethiopic | ^5.3.0        | Ethiopic content face (Amharic body, §43.5)    | §43        |
 | jspdf                       | ^4.2.1            | PDF export (client-side)                       | §58        |
 | jspdf-autotable             | ^5.0.8            | PDF tables (report tables)                   | §58        |
 | dayjs                       | ^1.11.21          | Date/time (DD-MM-YY display)                 | §6.3, §52  |
@@ -2774,7 +2775,6 @@ become manifest truth:
 | ------------- | ------------------------------------------------ | --------------- | -------------------------- |
 | @tiptap/react | `MuiEditor` rich-text editing (toolbar: bold, italic, font size, text color) | client dependencies | editor phase in §66 |
 | dompurify     | Sanitizes rich-text HTML on save and on render  | client dependencies | editor phase in §66; §61 |
-| @fontsource/noto-serif-ethiopic | Ethiopic content face — report, transcription, and chat surfaces (§43) | client dependencies | theme phase in §66; §43 |
 | NVIDIA multipart transport helper (named at install) | Conditional (§16.4): only if the installed runtime lacks reliable multipart forwarding to NVIDIA | backend dependencies | transport phase in §66; §16.4 rules stay in force |
 
 Until these are installed, no section may assume their behavior; the
@@ -3125,6 +3125,7 @@ client/
     |   |-- constants.js                       # client constants inventory (§11.5)
     |   |-- httpStatus.js                      # client mirror of the status semantics (§11.6)
     |   `-- ethiopianDate.js                   # Ethiopian calendar conversions (§13.4, §46, §52)
+    |   `-- ethiopianDateAdapter.js            # field display → Ethiopian DD-MM-YY (§46.6)
     |-- hooks/
     |   `-- useAudioRecorder.js                # recording hook; reused by Mode 3 (§53)
     |-- redux/
@@ -3136,7 +3137,14 @@ client/
     |       `-- <domain>Slice.js             # one slice per domain (e.g. reports, branches) (§41)
     |-- components/
     |   |-- layout/                          # PublicLayout, AppShell, AppSidebar (§47)
-    |   |-- reusable/                        # Mui* library, one file per component (§46)
+    |   |-- reusable/                        # Mui* belt (§46), one file per component: MuiButton,
+    |   |                                    #   MuiTextField, MuiSelect, MuiDatePicker (+MuiTimePicker),
+    |   |                                    #   MuiPagination, MuiDataGrid, MuiConfirmDialog, MuiDialog,
+    |   |                                    #   MuiAppbar, MuiPageHeader, MuiStatusBadge, MuiAudioPlayer,
+    |   |                                    #   MuiRecorder, MuiFileInput, MuiStatCard, MuiStepper,
+    |   |                                    #   MuiRegistrationValue, MuiToast, GlobalSearchDialog,
+    |   |                                    #   LoadingSpinner, TableSkeleton, ListSkeleton, FormSkeleton,
+    |   |                                    #   MessageSkeleton (MuiEditor at the editor phase, §66)
     |   |-- columns/                         # domain column-set files for MuiDataGrid (§50, §56, ADR-034)
     |   |-- landing/                          # e.g. Hero.jsx — example of a domain folder
     |   |-- login/                            # e.g. LoginForm.jsx — example of a domain folder
@@ -7911,8 +7919,8 @@ import primitives directly). Semantic roles (normative):
   helper text, table headers): **Inter** 300–700 (§13.4
   `@fontsource/inter`).
 - Content (report body, transcription text, chat messages — the
-  §7.6 content surfaces): **Noto Serif Ethiopic** — the planned
-  `@fontsource/noto-serif-ethiopic` dependency of §13.5, installed
+  §7.6 content surfaces): **Noto Serif Ethiopic** — the
+  `@fontsource/noto-serif-ethiopic` dependency of §13.4, installed
   at the §66 theme phase; Latin runs inside content keep the Inter
   stack, Amharic runs render through the Ethiopic face (see the
   §43.5 stack rule).
@@ -8057,7 +8065,7 @@ scaffold scales; the page sections reference roles only.
   (ADR-011/032/038).
 - §43 introduces no constant (§11 unchanged — the design tokens
   live in the scaffold `themePrimitives.js`), no path outside §15.5,
-  and registers exactly one planned package in §13.5
+  and registers exactly one installed package in §13.4
   (`@fontsource/noto-serif-ethiopic`); it is standalone — it
   references only specification sections.
 
@@ -8402,13 +8410,19 @@ in bold), states, and responsive behavior. Forms bind through the
 - **Purpose:** the single button; composed by every surface.
 - **Props:** `variant` (`contained`/`outlined`/`text`), `color`
   (default `primary`), `size` (**small**), `loading`
-  (**false**), `loadingPosition` (**center**), `startIcon`,
+  (**false**), `loadingPosition` (**center**), `loadingIndicator`
+  (replaces the default spinner), `startIcon`,
   `endIcon`, `fullWidth`, `disabled`, `children`, `onClick`, `sx`,
   `type`; icon-only buttons stay raw `@mui/material/IconButton`
   (never MuiButton) (§44.2).
 - **States:** default / hover / focus-visible (§45.8) / pressed /
-  disabled / loading (spinner replaces the label per
-  `loadingPosition`). Submit buttons: `size="small"`,
+  disabled / loading (MUI's native loading prop: indicator per
+  `loadingPosition`, always in the DOM). The customization's
+  root-level `&.Mui-disabled` rule clears the ink gradient
+  (`backgroundImage: none`) so disabled text stays readable via
+  `action.disabled` (contract: variants never override disabled
+  appearance). Submit buttons:
+  `size="small"`,
   `flexShrink: 0` — **never shrink on flex** (§9.6).
 - **Responsive:** full-width inside forms at every bucket; the
   §45.3 icon-only rule applies to chrome buttons, never to primary
@@ -8423,10 +8437,12 @@ in bold), states, and responsive behavior. Forms bind through the
   `onMouseDown` prevents focus loss, no layout shift when
   toggled; caller `slotProps.input.endAdornment` merges after the
   eye).
-- **Props:** `label`, `placeholder`, `type` (**text**), `required`,
+- **Props:** `label`, `placeholder`, `type` (**text**), `size`
+  (**small**), `required`,
   `disabled`, `multiline`, `rows`/`maxRows`, `fullWidth`,
   `error` + `helperText` (validation surface), `startAdornment`,
-  `slotProps`, `sx`, standard passthrough.
+  `endAdornment` (the password eye overrides it), `slotProps`,
+  `sx`, standard passthrough; `forwardRef` exports the input ref.
 - **States:** empty / filled / focused / error (helperText shows
   the manual-resolver message) / disabled; `register` returns the
   input props; `helperText` space is reserved so error appearance
@@ -8441,22 +8457,40 @@ in bold), states, and responsive behavior. Forms bind through the
   branch picker §52/§56, filters §50) — the bordered, arrowed
   field style of §44.5.
 - **Props:** `options` (`{ value, label }[]`), `value`, `onChange`,
-  `label`, `fullWidth`, `disabled`, `error`/`helperText`;
+  `label`, `size` (**small**, FormControl + Select),
+  `startAdornment`/`endAdornment` (reached through the Select's
+  `other` spread onto the OutlinedInput),
+  `fullWidth`, `disabled`, `error`/`helperText`;
   `MenuProps={{ slotProps: { paper: { sx: { maxHeight: 300 } } }
-  }}` — the fixed dropdown height.
+  }}` — the fixed dropdown height; `forwardRef` exports the input
+  ref.
 - **States:** empty (label + placeholder), focused, error,
   disabled, open; empty-option behavior is the owning form's
   validation concern (§48–§57).
 
 ### 46.6 MuiDatePicker & `ethiopianDate.js`
 
-- **Files:** `components/reusable/MuiDatePicker.jsx` and
-  `utils/ethiopianDate.js` (§15.5).
+- **Files:** `components/reusable/MuiDatePicker.jsx`,
+  `utils/ethiopianDate.js` and `utils/ethiopianDateAdapter.js`
+  (§15.5).
 - **Purpose:** the Ethiopian-calendar date picker with English
   day/month names (§43.6, ADR-011/ADR-032) — built on
   `@mui/x-date-pickers` community (no Pro features). When the
   section needs a time value, the same component file renders the
-  matching `MuiTimePicker` behavior (24h `HH:mm`, §43.6).
+  matching `MuiTimePicker` behavior — a 12h AM/PM input surface
+  (`h:mm A`): selecting 12:00 keeps 12:00 with an explicit meridiem
+  on the dial; the stored dayjs value stays absolute, so domain
+  rendering keeps the 24h `HH:mm` convention (§43.6).
+- **Field display** (`utils/ethiopianDateAdapter.js`, §15.5): the
+  picker runs its own `LocalizationProvider` with
+  `EthiopianDateAdapter extends AdapterDayjs`, which re-maps the
+  `DD`/`MM`/`YY`/`YYYY` section tokens to the Ethiopian parts
+  (v9 formats each field section per token —
+  `buildSectionsFromFormat`). The field therefore shows the
+  Ethiopian `DD-MM-YY` (e.g. `12-05-18`), never the Gregorian
+  equivalent; the internal value and the day grid keep the
+  proleptic-Gregorian-equivalent model, and typed section edits
+  operate on that internal model (§43.6).
 - **Conversion contract** (`ethiopianDate.js`):
   `ethiopianToGregorian(ethDate) → JS Date` and
   `gregorianToEthiopian(jsDate) → { day, month, year }` — a
@@ -8465,9 +8499,26 @@ in bold), states, and responsive behavior. Forms bind through the
   chrome headers (§43.6); input/display value `DD-MM-YY` numeric.
 - **Props:** `value`, `onChange` (value arrives via the picker's
   custom onChange — **`Controller` is required**, with a
-  justification comment, §46.2), `label`, `views` (day/month/year
-  per the owning form, §52.3/§50.3), `disabled`, `error`/
-  `helperText`.
+  justification comment, §46.2), `label`, `size` (**small**, into
+  the TextField slot), `views` (day/month/year
+  per the owning form, §52.3/§50.3), `startAdornment`/
+  `endAdornment` (merged into the TextField's input slot),
+  `slotProps` (user values merge under the picker's own —
+  contract fields win; the picker forces
+  `desktopTrapFocus.disableEnforceFocus` and `dialog.disableEnforceFocus`
+  — the focus-trap fight fix, §46.6), `slots` (the Ethiopian
+  `CalendarHeader` mounts via `slots.calendarHeader` — the v9
+  API; user `slots` win), `disabled`, `error`/
+  `helperText`; `forwardRef` on both pickers.
+- **CalendarHeader interaction:** the Ethiopic chrome label shows
+  the Ethiopian month name + year and behaves exactly like v9's
+  `handleToggleView` — 2 views → the other view, 3+ views →
+  alternating first two; no-op when `views.length === 1`,
+  `!onViewChange`, or `disabled` (the label shows an
+  `ArrowDropDown` hint only when toggle is possible). The slot
+  renders its own `ChevronLeft/ChevronRight` month arrows via
+  dayjs ±1 month (`onMonthChange`), since the default arrows live
+  inside the header we replace.
 - **Responsive:** md+ (≥ 900px) renders `DesktopDatePicker`
   (popper mode); below 900px renders `MobileDatePicker` (dialog
   mode, fullscreen below 600px per §45.6).
@@ -8498,14 +8549,19 @@ in bold), states, and responsive behavior. Forms bind through the
   data grid).
 - **Props/contract:** `columns` (from the domain column file),
   `rows`, `loading`, `rowCount` (**= server `totalDocs`**),
+  `getRowId={(row) => row._id}` (key doctrine §9.3 — never an
+  `id` field),
   `paginationMode="server"`, `page`, `pageSize`, `onPaginationModelChange`, `onRowClick`, `checkboxSelection` (**true**),
   `disableRowSelectionOnClick` (**true**), `onSelectionModelChange`,
-  `slots` (toolbar override), `slotProps`, `sx` (default height
-  400, overridable); `pageSizeOptions={[10, 25, 50, 100]}` — the
-  §11.5 `PAGINATION_*` mirrors.
-- **Toolbar:** `GridToolbar` (columns toggle, filter, density, CSV
-  export of the **selected rows**) — the CSV export is the §58
-  export surface of the lists.
+  `slots`, `slotProps` (the v9 built-in toolbar's options —
+  `csvOptions`, `printOptions.disableToolbarButton`), `sx`
+  (default height 400, overridable); `pageSizeOptions={[10, 25, 50,
+  100]}` — the §11.5 `PAGINATION_*` mirrors.
+- **Toolbar:** the v9 built-in toolbar via `showToolbar` (columns
+  toggle, filter, density, CSV export of the **selected rows**) —
+  the legacy `GridToolbar*` component imports are deprecated
+  (§46.8); CSV export of selected rows is the §58 export surface
+  of the lists.
 - **Action column:** per domain — View (`VisibilityIcon`,
   `sx={{ color: 'primary.main' }}`, tooltip "View", navigates to
   `/${resource}/${_id}`), Edit (`EditIcon`, `sx={{ color:
@@ -8543,6 +8599,10 @@ in bold), states, and responsive behavior. Forms bind through the
 - **Props:** `open`, `onClose`, `title`, `children`, `actions`,
   `maxWidth`, `fullWidth`, `disableEnforceFocus` (**true**),
   `disableRestoreFocus` (**true**).
+- **Anatomy (normative):** `DialogTitle` (when `title` given) →
+  `DialogContent` with `dividers` (**top and bottom dividers**,
+  MUI requirement) → `DialogActions` (when `actions` given); the
+  body `children` always render inside `DialogContent`.
 - **Responsive:** fullscreen at `down('sm')` **or** `down('md')` +
   landscape (§45.6); otherwise centered paper with radius 10.
 
@@ -8667,7 +8727,9 @@ Justified by their sections; the same contract discipline applies:
   interactive cue with icon-only labels below 600px (§45.3).
 - **MuiRecorder** (`components/reusable/MuiRecorder.jsx`) — the
   device recording strip: a circular record/stop button (the
-  §44.4 icon-button treatment), a live `MM:SS` timer, and after
+  §44.4 icon-button treatment; the record button sits in a
+  Tooltip `span` wrapper — it can be disabled), a live `MM:SS`
+  timer, and after
   stop a per-clip chip with re-record (discards the take — the
   §52.6 label binding, never an upload) and **Add** (appends
   the take as a clip of the labelled visit, §32). MediaRecorder

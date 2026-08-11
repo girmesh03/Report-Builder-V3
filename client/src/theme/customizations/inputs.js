@@ -22,7 +22,7 @@ const inputsCustomizations = {
       root: ({ theme }) => ({
         boxSizing: "border-box",
         transition: "all 100ms ease-in",
-        [theme.breakpoints.down("md")]: {
+        [theme.breakpoints.down("sm")]: {
           minWidth: 44,
           minHeight: 44,
         },
@@ -39,6 +39,12 @@ const inputsCustomizations = {
         boxShadow: "none",
         borderRadius: (theme.vars || theme).shape.borderRadius,
         textTransform: "none",
+        "&.Mui-disabled": {
+          color: (theme.vars || theme).palette.action.disabled,
+          backgroundColor: (theme.vars || theme).palette.action.disabledBackground,
+          backgroundImage: "none",
+          boxShadow: "none",
+        },
         variants: [
           {
             props: {
@@ -47,7 +53,7 @@ const inputsCustomizations = {
             style: {
               height: "2.25rem",
               padding: "8px 12px",
-              [theme.breakpoints.down("md")]: {
+              [theme.breakpoints.down("sm")]: {
                 minHeight: 44,
               },
             },
@@ -57,8 +63,8 @@ const inputsCustomizations = {
               size: "medium",
             },
             style: {
-              height: "2.5rem", // 40px
-              [theme.breakpoints.down("md")]: {
+              height: "2.5rem",
+              [theme.breakpoints.down("sm")]: {
                 minHeight: 44,
               },
             },
@@ -71,12 +77,12 @@ const inputsCustomizations = {
             style: {
               color: "white",
               backgroundColor: gray[900],
-              backgroundImage: `linear-gradient(to bottom, ${gray[700]}, ${gray[800]})`,
+              backgroundImage: `linear-gradient(to bottom, ${gray[900]}, ${gray[800]})`,
               boxShadow: `inset 0 1px 0 ${gray[600]}, inset 0 -1px 0 1px hsl(220, 0%, 0%)`,
               border: `1px solid ${gray[700]}`,
               "&:hover": {
                 backgroundImage: "none",
-                backgroundColor: gray[700],
+                backgroundColor: gray[800],
                 boxShadow: "none",
               },
               "&:active": {
@@ -279,7 +285,7 @@ const inputsCustomizations = {
               width: "2.25rem",
               height: "2.25rem",
               padding: "0.25rem",
-              [theme.breakpoints.down("md")]: {
+              [theme.breakpoints.down("sm")]: {
                 width: 44,
                 height: 44,
               },
@@ -293,7 +299,7 @@ const inputsCustomizations = {
             style: {
               width: "2.5rem",
               height: "2.5rem",
-              [theme.breakpoints.down("md")]: {
+              [theme.breakpoints.down("sm")]: {
                 width: 44,
                 height: 44,
               },
@@ -486,7 +492,8 @@ const inputsCustomizations = {
   MuiFormLabel: {
     styleOverrides: {
       root: ({ theme }) => ({
-        typography: theme.typography.caption,
+        fontSize: theme.typography.caption.fontSize,
+        lineHeight: theme.typography.caption.lineHeight,
         marginBottom: 8,
       }),
     },
