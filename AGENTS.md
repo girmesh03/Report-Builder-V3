@@ -4,7 +4,7 @@
 
 Report Builder V3 — Amharic daily-supervision report builder. Two components: `backend/` (Express 5 + Mongoose 9, ESM) and `client/` (Vite + React 19 + MUI v9 + RTK).
 
-The implementation has **not started**: no §66.9 phase has run. The backend contains only manifests and `.env` (no source, no start scripts yet); the client is a Vite scaffold (`App.jsx` stub). The canonical target trees are §15.4 (backend) and §15.5 (client); follow them when creating files.
+The implementation runs on the §66 phases: **phase 1 (foundations) and phase 2 (design system) are complete** and merged to `main`. The backend holds the P1 foundation only (`config/env.js` frozen env, `utils/constants.js`, `utils/httpStatus.js` — no Express source yet; the `dev`/`start` scripts already point at `server.js`, a §15.4-listed P6 file, so backend `npm run dev` fails until P6); the client holds the P2 deliverables (theme tokens + 8 customizations, the §46 reusable belt, `ethiopianDate.js`/`ethiopianDateAdapter.js`, Noto Serif Ethiopic, favicon) with `App.jsx` at the scaffold stub. The canonical target trees are §15.4 (backend) and §15.5 (client); follow them when creating files.
 
 ## Single source of truth
 

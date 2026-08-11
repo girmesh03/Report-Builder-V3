@@ -10651,7 +10651,7 @@ surface.
 | Variant | Copy/tones | Icon/sx |
 |---|---|---|
 | success | green check — message from the §60.6 catalogue | `CheckCircleOutlined`, `success.main` |
-| error | red — message from §60.6 | `ErrorOutline`, `error.main` |
+| error | red — message from §60.6 | `ErrorOutlined`, `error.main` |
 | info | neutral — message from §60.6 | `InfoOutlined`, `info.main` |
 | warning | amber — message from §60.6 | `WarningAmberOutlined`, `warning.main` |
 | loading | spinner icon + message; auto-dismisses on completion; never duplicated on retry | spinner |
