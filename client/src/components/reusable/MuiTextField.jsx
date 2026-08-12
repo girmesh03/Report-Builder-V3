@@ -3,10 +3,11 @@
  *
  * All text entry (§46.4): single-line, multiline, and passwords (an
  * internal eye toggle on type="password"). Every text input carries a
- * start adornment (§44.2).
+ * start adornment (§44.2). The component `ref` forwards to the real
+ * `<input>` element (MUI's TextField sends its ref to the root slot;
+ * `slotProps.input.ref` is the input) — the RHF/imperative contract.
  */
 import { useState, useCallback, forwardRef } from "react";
-import PropTypes from "prop-types";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
@@ -67,7 +68,7 @@ const MuiTextField = forwardRef(function MuiTextField(props, ref) {
   const isPassword = type === "password";
   const effectiveType = isPassword && showPassword ? "text" : type;
 
-  const passwordEye = (
+  const passwordEye = isPassword ? (
     <InputAdornment position="end">
       <Tooltip title={showPassword ? "Hide password" : "Show password"}>
         <IconButton
@@ -85,13 +86,12 @@ const MuiTextField = forwardRef(function MuiTextField(props, ref) {
         </IconButton>
       </Tooltip>
     </InputAdornment>
-  );
+  ) : null;
 
   const effectiveEndAdornment = isPassword ? passwordEye : endAdornment;
 
   return (
     <TextField
-      ref={ref}
       label={label}
       placeholder={placeholder}
       type={effectiveType}
@@ -103,7 +103,8 @@ const MuiTextField = forwardRef(function MuiTextField(props, ref) {
       maxRows={maxRows}
       fullWidth={fullWidth}
       error={error}
-      helperText={error ? helperText : helperText}
+      helperText={helperText}
+      inputRef={ref}
       slotProps={{
         ...slotProps,
         input: {
@@ -118,23 +119,6 @@ const MuiTextField = forwardRef(function MuiTextField(props, ref) {
   );
 });
 
-export default MuiTextField;
+MuiTextField.displayName = "MuiTextField";
 
-MuiTextField.propTypes = {
-  label: PropTypes.string,
-  placeholder: PropTypes.string,
-  type: PropTypes.oneOf(["text", "password", "number", "email", "search", "tel", "url"]),
-  size: PropTypes.oneOf(["small", "medium"]),
-  required: PropTypes.bool,
-  disabled: PropTypes.bool,
-  multiline: PropTypes.bool,
-  rows: PropTypes.number,
-  maxRows: PropTypes.number,
-  fullWidth: PropTypes.bool,
-  error: PropTypes.bool,
-  helperText: PropTypes.string,
-  startAdornment: PropTypes.node,
-  endAdornment: PropTypes.node,
-  slotProps: PropTypes.object,
-  sx: PropTypes.object,
-};
+export default MuiTextField;

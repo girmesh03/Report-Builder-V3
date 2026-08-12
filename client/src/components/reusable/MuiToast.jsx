@@ -4,9 +4,10 @@
  * The feedback-toast surface (§60.3/§60.4, belt §46.17): five
  * variant bodies (success / error / info / warning / loading),
  * themed §44.5/§44.4. These components carry the variant model;
- * the single mount (`AppToastContainer`) and the single trigger
- * API (`showToast`) follow in the §60 phase — no container or
- * trigger exists yet (nothing toasts in P2).
+ * the single mount (`AppToastContainer`) is fixed in the app
+ * shell (§47.2) and the single trigger API (`showToast`) lives in
+ * `utils/toast.jsx` — auth and error surfaces already toast in P3
+ * (§42.5/§29); full §60 wiring follows in the §60 phase.
  */
 import PropTypes from "prop-types";
 import Box from "@mui/material/Box";
@@ -60,7 +61,12 @@ export default function MuiToast({ variant, title, message, action }) {
           </Typography>
         ) : null}
         {message ? (
-          <Typography variant="caption" color="text.secondary" component="p">
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            component="p"
+            sx={{ overflowWrap: "anywhere" }}
+          >
             {message}
           </Typography>
         ) : null}

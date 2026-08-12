@@ -596,6 +596,11 @@ The system is not, and is not intended to become:
 | Boss (report reader) | Implicit consumer — reads the exported/generated reports; no application account | None (receives the deliverable) |
 | Anonymous visitor | Unauthenticated | Landing, Login, Register pages only |
 
+An authenticated session may also browse the Landing page
+(read-only, §41.5/§48.2 — the bar shows the Logout action
+instead of Log in / Sign up, §47.2); Login and Register remain
+guests-only.
+
 #### 3.2.2 Registration model
 
 - Registration collects only `email` and `password`. No name field on the
@@ -1991,7 +1996,10 @@ standard:
 - MUI Community edition only (ADR-012); styling via MUI `sx` and
   `styled()` only — no Tailwind, no other CSS frameworks (§43, §44).
 - MUI imports are tree-shaken; reusable components set a `displayName`.
-- Reusable input components use `forwardRef`.
+- Reusable input components use `forwardRef`; **forwardRef
+  components declare no `propTypes`** — the named function (or an
+  explicit `displayName`) is their identity; plain components may
+  keep `propTypes`.
 - Forms use `react-hook-form` with `register` by default:
   - `useForm({ mode: 'onBlur' })` with destructured
     `register, handleSubmit, formState`.
@@ -2245,6 +2253,8 @@ by the UI:
 | `AI_REASONING_EFFORTS`| §11.4                | §54     |
 | `PAGINATION_*`        | §11.3                | §50     |
 | `AUDIO_*`             | §11.3 (MIME list)    | §53     |
+| `TOAST_AUTO_DISMISS_MS` | §60.5 cadence (success/info 5000, error/warning 8000; loading never auto-dismisses) | §60, §48 |
+| `TOAST_CATALOGUE`     | §60.6 catalogue — single-sourced strings (one occurrence per string, §48.6) | §27, §48, §60 |
 
 Client-side magic-value ban and freeze rules are identical to the
 backend (§11.2).
@@ -2738,6 +2748,7 @@ caret ranges preserved verbatim):
 | @fontsource/noto-serif-ethiopic | ^5.3.0        | Ethiopic content face (Amharic body, §43.5)    | §43        |
 | jspdf                       | ^4.2.1            | PDF export (client-side)                       | §58        |
 | jspdf-autotable             | ^5.0.8            | PDF tables (report tables)                   | §58        |
+| prop-types                  | ^15.8.1           | Runtime prop validation (direct dep of the §46 belt) | §46  |
 | dayjs                       | ^1.11.21          | Date/time (DD-MM-YY display)                 | §6.3, §52  |
 | vite                        | ^8.2.0            | Build tool                                    | §9.7       |
 | @vitejs/plugin-react        | ^6.0.4            | Vite React transform                            | §9.7       |
@@ -3112,10 +3123,10 @@ client/
 |   |-- favicon.svg                 (scaffold)
 |   `-- icons.svg                   (scaffold)
 `-- src/
-    |-- main.jsx                    (scaffold)  # flat route map; RouterProvider; Provider;
-    |                                           # LocalizationProvider + AdapterDayjs (§41)
+    |-- main.jsx                    (scaffold)  # flat route map; HydrateFallback spinner; RouterProvider;
+    |                                           # Provider; LocalizationProvider + AdapterDayjs (§41)
     |-- App.jsx                     (scaffold)  # application shell & guards (§41)
-    |-- assets/                     (scaffold)  # hero.png and starter art; documented use in §43
+    |-- assets/                     (scaffold)  # hero.png, starter art, notFound_404.svg; documented use in §43/§59
     |-- theme/
     |   |-- AppTheme.jsx            (scaffold)  # theme definition (§43)
     |   |-- themePrimitives.js      (scaffold)
@@ -3124,37 +3135,48 @@ client/
     |-- utils/
     |   |-- constants.js                       # client constants inventory (§11.5)
     |   |-- httpStatus.js                      # client mirror of the status semantics (§11.6)
-    |   `-- ethiopianDate.js                   # Ethiopian calendar conversions (§13.4, §46, §52)
-    |   `-- ethiopianDateAdapter.js            # field display → Ethiopian DD-MM-YY (§46.6)
+    |   |-- ethiopianDate.js                   # Ethiopian calendar conversions (§13.4, §46, §52)
+    |   |-- ethiopianDateAdapter.js            # field display → Ethiopian DD-MM-YY (§46.6)
+    |   `-- toast.jsx                          # showToast/dismissToast — the §60.3 trigger API (§60)
     |-- hooks/
-    |   `-- useAudioRecorder.js                # recording hook; reused by Mode 3 (§53)
+    |   |-- useAudioRecorder.js                # recording hook; reused by Mode 3 (§53)
+    |   `-- useLogout.js                       # the single logout flow (§47.6)
+    |-- mock/                                  # dev-only §66.10 adapter; deleted at P7
+    |   |-- fixtures.js                        # §40 fixture data — seed of the adapter
+    |   `-- transport.js                       # §42-shaped mock transport over the fixtures
     |-- redux/
     |   |-- app/
     |   |   `-- store.js                       # store creation; Provider wiring (§41–§42)
     |   `-- features/
     |       |-- apiSlice.js                  # RTK Query createApi; fetchBaseQuery +
     |       |                                #   baseQueryWithReauth; network & error layer (§41–§42)
+    |       |-- authSlice.js                  # session/identity UI state (§41.5, §42)
+    |       |-- authEndpoints.js              # getCurrentUser/login/logout/refresh (§28, §42)
     |       `-- <domain>Slice.js             # one slice per domain (e.g. reports, branches) (§41)
     |-- components/
-    |   |-- layout/                          # PublicLayout, AppShell, AppSidebar (§47)
+    |   |-- AppErrorPage.jsx                   # §60 render-error fallback (ADR-025, §41.4)
+    |   |-- layout/                          # PublicLayout, AppShell, AppSidebar, PublicRoute,
+    |   |                                    #   ProtectedRoute, Logo, ThemeToggle, AvatarMenu (§47)
     |   |-- reusable/                        # Mui* belt (§46), one file per component: MuiButton,
     |   |                                    #   MuiTextField, MuiSelect, MuiDatePicker (+MuiTimePicker),
     |   |                                    #   MuiPagination, MuiDataGrid, MuiConfirmDialog, MuiDialog,
-    |   |                                    #   MuiAppbar, MuiPageHeader, MuiStatusBadge, MuiAudioPlayer,
+    |   |                                    #   MuiEmptyState, MuiAppbar, MuiPageHeader, MuiStatusBadge, MuiAudioPlayer,
     |   |                                    #   MuiRecorder, MuiFileInput, MuiStatCard, MuiStepper,
-    |   |                                    #   MuiRegistrationValue, MuiToast, GlobalSearchDialog,
-    |   |                                    #   LoadingSpinner, TableSkeleton, ListSkeleton, FormSkeleton,
-    |   |                                    #   MessageSkeleton (MuiEditor at the editor phase, §66)
+    |   |                                    #   MuiRegistrationValue, MuiToast, AppToastContainer,
+    |   |                                    #   GlobalSearchDialog, LoadingSpinner, TableSkeleton,
+    |   |                                    #   ListSkeleton, FormSkeleton, MessageSkeleton
+    |   |                                    #   (MuiEditor at the editor phase, §66)
     |   |-- columns/                         # domain column-set files for MuiDataGrid (§50, §56, ADR-034)
     |   |-- landing/                          # e.g. Hero.jsx — example of a domain folder
-    |   |-- login/                            # e.g. LoginForm.jsx — example of a domain folder
+    |   |-- auth/                             # e.g. LoginForm.jsx — example of a domain folder
     |   |-- report/                           # e.g. ReportCard.jsx — example of a domain folder
     |   `-- <domain>/                        # every other component lives at
-    |-- pages/                                # one <Name>.jsx per routed view. The page set is
-    |                                         # NOT fixed in this tree: page shape is decided by
-    |                                         # the page sections (§48–§59) when they are authored,
-    |                                         # and each implementing phase adds its page files
-    |                                         # here in the same change (§15.7)
+    |-- pages/                                # one <Name>.jsx per routed view; the page set is
+    |                                         # decided by the page sections (§48–§59); pages so far:
+    |                                         # Landing, Login, Register, NotFound, Dashboard, Reports,
+    |                                         # ReportNew, ReportDetails, Branches, BranchDetails,
+    |                                         # Profile — each implementing phase adds its page
+    |                                         # files here in the same change (§15.7)
 ```
 
 The design system and the data-access layer are the two structural
@@ -3191,7 +3213,7 @@ files own no leaf UI outside page-level composition (§12.6, §15.6).
   Mui* UI library only (§46); `components/columns/` — MuiDataGrid
   column sets only (§50, §56); every other component lives at
   `components/<domain>/<Name>.jsx` — one folder per concern (e.g.
-  `login/`, `landing/`, `report/`) — and never outside `components/`.
+  `auth/`, `landing/`, `report/`) — and never outside `components/`.
 - `pages/` — one `<Name>.jsx` per routed view; the page set and page
   shape are decided by the page sections (§48–§59) when they are
   authored, never pre-committed here; each implementing phase adds its
@@ -7587,14 +7609,24 @@ The route map is a flat array (locked decision 2). The two layout
 branches are `PublicRoute`-wrapped `PublicLayout` children and
 `ProtectedRoute`-wrapped `AppShell` children (§47); the `*` route
 renders the 404 page (§59). Every page module is loaded via
-React Router's lazy form (`Component` + `lazy`); the guard wrappers
-(`PublicRoute`, `ProtectedRoute`) are loaded the same way.
+React Router's lazy form (`Component` + lazy property) with a
+**literal import specifier per route** — Vite's static import
+analysis must stay intact (a variable specifier helper is never
+used). The guard wrappers (`PublicRoute`, `ProtectedRoute`) are
+synchronous redirects and ship **statically as elements** — the
+third static route participant with `AppErrorPage` and `NotFound`
+— so a branch can never render unguarded inside a lazy-loading
+window. **The `*` catch-all is the one lazy exception**:
+`NotFound` ships statically (like `AppErrorPage`) so an unmatched
+URL — deep-link reload or SPA navigation — renders the §59.4 404
+instantly and never enters a lazy-loading window (where the pending
+leaf renders `null` and only bare layout chrome would show).
 
 The route set is decided here and detailed by the page sections:
 
 | Path | Component | Guard | Section |
 | --- | --- | --- | --- |
-| `/` | Landing page | Public | §48.2 |
+| `/` | Landing page | Public (browsable by all; authed sessions see the Logout bar, §41.5) | §48.2 |
 | `/login` | Login page | Public | §48.3 |
 | `/register` | Register page | Public | §48.4 |
 | `/dashboard` | Dashboard page | Protected | §49 |
@@ -7602,15 +7634,16 @@ The route set is decided here and detailed by the page sections:
 | `/reports/new` | Report Creation Wizard | Protected | §52 |
 | `/reports/:reportId` | Report Details page | Protected | §51 |
 | `/branches` | Branches page | Protected | §56 |
+| `/branches/:branchId` | Branch Details page | Protected | §56.5 |
 | `/profile` | Profile page | Protected | §57 |
 | `*` | 404 page | Public | §59 |
 
-Routes are kebab-case (§9.3); the only route parameter is
-`:reportId` (§9.3 — a bare `:id` is never used). This table is the
-complete page set: AI chat (§55), audio recording (§53),
-transcription review (§54), export flows (§58), and global search
-(§59) are **embedded surfaces** of the pages above — they are never
-routes. The rationale for each page's existence, and for those
+Routes are kebab-case (§9.3); the only route parameters are
+`:reportId` and `:branchId` (§9.3 — a bare `:id` is never used).
+This table is the complete page set: AI chat (§55), audio recording
+(§53), transcription review (§54), export flows (§58), and global
+search (§59) are **embedded surfaces** of the pages above — they are
+never routes. The rationale for each page's existence, and for those
 non-pages, is authored in the owning sections.
 
 ### 41.4 Root layout (`App.jsx`)
@@ -7641,18 +7674,23 @@ route branches. Their contract:
 - **`ProtectedRoute`.** While the auth state is `initializing`
   (populated by the §28 session contract through the §42 network
   layer), renders `LoadingSpinner` full-page (§46.14). When
-  unauthenticated, renders `<Navigate to="/login" replace
+  unauthenticated — the lower-case status enum is
+  `initializing | authenticated | guest`; "guest" is the resolved
+  unauthenticated value (the §41.5 enum lock, first enforced at
+  P3) — renders `<Navigate to="/login" replace
   state={{ from: location }} />` (locked decision 4) — the login
   page reads `state.from` for post-login navigation (§48.3). When
   authenticated, renders `<Outlet/>`.
-- **`PublicRoute`.** The inverse: authenticated → `<Navigate
-  to="/dashboard" replace />`; unauthenticated → `<Outlet/>`.
-  Landing, Login, and Register are public by lock (decision 4).
-
-Redirect targets are fixed strings — `/login`, `/dashboard` —
-defined in the route map, never recomposed by callers. The 401
-expiry path that *lands* on login is the §42 reauth chain's
-responsibility, not a guard's.
+- **`PublicRoute`.** The inverse — but it gates **Login and
+  Register only**: authenticated → `<Navigate to="/dashboard"
+  replace />`; unauthenticated → `<Outlet/>`. Landing (`/`) sits
+  **outside** this guard (its own `PublicLayout` route): it is
+  browsable by both guests and authenticated sessions — the
+  auth-aware bar then shows the Logout action (§47.2). The
+  redirect targets are fixed strings (`/login`, `/dashboard`) —
+  never recomposed by callers; the 401 expiry path that *lands* on
+  login is the §42 reauth chain's responsibility, not a guard's.
+  Login, and Register are public by lock (decision 4).
 
 ### 41.6 Store, slices & endpoint injection
 
@@ -7687,7 +7725,7 @@ The §15.2 conventions bind every Part D module: imports only within
 leaves the SPA (§12.6, §42); reusable components in
 `components/reusable/` (§46), layout shells in `components/layout/`
 (§47), MuiDataGrid column sets in `components/columns/` (§50, §56),
-every other component in `components/<domain>/` (e.g. `login/`,
+every other component in `components/<domain>/` (e.g. `auth/`,
 `landing/`, `report/`), pages in `pages/`, shared UI-state logic in
 `hooks/` (§53), and store/API modules in `redux/` (§41.6). Page
 files own no leaf UI outside page-level composition (§15.5).
@@ -7780,7 +7818,13 @@ The chain is the single owner of session expiry on the client
    through as expiration.
 5. If refresh fails, the session is expired: clear auth state
    (`authSlice`), redirect to `/login` (§41.5), and fail the
-   original request without a toast.
+   original request without a toast. The expiry redirect applies
+   to an **authenticated** session whose credentials just died
+   (authenticated → request → 401 → one retry → on failure,
+   session cleared, landing on `/login`); anonymous and
+   `initializing` probes fail through silently — guests are
+   already gated by §41.5 and never bounce, so public pages do
+   not reload-loop on failed boot probes.
 6. **401s are never toasted** — expiry is a silent redirect flow
    (§12.11-2, §9.6). Only non-401 errors surface as toasts (§42.4).
 
@@ -7890,8 +7934,8 @@ the report's most characteristic artifact is the fixed eight-line
 Amharic header (ቀን / ብራንች / ስም / ሰዓት …, §6.3). The design language
 is therefore "**regulatory paper with a dictation desk**": flat,
 paper-white surfaces with hairline rules, an English chrome that
-stays quiet, and the report's own header as the one repeated
-identity motif.
+stays quiet, and the empty ruled desk as the one repeated identity
+motif.
 
 **Palette (committed scales).** The palette is the scaffold's
 committed token set (§44 applies it mode-aware; components never
@@ -7937,13 +7981,14 @@ mirrors the report's own line structure without imitating its
 Amharic labels (§7.6 — chrome copy is English).
 
 **Signature element (normative).** The Landing page hero (§48.2)
-renders the *report-header motif*: the eight-line Amharic header of
-§6.3, typeset in the Ethiopic content face over a hairline-ruled
-paper panel, with a single restrained animation — a low-opacity
-waveform line traced once across the ስም line ("the spoken report")
-that obeys `prefers-reduced-motion` (§45.7). This is the only
-decorative motion in the product; every other transition in §44–§59
-is a MUI default or an explicit functional micro-interaction.
+renders the *ruled dictation desk*: a cardless, hairline-ruled
+expanse — the paper for the day's report, waiting — with a single
+restrained animation: a low-opacity waveform line traced once across
+the rules ("the spoken report") that obeys `prefers-reduced-motion`
+(§45.7; under reduced motion it renders fully drawn, statically) and
+persists after its first display. This is the only decorative motion
+in the product; every other transition in §44–§59 is a MUI default
+or an explicit functional micro-interaction.
 **Uniqueness rationale:** the brief's committed tokens (blue,
 paper, Inter, light-first) rule out the common warm-cream/serif and
 near-black/accent templates; the Ethiopic header ties the identity
@@ -8442,7 +8487,10 @@ in bold), states, and responsive behavior. Forms bind through the
   `disabled`, `multiline`, `rows`/`maxRows`, `fullWidth`,
   `error` + `helperText` (validation surface), `startAdornment`,
   `endAdornment` (the password eye overrides it), `slotProps`,
-  `sx`, standard passthrough; `forwardRef` exports the input ref.
+  `sx`, standard passthrough; `forwardRef` forwards the ref to the
+  **real `<input>` element** (via MUI's `inputRef` — MUI's own
+  TextField ref lands on the root slot), the RHF/imperative
+  contract.
 - **States:** empty / filled / focused / error (helperText shows
   the manual-resolver message) / disabled; `register` returns the
   input props; `helperText` space is reserved so error appearance
@@ -8654,11 +8702,16 @@ in bold), states, and responsive behavior. Forms bind through the
 ### 46.14 LoadingSpinner & skeleton variants
 
 - **File:** `components/reusable/LoadingSpinner.jsx`.
-- **Purpose:** centered `CircularProgress` for full-page or
-  section-level loading.
+- **Purpose:** centered `CircularProgress` for full-page,
+  section-level, and route-transition loading.
 - **Props:** `message` (optional, `text.secondary`), `minHeight`
   (**`100vh`** default; sections override, e.g. `400px`).
-- **Usage:** guards §41.5, page loads §49–§59, dialog loads.
+- **Usage:** guards §41.5, page loads §49–§59, dialog loads, and the
+  route-transition swap in the layouts: while
+  `useNavigation().state === "loading"` (§47.2/§47.3 — lazy module,
+  loader, and middleware fetch) the scrollable content area renders
+  `<LoadingSpinner message="Loading…" minHeight="100%"/>` in place
+  of the `<Outlet/>`; chrome stays mounted.
 - **Skeleton variants (the §45.7 batch surfaces):**
   `TableSkeleton`, `ListSkeleton`, `FormSkeleton`,
   `MessageSkeleton` (`components/reusable/*Skeleton.jsx`) —
@@ -8671,13 +8724,23 @@ in bold), states, and responsive behavior. Forms bind through the
 
 - **File:** `components/reusable/GlobalSearchDialog.jsx` (UX in
   §59; standalone — does not use MuiDialog's actions slot).
-- **Props:** `open`, `onClose`, `initialQuery`.
-- **Behavior contract:** search field with start adornment
-  (**`ArrowBackIcon`** — clears the field, resets results, closes
-  the dialog); React Hook Form `register('search')`; search fires
-  on Enter or on click of the action — **no debounce** (§9.6);
-  results grouped by entity (Reports, Branches) in MuiAccordion
-  sections; empty state "No results found"; loading state;
+- **Props:** `open`, `onClose` only — the dialog is fully
+  self-contained (query state, state machine, §39 call at P4).
+- **Behavior contract:** search field (belt `MuiTextField`) with
+  start adornment (**`ArrowBackIcon`** — clears the field, resets
+  results, closes the dialog) and end adornments: a clear button
+  (**`CloseIcon`**) and the search action (**`SearchIcon`** —
+  fires the search); React Hook Form `register('search')` —
+  **typing renders nothing**: the field is uncontrolled and the
+  clear button's visibility flips natively via the
+  `input:placeholder-shown` pseudo-class (empty input →
+  `visibility: hidden` on the reserved slot, no re-render, no
+  layout shift); search fires on Enter or on click of the action —
+  **no debounce** (§9.6); results grouped by entity
+  (Reports, Branches) in MuiAccordion sections; the content area is
+  **full-height** and shows the two `MuiEmptyState` variants
+  (§46.17): the search prompt while idle, "No results found" when
+  a completed run has no hits; loading state (§46.14 spinner);
   fullscreen below 600px (and below 768px landscape, no border
   radius, 100vh); centered at 600–1200px (80vh / 600px) and above
   1200px (70vh / 720px); closes via back arrow, Escape, or click
@@ -8718,6 +8781,14 @@ in bold), states, and responsive behavior. Forms bind through the
 
 Justified by their sections; the same contract discipline applies:
 
+- **MuiEmptyState** (`components/reusable/MuiEmptyState.jsx`) — the
+  belt empty-state surface implementing §60.2 state 2: centered
+  icon (`action.active`) + title + description column, optional
+  inline primary action slot; copy always from the owning section
+  (§60.7). Props: `title` (required), `description`, `icon`,
+  `action`, `minHeight` (`100%` default). Used by §46.15
+  (prompt + no-results) and every page's empty state (§50, §56,
+  §60.2).
 - **MuiAudioPlayer** (`components/reusable/MuiAudioPlayer.jsx`) —
   clip playback; drives §53 (recording review) and §54 (clip
   playback during review). Props: `audio` (**the metadata-only
@@ -8817,9 +8888,15 @@ header-strip treatment (§46.12, used per page), the guards
   toggle (LightMode/DarkMode icon buttons), and — auth-aware via
   `authSlice` — "Log in" (text) and "Sign up" (contained, §46.3)
   when unauthenticated, or a Logout icon button (with `MuiTooltip`
-  "Logout") when authenticated); 2) `<Outlet/>` — scrollable
-  content (`overflow-y: auto`); the outer wrapper applies
-  `height: 100vh; overflow: hidden` (§45.4).
+  "Logout") when authenticated); 2) the content area — scrollable
+  (`overflow-y: auto`); during a route transition
+  (`useNavigation().state === "loading"`, §46.14) it renders the
+  transition `LoadingSpinner` in place of the `<Outlet/>`; the
+  outer wrapper applies
+  `height: 100vh; overflow: hidden` (§45.4). The content area
+  renders a passed `children` in place of the `<Outlet/>` when one
+  is given — the §59.4 composition contract (NotFound selects this
+  layout by auth and hands it the 404 card as children).
 - **Responsive:** below 600px the bar actions collapse to
   icons/tooltips (§45.3); the content area scrolls independently.
 
@@ -8833,10 +8910,19 @@ header-strip treatment (§46.12, used per page), the guards
   `variant="protected"` (64px, sits **inside** the content column —
   never spanning the sidebar; right-aligned: search icon button
   (opens `GlobalSearchDialog`, §46.15/§59), theme toggle, avatar —
-  see §47.5; **no title text, no hamburger** — the hamburger lives
-  in the sidebar header); 2) the page header, rendered by each page
-  (§46.12 — not a reusable view here); 3) `<Outlet/>` — scrollable
-  (`overflow-y: auto`). Outer wrapper: `height: 100vh;
+  see §47.5; **no title text**; below md the leading slot carries
+  the navigation hamburger — the only sidebar opener on xs/sm;
+  on md+ there is no hamburger in the app-bar, the menu icon lives
+  in the sidebar header, §47.4); 2) the page header, rendered by
+  each page (§46.12 — not a reusable view here); 3) the content
+  area — scrollable (`overflow-y: auto`); during a route
+  transition (`useNavigation().state === "loading"`, §46.14) it
+  renders the transition `LoadingSpinner` in place of the
+  `<Outlet/>`. The content area renders a passed `children` in
+  place of the `<Outlet/>` when one is given — the §59.4
+  composition contract (NotFound selects this layout by auth and
+  hands it the 404 card as children). Outer wrapper:
+  `height: 100vh;
   overflow: hidden` (§45.4).
 - **Responsive:** the content column resizes to the sidebar mode
   (§47.4); on xs/sm the sidebar is an overlay (§47.4).
@@ -8846,15 +8932,18 @@ header-strip treatment (§46.12, used per page), the guards
 - **File:** `components/layout/AppSidebar.jsx`.
 - **Props:** `open` (boolean), `onClose` (function), `sidebarMode`
   (`'full'` | `'mini'`), `onToggle` (function).
-- **Header:** menu icon + logo + app name (**"Report Builder"** —
-  `VITE_APP_NAME`, §10.5). The menu icon toggles full/mini on the
-  permanent drawer (md+); on xs/sm the menu icon opens the
-  temporary overlay.
+- **Header:** the §43.2 report-header motif + logo + app name
+  (**"Report Builder"** — `VITE_APP_NAME`, §10.5). On the
+  **permanent** drawer (md+) the header also shows the menu icon,
+  which toggles full/mini; the **temporary** overlay (xs/sm)
+  header shows the logo only — no menu toggle (the app-bar
+  hamburger owns xs/sm, §47.3 — the sidebar is not visible
+  before it opens).
 - **Nav items** (top, `flexGrow: 1`): **Dashboard, Reports,
   Branches, Profile** — each a `MuiListItemButton` with icon +
   label and a link to its route (§41.3). Bottom: `MuiDivider` +
-  **Logout** (`MuiListItemButton`, icon + label; hover styled via
-  `error.main` tint, §44.2/§47.6).
+  **Logout** (`MuiListItemButton`, icon + label; resting state
+  neutral; hover styled via `error.main` tint, §44.2/§47.6).
 - **Theming (normative, §44):** default `backgroundColor:
   transparent`, `color: text.secondary`; hover `backgroundColor:
   action.hover`, radius 8; **selected**: `backgroundColor: primary.main
@@ -8864,8 +8953,9 @@ header-strip treatment (§46.12, used per page), the guards
   `backgroundColor: error.main + 0.08`, `color: error.main`.
 - **Responsive (normative):**
   - xs (< 600px) and sm (600–899px): **temporary overlay** drawer
-    (240px) — opens via the sidebar-header menu icon, closes on
-    backdrop click, nav selection, or Escape (§45.6/§46.10).
+    (240px) — opened by the app-bar hamburger (§47.3), closes on
+    backdrop click, nav selection, or Escape (§45.6/§46.10). The
+    mini mode never appears below md.
   - md+ (≥ 900px) default: **permanent docked** drawer (240px),
     full icon + text.
   - md+ after toggle: **permanent mini** drawer (64px), icons only;
@@ -8892,9 +8982,10 @@ header-strip treatment (§46.12, used per page), the guards
 
 - Nav marking follows the active route: exact match on the four
   nav paths (Dashboard, Reports, Branches, Profile); the wizard
-  (`/reports/new`) and details (`/reports/:reportId`) do **not**
-  mark the Reports nav item as selected (page-context rule),
-  unless the section chooses a different rule explicitly.
+  (`/reports/new`), report details (`/reports/:reportId`), and
+  branch details (`/branches/:branchId`) do **not** mark their
+  parent nav item as selected (page-context rule), unless the
+  section chooses a different rule explicitly.
 - `useNavigate` is the only navigation mechanism for actions;
   `Link` is used for nav items and inline links (§44.5).
 - Logout clears the `authSlice` state **after** the §28 logout
@@ -8906,7 +8997,9 @@ header-strip treatment (§46.12, used per page), the guards
 - Grep gates: the four nav items and their paths match §47.4
   verbatim; no second app-bar/title inside `AppShell` content; the
   `100vh` wrapper and `overflow-y: auto` patterns appear in both
-  shells (§45.4); no hamburger in the protected app-bar.
+  shells (§45.4); no hamburger in the protected app-bar above md
+  (on xs/sm the app-bar hamburger is the only sidebar opener,
+  §47.3).
 - Cross-section checks: mirrors §12.6/§12.7 (shell and auth),
   §44.5/§44.2 (drawer/button styles), §45 (buckets and drawer
   modes), §46.11/§46.15 (bar and search contracts), §41.3/§41.5
@@ -8924,8 +9017,10 @@ header-strip treatment (§46.12, used per page), the guards
 §48 owns the three public pages and their shared behaviors — the
 only surfaces an anonymous visitor may reach (§3.2.1, §4.4): the
 Landing page (`/`), the Login page (`/login`), and the Register
-page (`/register`). All three render inside `PublicLayout`
-(§47.2) behind `PublicRoute` (§41.5). Reasons of existence: the
+page (`/register`). Landing renders inside `PublicLayout`
+(§47.2) on its own route — browsable by guests and authenticated
+sessions alike (authed visitors see the Logout bar, §47.2/§41.5);
+Login and Register render behind `PublicRoute` (§41.5). Reasons of existence: the
 supervisor must learn what the product does before signing up
 (Landing), must enter the session (Login — also the converge
 point of the guard redirect `state.from`, §41.5, and of the §42
@@ -8947,7 +9042,7 @@ expiry redirect), and must create an account with no admin path
   contracts (e.g. no extra registration fields — the form collects
   exactly `email` and `password`); no new constant (§11/§10
   unchanged — page copy is authored text, not code constants); no
-  path beyond §15.5 (`pages/`, `components/login/`,
+  path beyond §15.5 (`pages/`, `components/auth/`,
   `components/landing/`); no package.
 
 ### 48.2 Landing page (`/`)
@@ -8958,36 +9053,34 @@ Outlet (§47.2); no reauth surface beyond the public app-bar.
 
 **Purpose & composition.** Phone-call-as-sale: a single job —
 explain the product and route to Register/Login (§4.4). Sections
-top to bottom: 1) **Hero** (the signature, §43.2); 2) **How it
-works** (a 3-step horizontal strip: Record → Verify → Deliver —
-the §1.5 loop in chrome copy); 3) **The report** (a framed
-reproduction of the §6.8 report body — read-only, sanitized
-render §61 — demonstrating the deliverable); 4) **CTA band**; 5)
-footer (product name `VITE_APP_NAME`, §10.5; copyright line).
+top to bottom: 1) **Hero** (the signature, §43.2); 2) **Branches
+strip** (the branch-management promise — the visitor's own names
+live in his reports, managed from Branches); 3) **How it works**
+(the §1.5 loop in chrome copy); 4) **CTA band**; 5) footer (product
+name `VITE_APP_NAME`, §10.5; copyright line). The composition is
+provisional under **OQ-008** (§69) — an owner decision may revise
+it after P8; until then it ships as delivered.
 
-**Hero (normative, locked decision of §43.2).** The report-header
-motif: the eight-line Amharic header of §6.3 (ቀን / ብራንች / ስም /
-ስራ የገባሁበት ሰዓት / የተሰሩ ስራዎች / መፍትሄ የሚፈሉ ጉዳዮች / አጠቃላይ
-አስተያየት / ከስራ የወጣሁበት ሰዓት) typeset in the Ethiopic content
-face (§43.5) over the hairline-ruled paper panel (§43.2); the
+**Hero (normative, locked decision of §43.2).** The ruled dictation
+desk: a hairline-ruled expanse with no card — no frame, no fill, no
+radius — the paper for the day's report, waiting. Over it, the
 "spoken report" waveform trace (the §43.2 signature animation —
-disabled under `prefers-reduced-motion`, §45.8); English eyebrow
-and headline above the panel ("Daily supervision reports, spoken
-in Amharic, delivered as documents."); two CTAs: **Sign up**
-(contained, §46.3) → `/register`, and **Log in** (outlined) →
-`/login`. The header reproduction is the §6.3 fixed labels — the
-only Amharic strings in chrome, and only within this content-
-illustration (§7.6 boundary: the hero panel is content-surface
-illustration, not control copy).
+disabled under `prefers-reduced-motion`, §45.7; shown statically
+fully drawn, and persisting after its first display). English
+eyebrow and headline beside the desk ("Daily supervision reports,
+in Amharic"); two CTAs: **Sign up** (contained, §46.3) → `/register`,
+and **Log in** (outlined) → `/login`. The desk carries no text —
+no Amharic strings in chrome (§7.6 boundary: content lives on the
+auth/report surfaces, never in the hero).
 
 **Breakpoint matrix (regions × buckets):**
 
 | Region | xs <600 | sm | md | lg | lg+ |
 |---|---|---|---|---|---|
-| Hero panel | stacked full-width, header block + CTA below | same, max-width 560px centered | two-column: header text left, report panel right | same | same, max-width 1100px |
-| Report header text | 16px Ethiopic | 16px | 18px | 20px | 20px |
+| Hero block | stacked full-width, headline + CTAs above the desk | same, max-width 560px centered | two-column: copy left, ruled desk right | same | same, max-width 1100px |
+| Ruled desk | ~130px tall, full-width lines | same | ~170px tall | same | same |
+| Branches strip | icon row wraps | icon row | one row, between hairlines | one row | one row |
 | How-it-works | vertical stack | vertical stack | 3 columns | 3 columns | 3 columns |
-| Report body frame | hidden (CTA instead) | shown, stacked | shown, beside CTA band | beside | beside |
 | CTA band | full-width buttons | full-width | contained center | contained | contained |
 
 **States.** Public page — no loading/empty data states beyond the
@@ -8996,8 +9089,8 @@ surfaces via the §60 toast only on the destination.
 
 ### 48.3 Login page (`/login`)
 
-**File:** `pages/LoginPage.jsx`; form component
-`components/login/LoginForm.jsx`.
+**File:** `pages/Login.jsx`; form component
+`components/auth/LoginForm.jsx`.
 
 **Purpose & composition.** Session entry; also the target of the
 §41.5 guard redirect (`state.from`) and the §42 expiry redirect.
@@ -9042,7 +9135,7 @@ copy only (§7.6).
 
 | Region | xs | sm | md | lg | lg+ |
 |---|---|---|---|---|---|
-| Card | full-width, p2, no border radius | 420px centered | 420px centered | 480px centered, right of a brand panel | 480px centered |
+| Card | full-width, p2, rounded, centered | 420px centered | 420px centered | 480px centered, right of a brand panel | 480px centered |
 | Brand panel (hero motif, static) | hidden | hidden | hidden | visible left column | visible left column |
 | Field labels | above fields | above | above | above | above |
 | Submit + OAuth | stacked, full-width | stacked, full-width | stacked | stacked | stacked |
@@ -9057,8 +9150,8 @@ decision anywhere — not added).
 
 ### 48.4 Register page (`/register`)
 
-**File:** `pages/RegisterPage.jsx`; form
-`components/login/RegisterForm.jsx` (same domain folder).
+**File:** `pages/Register.jsx`; form
+`components/auth/RegisterForm.jsx` (same domain folder).
 
 **Purpose & composition.** Self-service registration (F1); the
 form collects **only `email` and `password`** (§3.2.2, §19.2) plus
@@ -9102,7 +9195,7 @@ OAuth loading; inline errors; disabled submit while submitting
 ### 48.5 Shared auth behaviors (normative)
 
 - **OAuth entry** — one component (`GoogleOAuthButton`-pattern in
-  the login domain folder), reused by both pages (§46.2; spinner on
+  the auth domain folder), reused by both pages (§46.2; spinner on
   click; §28/OQ-004 stub contract).
 - **Cross links** — Login footer link "Don't have an account?
   Sign up" → `/register`; Register link "Already have an account?
@@ -10163,9 +10256,9 @@ because branches are the report's primary dimension (§20, §30)
 and F2 names branch management as a first-class capability.
 
 - **Owned here (normative).** Page composition (§56.2); the
-  grid and its columns (§56.3); filters & toolbar (§56.4); row
-  actions and confirm dialogs (§56.5); states & breakpoints
-  (§56.6); verification (§56.7).
+  grid and its columns (§56.3); filters & toolbar (§56.4); the
+  Branch Details page (§56.5); row actions and confirm dialogs
+  (§56.6); states & breakpoints (§56.7); verification (§56.8).
 - **Owned elsewhere — deliberately not repeated here.** Branch
   schema/tombstone/snapshot = §20; endpoints, guards, and the
   two-path deletion = §30; envelope/errors = §27; pagination =
@@ -10198,11 +10291,13 @@ band and the `MuiDataGrid` (§56.3).
 | Status | `MuiStatusBadge` (`branchActive` variant — "Active" / "Archived", §46.13) | from `isArchived` — chrome copy, §7.6 |
 | Archived | `archivedAt` as `DD-MM-YY` | `—` for active rows |
 | Created | `createdAt` as `DD-MM-YY` | |
-| Actions | Edit / Archive-or-Restore / Delete (§46.8 icon row) | per §56.5 |
+| Actions | Edit / Archive-or-Restore / Delete (§46.8 icon row) | per §56.6 |
 
 Responsive: below **md** (900px, §45.2) the Location and Created
 columns drop (icons keep tooltips, §45.3); the grid always reads
-page slices — never a full dataset (§45.7/ADR-034).
+page slices — never a full dataset (§45.7/ADR-034). The row's
+**Name** cell links to the Branch Details page
+(`/branches/:branchId`, §56.5).
 
 ### 56.4 Filters, toolbar & the create/edit dialog
 
@@ -10222,7 +10317,45 @@ page slices — never a full dataset (§45.7/ADR-034).
   pattern; submit posts §30.3/§30.4 via the §42 layer; success
   → toast (§60) + cache invalidation (§42.6 tags: `Branches`).
 
-### 56.5 Row actions & confirm dialogs
+### 56.5 Branch Details page (`/branches/:branchId`)
+
+**File:** `pages/BranchDetails.jsx`; domain components in
+`components/branches/`.
+
+**Purpose & composition.** The per-branch detail surface — the
+branch's identity, its reports, and its analytics — reached from
+the Branches grid (Name link, §56.3) and from global search
+results (§59.3). Inside AppShell (§47.3):
+
+1. **Page header** (§46.12): eyebrow "Branches", title = the
+   branch `name`, subtitle = `location` with the `MuiStatusBadge`
+   (`branchActive` — "Active" / "Archived", §46.13); no actions
+   slot (edit/archive/delete stay on the grid rows of `/branches`,
+   §56.6).
+2. **Reports of this branch** — the §50 report list surface
+   (list/grid toggle, status badges, §60 states) served **server-
+   filtered by `branchId`** via the §39 query path — never a
+   client-side subset of a shared page.
+3. **Analytics** — the §38 per-branch analytics (reports per
+   status over the §38 window, recent activity) rendered with the
+   §49.4 chart conventions; loading/empty/error per §60.
+
+**States & edge cases.** Loading — grid overlay/skeleton rows;
+error — §60 toast + inline retry band; branch with no reports —
+§60 empty state ("No reports yet for this branch"); unknown or
+removed `:branchId` — the §30 `GET /branches/:branchId` 404
+contract surfaces the §60 toast and the page renders an inline
+not-found band with a "Back to branches" button (the §51.6
+detail-route precedent: the §30 404 resolves **before** the
+global 404). A tombstone branch (§17.4) renders its tombstone
+surface with the same back link.
+
+**Route note.** `/branches/:branchId` does **not** mark the
+Branches nav item as selected (§47.6 page-context rule); the
+page is fully built in the P4 pages phase (§66.9 P4); P3 ships
+the route + placeholder only.
+
+### 56.6 Row actions & confirm dialogs
 
 - **Edit** — `EditIcon` (`warning.main`), tooltip "Edit", opens
   the §56.4 dialog pre-filled; allowed for archived branches
@@ -10242,7 +10375,7 @@ page slices — never a full dataset (§45.7/ADR-034).
   read path is tombstone-safe (§17.4: a removed branch's
   reports still render their snapshot names in §50/§51).
 
-### 56.6 States & breakpoints
+### 56.7 States & breakpoints
 
 - Loading — grid overlay loading (§46.8)/skeleton rows;
   error — §60 toast + inline retry band; empty (no branches
@@ -10259,7 +10392,7 @@ page slices — never a full dataset (§45.7/ADR-034).
 | Grid columns | Name, Status, Actions | Name, Status, Location, Actions | full | full | full |
 | Create dialog | full-width (maxWidth sm) | sm | sm | sm | sm |
 
-### 56.7 Verification usage
+### 56.8 Verification usage
 
 - Grep gates: no branch DTO field beyond the §20 serialized
   surface; no hard-delete call in the page (only archive, §30.6);
@@ -10529,9 +10662,8 @@ for unmatched or invalid routes (§14.2 fallback).
 ### 59.3 Result groups & navigation
 
 - Clicking a result navigates: reports (any status, including
-  drafts) → `/reports/:reportId` (§51); branches → the §56.4
-  branch dialog opened on the Branches page (`/branches`) — no
-  `/branches/:branchId` route exists (§41.3). All navigation
+  drafts) → `/reports/:reportId` (§51); branches → the Branch
+  Details page `/branches/:branchId` (§56.5). All navigation
   honors the app-level navigation model (§47).
 - When the entity is a tombstone (§17.4), the result still
   renders and navigates — the detail page shows the tombstone
@@ -10542,11 +10674,21 @@ for unmatched or invalid routes (§14.2 fallback).
 - The route-not-found fallback (§41.3's `*` route), rendered
   **inside whichever layout is active** — the AppShell for
   authenticated users, PublicLayout for unauthenticated ones
-  (no AppShell chrome for anonymous users): a MuiCard centered
-  with **"Page not found"** (title, chrome copy §7.6), a subtitle
-  "This page doesn't exist or was moved", and a button
-  **"Back to dashboard"** which routes to `/dashboard` when
-  authenticated and to `/login` otherwise (§41.3).
+  (no AppShell chrome for anonymous users): the page selects the
+  layout by `authSlice` status and hands the 404 card to it as
+  `children`, which the layout renders in place of its `<Outlet/>`
+  (§47.2/§47.3 composition contract — a composed `children` is
+  never routed through an Outlet, which would sit beneath the
+  `*` leaf with nothing left to render). A centered **Box**
+  (bgcolor `background.default` + divider border + radius — **no
+  Paper/Card surface**, user-directed standing rule) holding the
+  `notFound_404.svg` illustration, **"Page not found"** (title,
+  chrome copy §7.6), a subtitle "This page doesn't exist or was
+  moved", and two actions in a centered row (`flex gap 1`, wraps):
+  **Home** (contained, `HomeOutlined` start icon) → `/` (landing,
+  browsable by all, §41.5) and **Back** (outlined, `ArrowBackOutlined`
+  start icon) → `navigate(-1)`. No dashboard/login-targeted routing —
+  the target depends on the user's history and the Home landing.
 
 ### 59.5 States & edge cases
 
@@ -10620,7 +10762,10 @@ implemented identically:
 1. **Loading** — §46.14 skeleton/spinner at the §45.7 slot;
    never a blank render.
 2. **Empty** — the empty-state copy (§60.7) + the page's
-   primary action inline; never an error or a toast.
+   primary action inline; never an error or a toast. The surface
+   is the belt `MuiEmptyState` (§46.17) — pages and the search
+   dialog (prompt + no-results variants, §46.15) reuse it; no
+   page re-implements the empty layout.
 3. **Error** — the §60.3 error toast (server errors, including
    all backend 4xx/5xx per §27.5) + an inline retry affordance
    on the failing region; the retry re-runs the same §42 call.
@@ -10641,7 +10786,9 @@ surface.
   **single trigger API** — every listener (service responses,
   §27 error mapping, page mutations) calls it; **no other toast
   API exists** (ADR-033). The catalogue strings come from
-  §60.6.
+  §60.6. Every call passes react-toastify `icon: false` — the
+  variant meta icon (§60.4) is the toast's only icon surface,
+  so a default toast icon never renders.
 - **`MuiToast` feedback components** (success/error/info/
   warning/loading variants) live in the §46.17 belt, themed
   §44.5/§44.4.
@@ -12060,6 +12207,7 @@ content rules: no prose invention outside this registry).
 | OQ-005 | **CLOSED** (2026-08-10) | Exact dashboard KPI set & charts | §49 | — |
 | OQ-006 | **CLOSED** (2026-08-11) | Export file naming convention | §58 | — |
 | OQ-007 | **OPEN** | `raw`/`latest` storage format: plain text vs rich-text HTML | §21.2, §46.16, §53, §61 | The §66 P4 (editor) decision point |
+| OQ-008 | **OPEN** | Landing page: further work wanted by the owner — the round-9 review is not final; polish/concept revision deferred until after all eight phases | §48.2, §66 | Post-P8 owner window (§66.9 P8 / §2.6); non-blocking |
 
 Records (closed):
 
@@ -12103,6 +12251,16 @@ Records (open):
   (§46.16/§53/§54/§61); the §61.3 sanitization policy holds on
   both branches. Closure: recorded here with the §21.2 slots and
   §46.16 contract finalized in the same change.
+- **OQ-008 — OPEN.** The owner wants further Landing-page work:
+  the round-9 composition (cardless ruled-desk hero with the
+  persisting §43.2 waveform, branches strip, Record → Verify →
+  Deliver strip, CTA band) is functionally complete but not
+  final — polish and/or concept revision are deferred until
+  after all eight phases. Until closure: the §48.2 composition
+  stands as delivered and nothing in the §66 P3 exit gate
+  depends on it (*non-blocking* row). Closure: an owner
+  decision recorded here with the §48.2 composition amended in
+  the same change (§66.6).
 
 ### 69.3 Assumptions register
 
