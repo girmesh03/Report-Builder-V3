@@ -6,8 +6,8 @@
  * for anonymous ones (no AppShell chrome for anonymous users). The
  * chosen layout receives the 404 card as `children` and renders it
  * in place of its Outlet (§47.2/§47.3 composition contract). A
- * centered Box (bgcolor `background.default` + divider border — no
- * Paper/Card surface, user-directed): the `notFound_404.svg`
+ * centered Box (bgcolor `background.default` + divider border +
+ * radius — no Paper/Card surface, user-directed): the `notFound_404.svg`
  * illustration, "Page not found" title, "This page doesn't exist or
  * was moved" subtitle, and two actions: **Home** (contained,
  * `HomeOutlined` start icon) to `/` and **Back** (outlined,
@@ -45,6 +45,10 @@ function NotFoundCard() {
           maxWidth: 480,
           width: "100%",
           textAlign: "center",
+          bgcolor: "background.default",
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: 2,
         }}
       >
         <Box

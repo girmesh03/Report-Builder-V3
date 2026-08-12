@@ -1,28 +1,35 @@
 /**
  * @module pages/Landing
  *
- * Interim placeholder for the §48.2 Landing page — replaced by the
- * full implementation in the P3 auth-pages task (§66.9 P3). Renders
- * inside PublicLayout's scrollable Outlet.
+ * The §48.2 Landing page (`/`), browsable by guests and
+ * authenticated sessions alike (§48.1/§47.2). Round-9b composition
+ * (owner review): the ruled-desk hero with the persisting §43.2
+ * waveform, the branches strip (the customer's own names, managed
+ * from Branches), the Record → Verify → Deliver strip, the CTA band,
+ * and the footer (product name `VITE_APP_NAME`, §10.5; copyright).
+ * Sections are fixed — no loading or data states; navigation
+ * failures toast only on the destination (§48.2 states).
  */
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Hero from "../components/landing/Hero";
+import BranchStrip from "../components/landing/BranchStrip";
+import HowItWorks from "../components/landing/HowItWorks";
+import CtaBand from "../components/landing/CtaBand";
 
 export function Component() {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "70vh",
-        gap: 8,
-        fontFamily: "Inter, sans-serif",
-        color: "text.secondary",
-      }}
-    >
-      <h1 style={{ margin: 0, fontWeight: 600 }}>Landing</h1>
-      <p style={{ margin: 0 }}>§48.2 — interim placeholder, full page in the P3 auth-pages task</p>
-    </div>
+    <>
+      <Hero />
+      <BranchStrip />
+      <HowItWorks />
+      <CtaBand />
+      <Box component="footer" sx={{ px: 2, py: 3, maxWidth: 1100, mx: "auto", width: "100%" }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center" }}>
+          © {new Date().getFullYear()} {import.meta.env.VITE_APP_NAME ?? "Report Builder"}
+        </Typography>
+      </Box>
+    </>
   );
 }
 

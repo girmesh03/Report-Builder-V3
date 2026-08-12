@@ -38,6 +38,7 @@ export const showToast = (variant, title, message, options = {}) => {
     pauseOnFocusLoss: false,
     role: "status",
     hideProgressBar: isLoading,
+    icon: false,
     ...options,
   });
 };

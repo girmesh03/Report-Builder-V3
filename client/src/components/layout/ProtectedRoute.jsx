@@ -4,7 +4,9 @@
  * The protected-branch guard (§41.5, locked decision 4): while the
  * auth state is `initializing` (populated by the §28 session
  * contract through the §42 network layer) renders a full-page
- * LoadingSpinner (§46.14); unauthenticated visitors are redirected
+ * LoadingSpinner (§46.14); unauthenticated sessions (the `guest`
+ * status — the lower-case status enum is
+ * `initializing | authenticated | guest`, §41.5) are redirected
  * to `/login` with `state={{ from: location }}` so the login page
  * can return them; authenticated sessions render the branch.
  */
@@ -21,7 +23,7 @@ export default function ProtectedRoute() {
     return <LoadingSpinner />;
   }
 
-  if (status === "unauthenticated") {
+  if (status === "guest") {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 

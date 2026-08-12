@@ -7,8 +7,8 @@
  * title; the sidebar-header menu icon toggles full/mini on md+, and
  * on xs/sm the app-bar's leading hamburger opens the temporary
  * overlay) over the scrollable content area. Outer `height: 100vh;
- * overflow: hidden` (§45.4). Content padding: 16px under 600px, 24px
- * at and above. During route transitions (`useNavigation().state ===
+ * overflow: hidden` (§45.4). Content padding: 8px under the md
+ * breakpoint, 24px at and above. During route transitions (`useNavigation().state ===
  * "loading"` — lazy module/loader/middleware fetch) the content area
  * swaps to a centered `LoadingSpinner`; the chrome stays mounted.
  * The content area renders a passed `children` in place of the

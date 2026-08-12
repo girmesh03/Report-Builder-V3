@@ -2253,6 +2253,8 @@ by the UI:
 | `AI_REASONING_EFFORTS`| §11.4                | §54     |
 | `PAGINATION_*`        | §11.3                | §50     |
 | `AUDIO_*`             | §11.3 (MIME list)    | §53     |
+| `TOAST_AUTO_DISMISS_MS` | §60.5 cadence (success/info 5000, error/warning 8000; loading never auto-dismisses) | §60, §48 |
+| `TOAST_CATALOGUE`     | §60.6 catalogue — single-sourced strings (one occurrence per string, §48.6) | §27, §48, §60 |
 
 Client-side magic-value ban and freeze rules are identical to the
 backend (§11.2).
@@ -2746,6 +2748,7 @@ caret ranges preserved verbatim):
 | @fontsource/noto-serif-ethiopic | ^5.3.0        | Ethiopic content face (Amharic body, §43.5)    | §43        |
 | jspdf                       | ^4.2.1            | PDF export (client-side)                       | §58        |
 | jspdf-autotable             | ^5.0.8            | PDF tables (report tables)                   | §58        |
+| prop-types                  | ^15.8.1           | Runtime prop validation (direct dep of the §46 belt) | §46  |
 | dayjs                       | ^1.11.21          | Date/time (DD-MM-YY display)                 | §6.3, §52  |
 | vite                        | ^8.2.0            | Build tool                                    | §9.7       |
 | @vitejs/plugin-react        | ^6.0.4            | Vite React transform                            | §9.7       |
@@ -3165,7 +3168,7 @@ client/
     |   |                                    #   (MuiEditor at the editor phase, §66)
     |   |-- columns/                         # domain column-set files for MuiDataGrid (§50, §56, ADR-034)
     |   |-- landing/                          # e.g. Hero.jsx — example of a domain folder
-    |   |-- login/                            # e.g. LoginForm.jsx — example of a domain folder
+    |   |-- auth/                             # e.g. LoginForm.jsx — example of a domain folder
     |   |-- report/                           # e.g. ReportCard.jsx — example of a domain folder
     |   `-- <domain>/                        # every other component lives at
     |-- pages/                                # one <Name>.jsx per routed view; the page set is
@@ -3210,7 +3213,7 @@ files own no leaf UI outside page-level composition (§12.6, §15.6).
   Mui* UI library only (§46); `components/columns/` — MuiDataGrid
   column sets only (§50, §56); every other component lives at
   `components/<domain>/<Name>.jsx` — one folder per concern (e.g.
-  `login/`, `landing/`, `report/`) — and never outside `components/`.
+  `auth/`, `landing/`, `report/`) — and never outside `components/`.
 - `pages/` — one `<Name>.jsx` per routed view; the page set and page
   shape are decided by the page sections (§48–§59) when they are
   authored, never pre-committed here; each implementing phase adds its
@@ -7671,7 +7674,10 @@ route branches. Their contract:
 - **`ProtectedRoute`.** While the auth state is `initializing`
   (populated by the §28 session contract through the §42 network
   layer), renders `LoadingSpinner` full-page (§46.14). When
-  unauthenticated, renders `<Navigate to="/login" replace
+  unauthenticated — the lower-case status enum is
+  `initializing | authenticated | guest`; "guest" is the resolved
+  unauthenticated value (the §41.5 enum lock, first enforced at
+  P3) — renders `<Navigate to="/login" replace
   state={{ from: location }} />` (locked decision 4) — the login
   page reads `state.from` for post-login navigation (§48.3). When
   authenticated, renders `<Outlet/>`.
@@ -7719,7 +7725,7 @@ The §15.2 conventions bind every Part D module: imports only within
 leaves the SPA (§12.6, §42); reusable components in
 `components/reusable/` (§46), layout shells in `components/layout/`
 (§47), MuiDataGrid column sets in `components/columns/` (§50, §56),
-every other component in `components/<domain>/` (e.g. `login/`,
+every other component in `components/<domain>/` (e.g. `auth/`,
 `landing/`, `report/`), pages in `pages/`, shared UI-state logic in
 `hooks/` (§53), and store/API modules in `redux/` (§41.6). Page
 files own no leaf UI outside page-level composition (§15.5).
@@ -7812,7 +7818,13 @@ The chain is the single owner of session expiry on the client
    through as expiration.
 5. If refresh fails, the session is expired: clear auth state
    (`authSlice`), redirect to `/login` (§41.5), and fail the
-   original request without a toast.
+   original request without a toast. The expiry redirect applies
+   to an **authenticated** session whose credentials just died
+   (authenticated → request → 401 → one retry → on failure,
+   session cleared, landing on `/login`); anonymous and
+   `initializing` probes fail through silently — guests are
+   already gated by §41.5 and never bounce, so public pages do
+   not reload-loop on failed boot probes.
 6. **401s are never toasted** — expiry is a silent redirect flow
    (§12.11-2, §9.6). Only non-401 errors surface as toasts (§42.4).
 
@@ -7922,8 +7934,8 @@ the report's most characteristic artifact is the fixed eight-line
 Amharic header (ቀን / ብራንች / ስም / ሰዓት …, §6.3). The design language
 is therefore "**regulatory paper with a dictation desk**": flat,
 paper-white surfaces with hairline rules, an English chrome that
-stays quiet, and the report's own header as the one repeated
-identity motif.
+stays quiet, and the empty ruled desk as the one repeated identity
+motif.
 
 **Palette (committed scales).** The palette is the scaffold's
 committed token set (§44 applies it mode-aware; components never
@@ -7969,13 +7981,14 @@ mirrors the report's own line structure without imitating its
 Amharic labels (§7.6 — chrome copy is English).
 
 **Signature element (normative).** The Landing page hero (§48.2)
-renders the *report-header motif*: the eight-line Amharic header of
-§6.3, typeset in the Ethiopic content face over a hairline-ruled
-paper panel, with a single restrained animation — a low-opacity
-waveform line traced once across the ስም line ("the spoken report")
-that obeys `prefers-reduced-motion` (§45.7). This is the only
-decorative motion in the product; every other transition in §44–§59
-is a MUI default or an explicit functional micro-interaction.
+renders the *ruled dictation desk*: a cardless, hairline-ruled
+expanse — the paper for the day's report, waiting — with a single
+restrained animation: a low-opacity waveform line traced once across
+the rules ("the spoken report") that obeys `prefers-reduced-motion`
+(§45.7; under reduced motion it renders fully drawn, statically) and
+persists after its first display. This is the only decorative motion
+in the product; every other transition in §44–§59 is a MUI default
+or an explicit functional micro-interaction.
 **Uniqueness rationale:** the brief's committed tokens (blue,
 paper, Inter, light-first) rule out the common warm-cream/serif and
 near-black/accent templates; the Ethiopic header ties the identity
@@ -9029,7 +9042,7 @@ expiry redirect), and must create an account with no admin path
   contracts (e.g. no extra registration fields — the form collects
   exactly `email` and `password`); no new constant (§11/§10
   unchanged — page copy is authored text, not code constants); no
-  path beyond §15.5 (`pages/`, `components/login/`,
+  path beyond §15.5 (`pages/`, `components/auth/`,
   `components/landing/`); no package.
 
 ### 48.2 Landing page (`/`)
@@ -9040,36 +9053,34 @@ Outlet (§47.2); no reauth surface beyond the public app-bar.
 
 **Purpose & composition.** Phone-call-as-sale: a single job —
 explain the product and route to Register/Login (§4.4). Sections
-top to bottom: 1) **Hero** (the signature, §43.2); 2) **How it
-works** (a 3-step horizontal strip: Record → Verify → Deliver —
-the §1.5 loop in chrome copy); 3) **The report** (a framed
-reproduction of the §6.8 report body — read-only, sanitized
-render §61 — demonstrating the deliverable); 4) **CTA band**; 5)
-footer (product name `VITE_APP_NAME`, §10.5; copyright line).
+top to bottom: 1) **Hero** (the signature, §43.2); 2) **Branches
+strip** (the branch-management promise — the visitor's own names
+live in his reports, managed from Branches); 3) **How it works**
+(the §1.5 loop in chrome copy); 4) **CTA band**; 5) footer (product
+name `VITE_APP_NAME`, §10.5; copyright line). The composition is
+provisional under **OQ-008** (§69) — an owner decision may revise
+it after P8; until then it ships as delivered.
 
-**Hero (normative, locked decision of §43.2).** The report-header
-motif: the eight-line Amharic header of §6.3 (ቀን / ብራንች / ስም /
-ስራ የገባሁበት ሰዓት / የተሰሩ ስራዎች / መፍትሄ የሚፈሉ ጉዳዮች / አጠቃላይ
-አስተያየት / ከስራ የወጣሁበት ሰዓት) typeset in the Ethiopic content
-face (§43.5) over the hairline-ruled paper panel (§43.2); the
+**Hero (normative, locked decision of §43.2).** The ruled dictation
+desk: a hairline-ruled expanse with no card — no frame, no fill, no
+radius — the paper for the day's report, waiting. Over it, the
 "spoken report" waveform trace (the §43.2 signature animation —
-disabled under `prefers-reduced-motion`, §45.8); English eyebrow
-and headline above the panel ("Daily supervision reports, spoken
-in Amharic, delivered as documents."); two CTAs: **Sign up**
-(contained, §46.3) → `/register`, and **Log in** (outlined) →
-`/login`. The header reproduction is the §6.3 fixed labels — the
-only Amharic strings in chrome, and only within this content-
-illustration (§7.6 boundary: the hero panel is content-surface
-illustration, not control copy).
+disabled under `prefers-reduced-motion`, §45.7; shown statically
+fully drawn, and persisting after its first display). English
+eyebrow and headline beside the desk ("Daily supervision reports,
+in Amharic"); two CTAs: **Sign up** (contained, §46.3) → `/register`,
+and **Log in** (outlined) → `/login`. The desk carries no text —
+no Amharic strings in chrome (§7.6 boundary: content lives on the
+auth/report surfaces, never in the hero).
 
 **Breakpoint matrix (regions × buckets):**
 
 | Region | xs <600 | sm | md | lg | lg+ |
 |---|---|---|---|---|---|
-| Hero panel | stacked full-width, header block + CTA below | same, max-width 560px centered | two-column: header text left, report panel right | same | same, max-width 1100px |
-| Report header text | 16px Ethiopic | 16px | 18px | 20px | 20px |
+| Hero block | stacked full-width, headline + CTAs above the desk | same, max-width 560px centered | two-column: copy left, ruled desk right | same | same, max-width 1100px |
+| Ruled desk | ~130px tall, full-width lines | same | ~170px tall | same | same |
+| Branches strip | icon row wraps | icon row | one row, between hairlines | one row | one row |
 | How-it-works | vertical stack | vertical stack | 3 columns | 3 columns | 3 columns |
-| Report body frame | hidden (CTA instead) | shown, stacked | shown, beside CTA band | beside | beside |
 | CTA band | full-width buttons | full-width | contained center | contained | contained |
 
 **States.** Public page — no loading/empty data states beyond the
@@ -9079,7 +9090,7 @@ surfaces via the §60 toast only on the destination.
 ### 48.3 Login page (`/login`)
 
 **File:** `pages/Login.jsx`; form component
-`components/login/LoginForm.jsx`.
+`components/auth/LoginForm.jsx`.
 
 **Purpose & composition.** Session entry; also the target of the
 §41.5 guard redirect (`state.from`) and the §42 expiry redirect.
@@ -9124,7 +9135,7 @@ copy only (§7.6).
 
 | Region | xs | sm | md | lg | lg+ |
 |---|---|---|---|---|---|
-| Card | full-width, p2, no border radius | 420px centered | 420px centered | 480px centered, right of a brand panel | 480px centered |
+| Card | full-width, p2, rounded, centered | 420px centered | 420px centered | 480px centered, right of a brand panel | 480px centered |
 | Brand panel (hero motif, static) | hidden | hidden | hidden | visible left column | visible left column |
 | Field labels | above fields | above | above | above | above |
 | Submit + OAuth | stacked, full-width | stacked, full-width | stacked | stacked | stacked |
@@ -9140,7 +9151,7 @@ decision anywhere — not added).
 ### 48.4 Register page (`/register`)
 
 **File:** `pages/Register.jsx`; form
-`components/login/RegisterForm.jsx` (same domain folder).
+`components/auth/RegisterForm.jsx` (same domain folder).
 
 **Purpose & composition.** Self-service registration (F1); the
 form collects **only `email` and `password`** (§3.2.2, §19.2) plus
@@ -9184,7 +9195,7 @@ OAuth loading; inline errors; disabled submit while submitting
 ### 48.5 Shared auth behaviors (normative)
 
 - **OAuth entry** — one component (`GoogleOAuthButton`-pattern in
-  the login domain folder), reused by both pages (§46.2; spinner on
+  the auth domain folder), reused by both pages (§46.2; spinner on
   click; §28/OQ-004 stub contract).
 - **Cross links** — Login footer link "Don't have an account?
   Sign up" → `/register`; Register link "Already have an account?
@@ -10775,7 +10786,9 @@ surface.
   **single trigger API** — every listener (service responses,
   §27 error mapping, page mutations) calls it; **no other toast
   API exists** (ADR-033). The catalogue strings come from
-  §60.6.
+  §60.6. Every call passes react-toastify `icon: false` — the
+  variant meta icon (§60.4) is the toast's only icon surface,
+  so a default toast icon never renders.
 - **`MuiToast` feedback components** (success/error/info/
   warning/loading variants) live in the §46.17 belt, themed
   §44.5/§44.4.
@@ -12194,6 +12207,7 @@ content rules: no prose invention outside this registry).
 | OQ-005 | **CLOSED** (2026-08-10) | Exact dashboard KPI set & charts | §49 | — |
 | OQ-006 | **CLOSED** (2026-08-11) | Export file naming convention | §58 | — |
 | OQ-007 | **OPEN** | `raw`/`latest` storage format: plain text vs rich-text HTML | §21.2, §46.16, §53, §61 | The §66 P4 (editor) decision point |
+| OQ-008 | **OPEN** | Landing page: further work wanted by the owner — the round-9 review is not final; polish/concept revision deferred until after all eight phases | §48.2, §66 | Post-P8 owner window (§66.9 P8 / §2.6); non-blocking |
 
 Records (closed):
 
@@ -12237,6 +12251,16 @@ Records (open):
   (§46.16/§53/§54/§61); the §61.3 sanitization policy holds on
   both branches. Closure: recorded here with the §21.2 slots and
   §46.16 contract finalized in the same change.
+- **OQ-008 — OPEN.** The owner wants further Landing-page work:
+  the round-9 composition (cardless ruled-desk hero with the
+  persisting §43.2 waveform, branches strip, Record → Verify →
+  Deliver strip, CTA band) is functionally complete but not
+  final — polish and/or concept revision are deferred until
+  after all eight phases. Until closure: the §48.2 composition
+  stands as delivered and nothing in the §66 P3 exit gate
+  depends on it (*non-blocking* row). Closure: an owner
+  decision recorded here with the §48.2 composition amended in
+  the same change (§66.6).
 
 ### 69.3 Assumptions register
 
