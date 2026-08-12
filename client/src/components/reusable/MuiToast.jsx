@@ -56,7 +56,11 @@ export default function MuiToast({ variant, title, message, action }) {
       )}
       <Box sx={{ minWidth: 0, flex: 1 }}>
         {title ? (
-          <Typography variant="subtitle2" component="p" noWrap>
+          <Typography
+            variant="subtitle2"
+            component="p"
+            sx={{ overflowWrap: "anywhere" }}
+          >
             {title}
           </Typography>
         ) : null}

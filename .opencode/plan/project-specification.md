@@ -2248,11 +2248,14 @@ by the UI:
 | Constant              | Value (mirror of)    | Used by |
 | --------------------- | -------------------- | ------- |
 | `REPORT_STATUSES`     | §11.4                | §51, §50 |
+| `REPORT_STATUS_LABELS`| §11.4 (English chrome, §7.6) | §49, §46.13 |
 | `AI_PROVIDERS`        | §11.4                | §54     |
 | `AI_MODELS`           | §11.4                | §54     |
 | `AI_REASONING_EFFORTS`| §11.4                | §54     |
 | `PAGINATION_*`        | §11.3                | §50     |
 | `AUDIO_*`             | §11.3 (MIME list)    | §53     |
+| `AVATAR_*`            | §11.3 (max size, MIME list) | §57 |
+| `OFFICIAL_TOKEN_PREFIX` | §11.3              | §51, §53, §58 |
 | `TOAST_AUTO_DISMISS_MS` | §60.5 cadence (success/info 5000, error/warning 8000; loading never auto-dismisses) | §60, §48 |
 | `TOAST_CATALOGUE`     | §60.6 catalogue — single-sourced strings (one occurrence per string, §48.6) | §27, §48, §60 |
 
@@ -3152,6 +3155,14 @@ client/
     |       |                                #   baseQueryWithReauth; network & error layer (§41–§42)
     |       |-- authSlice.js                  # session/identity UI state (§41.5, §42)
     |       |-- authEndpoints.js              # getCurrentUser/login/logout/refresh (§28, §42)
+    |       |-- reportsEndpoints.js           # report CRUD + visits + content + lifecycle (§30, §31, §34, §35)
+    |       |-- branchesEndpoints.js          # branch CRUD + lifecycle (§30, §56)
+    |       |-- audioEndpoints.js             # clips CRUD, audio stream URL (§32)
+    |       |-- transcriptionEndpoints.js     # list, transcribe, re-transcribe, accept (§33, §54)
+    |       |-- conversationEndpoints.js      # chat get/send (§35, §55)
+    |       |-- analyticsEndpoints.js         # dashboard + items analytics (§38, §49, §56)
+    |       |-- searchEndpoints.js            # global search (§39, §59)
+    |       |-- profileEndpoints.js           # profile + sessions (§28, §57)
     |       `-- <domain>Slice.js             # one slice per domain (e.g. reports, branches) (§41)
     |-- components/
     |   |-- AppErrorPage.jsx                   # §60 render-error fallback (ADR-025, §41.4)
@@ -3166,10 +3177,17 @@ client/
     |   |                                    #   GlobalSearchDialog, LoadingSpinner, TableSkeleton,
     |   |                                    #   ListSkeleton, FormSkeleton, MessageSkeleton
     |   |                                    #   (MuiEditor at the editor phase, §66)
-    |   |-- columns/                         # domain column-set files for MuiDataGrid (§50, §56, ADR-034)
+    |   |-- columns/                         # domain column-set files for MuiDataGrid (§50, §56, ADR-034):
+    |   |                                    #   reports.jsx (§50), visits.jsx (§52)
     |   |-- landing/                          # e.g. Hero.jsx — example of a domain folder
     |   |-- auth/                             # e.g. LoginForm.jsx — example of a domain folder
-    |   |-- report/                           # e.g. ReportCard.jsx — example of a domain folder
+    |   |-- report/                           # ReportCard.jsx — the §50 list/grid card (§15.6)
+    |   |-- reports/                          # correction surface folders (§54, §15.6):
+    |   |                                    #   edit-content/, correct-instruction/, correct-voice/,
+    |   |                                    #   corrected-strip/, unassigned-panel/
+    |   |-- branches/                         # branch domain components — Create/Edit dialog,
+    |   |                                    #   Branch Details composition (§56, §56.5)
+    |   |-- print/                            # ReportPrint.jsx — the §58.3 print surface
     |   `-- <domain>/                        # every other component lives at
     |-- pages/                                # one <Name>.jsx per routed view; the page set is
     |                                         # decided by the page sections (§48–§59); pages so far:
@@ -7269,9 +7287,12 @@ derivation and no model call ever runs inside this endpoint.
 ### 38.6 States & edge cases
 
 - Empty account (no reports): kpis all zero, charts = five
-  zero-slices + empty series — the §49 dashboard renders its
-  empty-state copy from this shape (no special "no data" 200
-  variant; the client derives the empty state from zeros).
+  zero-slices + empty series — the §49 dashboard renders no
+  account-level empty band (owner decision, R3-fix): each chart
+  degrades to its own §60 empty state and the Latest-reports
+  band renders its own (no special "no data" 200 variant; the
+  client derives nothing from zeros beyond those per-surface
+  states).
 - Archive state: archived reports/`archivedAt` windows never
   feed the dashboard (consistent with §50's filters).
 - A tombstoned branch's reports still count in
@@ -8548,8 +8569,9 @@ in bold), states, and responsive behavior. Forms bind through the
 - **Props:** `value`, `onChange` (value arrives via the picker's
   custom onChange — **`Controller` is required**, with a
   justification comment, §46.2), `label`, `size` (**small**, into
-  the TextField slot), `views` (day/month/year
-  per the owning form, §52.3/§50.3), `startAdornment`/
+  the TextField slot), `views` (day/month/year if the owning form
+  narrows modes — §52.3; the §50 filter date range waits on
+  OQ-009), `startAdornment`/
   `endAdornment` (merged into the TextField's input slot),
   `slotProps` (user values merge under the picker's own —
   contract fields win; the picker forces
@@ -8590,7 +8612,7 @@ in bold), states, and responsive behavior. Forms bind through the
 ### 46.8 MuiDataGrid
 
 - **File:** `components/reusable/MuiDataGrid.jsx`; domain columns
-  live in `components/columns/*.js` — `reports.js` (§50),
+  live in `components/columns/*.jsx` — `reports.jsx` (§50),
   `branches.js` (§56).
 - **Purpose:** every data table (the Reports list §50, the
   Branches list §56 — the dashboard charts of §49 are not a
@@ -8725,7 +8747,8 @@ in bold), states, and responsive behavior. Forms bind through the
 - **File:** `components/reusable/GlobalSearchDialog.jsx` (UX in
   §59; standalone — does not use MuiDialog's actions slot).
 - **Props:** `open`, `onClose` only — the dialog is fully
-  self-contained (query state, state machine, §39 call at P4).
+  self-contained (query state, state machine, driven by the §39
+  endpoint through the §42 layer).
 - **Behavior contract:** search field (belt `MuiTextField`) with
   start adornment (**`ArrowBackIcon`** — clears the field, resets
   results, closes the dialog) and end adornments: a clear button
@@ -8741,10 +8764,12 @@ in bold), states, and responsive behavior. Forms bind through the
   **full-height** and shows the two `MuiEmptyState` variants
   (§46.17): the search prompt while idle, "No results found" when
   a completed run has no hits; loading state (§46.14 spinner);
-  fullscreen below 600px (and below 768px landscape, no border
-  radius, 100vh); centered at 600–1200px (80vh / 600px) and above
-  1200px (70vh / 720px); closes via back arrow, Escape, or click
-  outside.
+  **fullscreen below md (900px)** — xs and sm are edge-to-edge with
+  no border radius (the app's small-screen convention, §44.4; the
+  centered paper exists only on md+); below 768px landscape stays
+  fullscreen too (radius 0); centered at 900–1200px
+  (80vh / 600px) and above 1200px (70vh / 720px); closes via back
+  arrow, Escape, or click outside.
 - **Data:** the §39 search endpoint via the §42 layer; archived
   entities hidden unless the search contract of §39 includes them.
 
@@ -9259,12 +9284,15 @@ Order (top to bottom) inside AppShell's Outlet (§47.3), with the
 per-page header first (§46.12): eyebrow "Overview", title
 "Dashboard", subtitle "Your supervision reports at a glance";
 `actions` slot hosts the primary action — "New report" (contained,
-§46.3) → `/reports/new` (§52). Then: **KPIs** — Row of four
+success — the §46.3 create color, owner decision) → `/reports/new`
+(§52). Then: **KPIs** — Row of four
 `MuiStatCard`s (§46.17); **Charts** — the §49.4 chart trio in a
 responsive Grid (`size` prop, §46.2); **Latest reports** — a
 compact read-only list (reportDate, branch snapshot names,
 `MuiStatusBadge`, updatedAt) of the five most recent reports,
-each row linking to `/reports/:reportId` (§51); when a row set is
+each row linking to `/reports/:reportId` (§51); the query passes
+`isArchived=false` so the band is always **active-only** (archived
+rows never surface here); when a row set is
 empty the section shows the §60 empty state.
 
 ### 49.3 KPI set (normative — closure of OQ-005)
@@ -9303,7 +9331,8 @@ and show a compact loading skeleton while pending (§49.6).
 
 ### 49.5 Quick actions
 
-- **"New report"** (header action, §49.2) → `/reports/new`.
+- **"New report"** (header action, §49.2; contained, success) →
+  `/reports/new`.
 - **"Open latest report"** — the Latest-reports section's first
   row: navigates to its details page (§51).
 
@@ -9311,10 +9340,12 @@ and show a compact loading skeleton while pending (§49.6).
 
 - **States (ADR-033).** Loading — KPI skeletons + chart skeletons;
   error — §60 toast on the §38 fetch failure and a compact inline
-  retry on the chart band; empty — first-run account with no
-  reports: the empty-state copy invites the first action
-  ("No reports yet — record your first day") with the New report
-  action inline (§60 voice); success — full render.
+  retry on the chart band; empty — **no account-level empty band**
+  (owner decision, R3-fix): each chart degrades to its own §60
+  empty state when its series is empty (zero-slice donut keeps its
+  slices — §38.4) and the Latest-reports band renders its own
+  empty ("No reports yet — record your first day", §60 voice);
+  success — full render.
 - **Breakpoint matrix:**
 
 | Region | xs | sm | md | lg | lg+ |
@@ -9363,7 +9394,7 @@ there is no separate list page (§15.8).
   queries and pagination contract = §31/§27 (Part C); transitions
   and guards = §31; retention = §62; status presentation =
   §46.13; grid mechanics = §46.8; columns = `components/columns/
-  reports.js` (§15.6); exports of the selection = §58; toasts and
+  reports.jsx` (§15.6); exports of the selection = §58; toasts and
   empty/error/success = §60; the wizard entry = §52.
 - **Explicitly out of scope §50.** No endpoint shapes (§31), no
   transition rules (§31), no new constant (§11 unchanged — the
@@ -9374,62 +9405,73 @@ there is no separate list page (§15.8).
 
 Inside AppShell (§47.3), with page header first (§46.12): eyebrow
 "Reports", title "Reports", subtitle "Your daily supervision
-reports"; `actions` slot: **"New report"** (contained) →
-`/reports/new` (§52). Then a **toolbar band**: the filter row
-(§50.3), the list/grid toggle (button group, §46.3), the
-`MuiDataGrid` (§50.4) or the card grid (§50.5) beneath.
+reports" — **the header renders on md+ only** (below md the app-bar
+already owns the chrome; the page never repeats it). Then a single
+**action button group** (§46.3) owns the actions band in the
+header's place: **Filter** (start icon with the active-filter
+count badge), **List** / **Cards** (the §50.3 view toggle —
+md+ only), **Create** (contained, success — the §46.3 create
+color → `/reports/new`), every button icon + text. Beneath it
+the `MuiDataGrid` (§50.4, md+) or the card grid (§50.5 — the only
+view below md, 1/2/3 columns).
 
-### 50.3 Filters & the list/grid toggle
+### 50.3 Filter dialog & the list/cards toggle
 
-- **Status filter** — MuiSelect "Status" (options = the five
-  `REPORT_STATUSES` + "All", labels from the §11.5 mirror).
-- **Branch filter** — MuiSelect "Branch", populated from **active
-  branches only** (§20: archived branches appear only when
-  "Show archived" is on); options render the branch snapshot name.
-- **Archived toggle** — a switch/checkbox "Show archived" — the
-  explicit filter that surfaces `isArchived` rows (§17.4, §21.6);
-  when off, archived rows are never listed.
-- **Filters combine** (status + branch + archived) and serialize
-  into the §31 list query via the §42 layer; changing a filter
-  resets to page 1. Filter state lives in the page's component
-  state (ephemeral, §12.2-10) — never in the URL.
-- **Toggle** — MuiToggleButtonGroup "List" / "Cards" (§46.3):
-  List = the MuiDataGrid; Cards = the ReportCard grid (§50.5).
-  No preference is persisted (no localStorage surfaces, §53.4
-  rule — nothing is persisted client-side).
+- **Filter dialog — provisional (OQ-009, OPEN).** The Filter
+  button opens a dialog whose full implementation is **TBD**: what
+  to filter (a status/branch/archived set was the working
+  hypothesis), branch single vs multi-select, server pagination of
+  filtered results, and date vs date-range (or both) are open
+  questions registered in §69 (OQ-009). Until they resolve, the
+  dialog renders the TBD surface (`MuiEmptyState` with the OQ-009
+  note) and the page holds **no filter state at all** — the list
+  query is `page`/`limit` only. The Filter button's badge shows
+  the active-filter count once filters exist (zero, hidden, while
+  none are set).
+- **Toggle** — "List" / "Cards" buttons of the action group
+  (§50.2), **md+ only**: below md the page renders cards only
+  (the data grid never appears on xs/sm). List = the MuiDataGrid;
+  Cards = the ReportCard grid (§50.5) — 1 column xs, 2 columns sm,
+  3 columns md, 4 columns lg. No preference is persisted (no
+  localStorage surfaces, §53.4 rule — nothing is persisted
+  client-side).
 
 ### 50.4 Grid mode (MuiDataGrid)
 
-Contract §46.8 with `components/columns/reports.js` (per-domain
+Contract §46.8 with `components/columns/reports.jsx` (per-domain
 column set, §15.6, ADR-034):
 
 | Column | Content | Notes |
 |---|---|---|
 | Date | `reportDate` as `DD-MM-YY` (§43.6) | falls back to `—` while uncaptured |
 | Branch(es) | `branches[].name` snapshot values, joined, ellipsized (§45.5) | tombstone-safe (§17.4/§20) |
-| Supervisor | `supervisorName` (snapshot, §21.2) | captured value, never live profile |
 | Status | `MuiStatusBadge` (§46.13) | from `status` |
 | Updated | `updatedAt`, `DD-MM-YY` | |
-| Actions | View / Edit / Archive-or-Restore / Delete (§46.8) | per §50.6 |
+| Actions | View / Edit / Archive / Restore / Delete (§46.8) | per §50.6 |
+
+**No owner/supervisor column exists** (per-user model §9 — the
+user only ever sees and acts on their own resources; `supervisorName`
+is report content, shown in the details, never a list column).
 
 Row click (with `disableRowSelectionOnClick`) opens details
 (`/reports/:reportId`, §51); Edit re-enters the wizard at the
 status-matched step (§52.3); checkboxes enable the selection-based
 actions (§50.7).
 
-**Responsive column priority (below 900px):** Supervisor, then
-Updated, then Branch collapse in that order (icons retain their
+**Responsive column priority (below 900px):** Updated, then
+Branch collapse in that order (icons retain their
 tooltips, §45.3/§46.8).
 
 ### 50.5 Card grid mode
 
 `components/report/ReportCard.jsx` (the `report/` domain folder,
 §15.5): the §44.6 card, containing reportDate (title line),
-branch snapshot names (ellipsized), `MuiStatusBadge`, supervisor
-name (caption), Updated caption, and the same action icon row as
-§50.4 (§46.8 icon styling). Grid: responsive Grid (`size` prop,
-§46.2) — 1 column xs, 2 columns sm, 3 columns md, 3–4 columns
-lg+; cards are not selectable (selection is a grid-mode feature,
+branch snapshot names (ellipsized), `MuiStatusBadge`, Updated
+caption, and the same action icon row as
+§50.4 (§46.8 icon styling) — **no owner/supervisor caption**
+(per-user model §9). Grid: responsive Grid (`size` prop,
+§46.2) — 1 column xs, 2 columns sm, 3 columns md, 4 columns
+lg; cards are not selectable (selection is a grid-mode feature,
 §50.7).
 
 ### 50.6 Row actions & confirm dialogs
@@ -9443,9 +9485,21 @@ lg+; cards are not selectable (selection is a grid-mode feature,
   report?" / "Restore this report?"; confirmColor `primary`; the
   §31 guard governs availability (a `completed` report archives
   — §21/§31 — nothing here invents a restriction).
-- **Delete** — the §31 delete → archived → retention path
-  (§17.4, BR-15 — no instantaneous hard-delete ever); the §21.6
-  restore stays possible until the §11.3 window end;
+- **Availability per row state.** Active rows
+  (`isArchived: false`) offer **Archive**; archived rows offer
+  **Restore or Delete** — the row's state decides the offered
+  actions in both views (§50.4 grid column and §50.5 card,
+  identical sets): archived → Restore / Delete; active → Archive.
+  A fresh page (no filters — OQ-009) lists what the list
+  contract returns; the dev adapter lists **all** rows absent
+  `isArchived` (§66.10 clause), so archived rows and their
+  actions are reachable before the filter dialog exists.
+- **Delete** — the §31 delete path: on the **archived** row it
+  is the final-removal intent (retention-window semantics §17.4,
+  BR-15; the dev adapter simulates by permanent removal with
+  retention copy, §66.10); on an **active** row the endpoint
+  itself is the archive step of the two-path lifecycle (§31.7) —
+  the page never offers Delete on active rows;
   MuiConfirmDialog confirmColor `error`, copy "Delete this
   report? It will be permanently removed after the retention
   period."; on success → toast (§60) and the row leaves the
@@ -9468,16 +9522,16 @@ lg+; cards are not selectable (selection is a grid-mode feature,
 
 - **Loading** — the grid overlay loading state (§46.8) / card
   skeletons.
-- **Empty** — the custom `noRowsOverlay` (§46.8): "No reports yet
-  — create your first report" (with the New report action
-  available in the header).
-- **Empty filtered** — "No reports match these filters." and a
-  "Clear filters" text button (chrome copy, §7.6).
+- **Empty** — the custom `noRowsOverlay` (§46.8) / cards empty:
+  "No reports yet — create your first report" with the inline
+  "New report" action; the group's **Create** button stays
+  available in every state.
 - **Error** — §60 toast + inline retry over the grid.
 - **Edge cases (enumerated).** An archived branch name still
-  renders through the snapshot (tombstone rule, §17.4/§20);
-  branch filter selections reset when the branch is archived or
-  deleted (active-only rule, §20); delete on the last page
+  renders through the snapshot (tombstone rule, §17.4/§20); the
+  no-rows overlay fills the grid body height (§46.8 — the overlay
+  is sized viewport minus header/footer, so the empty content
+  never paints a fixed stub); delete on the last page
   re-fetches the current page (tag invalidation covers the cache —
   page index clamps server-side per §31); deep links to a report
   that was deleted land on the §59 404 or a §60 toast per the
@@ -9487,8 +9541,11 @@ lg+; cards are not selectable (selection is a grid-mode feature,
 
 - Grep gates: no client-side paging math (ADR-034 — `totalDocs`/
   `totalPages` only); action icons colored via `sx` (§44.2); the
-  toggle button group labels "List"/"Cards"; no archived branch in
-  the active filter options; no `reportId` document field (only the
+  action-group buttons hold icon + text and the view toggle
+  labels "List"/"Cards" (md+ only — below md no List/Cards
+  buttons exist and the data grid never renders); no
+  owner/supervisor column or caption in the §50.4/§50.5 surfaces
+  (per-user model §9); no `reportId` document field (only the
   route params and cache keys, §9.3).
 - Cross-section checks: mirrors §15.8 (the list/grid forward gate),
   §31 (guard reuse and delete), §17.4/§21.6 (archive visibility),
@@ -9740,7 +9797,7 @@ copy of the fields).
 ### 52.5 Step 2 — Visits
 
 The MuiDataGrid of §46.8 with the domain columns from
-`components/columns/visits.js` (§15.6): **#**, **Branch** (select
+`components/columns/visits.jsx` (§15.6): **#**, **Branch** (select
 from **active branches only**, §20), **In** / **Out**
 (`HH:mm` time inputs with the §43.6 dual binding), **Actions**
 (remove row). Inline add row via the row icon button
@@ -10591,7 +10648,7 @@ sanitized (§61) `latest` content of the report with print styling:
 
 - The grid's export serializes the **visible/selected rows** from
   the current grid state (columns per `components/columns/
-  reports.js`, English headers), with `\r\n` line endings and the
+  reports.jsx`, English headers), with `\r\n` line endings and the
   standard RFC 4180 quoting for the branch text (the ellipsized
   branch is **not** exported truncated — the full snapshot string
   is). Download is a client-side Blob; filename `reports.csv`
@@ -10791,7 +10848,10 @@ surface.
   so a default toast icon never renders.
 - **`MuiToast` feedback components** (success/error/info/
   warning/loading variants) live in the §46.17 belt, themed
-  §44.5/§44.4.
+  §44.5/§44.4. **Wrapping rule:** both the title and the message
+  lines break long strings (`overflowWrap: anywhere`) — a long
+  server message passed as the title (e.g. `showToast("error",
+  result.error.message)`) never overflows on one line.
 
 ### 60.4 Variant model
 
@@ -11936,6 +11996,25 @@ end-to-end through a **client-side development mock adapter**:
   while accuracy claims are explicitly deferred to P7 (SC-1).
 - **Gating:** the adapter is wired at the §42 boundary under a
   dev-only condition; it never exists in a production build.
+- **Dev conveniences (owner-approved, die with the adapter at
+  P7):** (1) **auto-auth on boot** — when no live stored session
+  exists at module load the adapter signs in the seeded supervisor
+  user, so a page refresh never drops development out of
+  authentication; a valid stored session (any seed user) always
+  wins; registered accounts are in-memory only, so their sessions
+  live for the page-load and are replaced by the seeded auto-auth
+  on the next reload; real login/register flows stay reachable
+  after an explicit logout. (2) **Report list default** — `GET
+  /reports` returns **all** rows of the user when `isArchived` is
+  absent (explicit `"true"`/`"false"` still filter), so archived
+  rows and their Restore/Delete actions are exercisable before the
+  §50 filter dialog exists (OQ-009); the §31.3 "default hidden"
+  contract stays the real-backend rule, and surfaces that must be
+  active-only (e.g. §49.2 Latest reports) pass `isArchived=false`
+  explicitly. Restore/Delete on an archived row work against the
+  two-path lifecycle; the adapter simulates the retention window
+  (archive retention message; delete of an archived row removes it
+  outright per §50.6's simulated path).
 - **Deletion gate (P7):** the adapter is removed when the real
   transport lands; a grep gate (its module absent from the
   client tree) closes the record. The adapter is a phase
@@ -12208,6 +12287,7 @@ content rules: no prose invention outside this registry).
 | OQ-006 | **CLOSED** (2026-08-11) | Export file naming convention | §58 | — |
 | OQ-007 | **OPEN** | `raw`/`latest` storage format: plain text vs rich-text HTML | §21.2, §46.16, §53, §61 | The §66 P4 (editor) decision point |
 | OQ-008 | **OPEN** | Landing page: further work wanted by the owner — the round-9 review is not final; polish/concept revision deferred until after all eight phases | §48.2, §66 | Post-P8 owner window (§66.9 P8 / §2.6); non-blocking |
+| OQ-009 | **OPEN** | The Reports filter feature is provisional: the dialog renders a TBD surface — what to filter (status/branch/archived were working guesses), branch single vs multi-select, server pagination of filtered results, and date vs date-range (or both) are unresolved; until closure the page holds no filter state and lists what `GET /reports` returns | §50.3, §66 | The §50 filter dialog (full implementation; the mock list-all convenience persists until then) |
 
 Records (closed):
 
@@ -12261,6 +12341,19 @@ Records (open):
   depends on it (*non-blocking* row). Closure: an owner
   decision recorded here with the §48.2 composition amended in
   the same change (§66.6).
+- **OQ-009 — OPEN.** Registered at the R3-fix round (owner
+  review): the Reports Filter button opens a dialog whose full
+  implementation waits on: what to filter (a status/branch/
+  archived set was the working hypothesis), branch single vs
+  multi-select, server pagination of filtered results, and date
+  vs date-range (or both). Until closure: the dialog renders the
+  TBD surface (§50.3), the page holds no filter state, and —
+  dev only — the mock lists all rows absent `isArchived` so the
+  archived walk (Restore/Delete, §50.6) stays reachable (§66.10
+  convenience, dies at P7 when the §31.3 "default hidden"
+  contract fully applies). Closure: an owner decision on the
+  filter dimensions recorded here with §50.3/§50.8 and the §31
+  query contract amended in the same change (§66.6).
 
 ### 69.3 Assumptions register
 

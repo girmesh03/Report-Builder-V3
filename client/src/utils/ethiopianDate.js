@@ -105,3 +105,19 @@ export function gregorianToEthiopian(jsDate) {
     day: (dayInYear % 30) + 1,
   };
 }
+
+/**
+ * The §43.6 display formatter: a stored date renders as its
+ * Ethiopian `DD-MM-YY` (numeric notation, English chrome — ADR-011).
+ * Null-safe: a missing value stays missing (BR-19).
+ * @param {Date|string} value - The stored date (UTC Date or ISO string).
+ * @returns {string|null} `DD-MM-YY` or null.
+ */
+export function formatEthiopianDate(value) {
+  if (!value) {
+    return null;
+  }
+  const eth = gregorianToEthiopian(value instanceof Date ? value : new Date(value));
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${pad(eth.day)}-${pad(eth.month)}-${String(eth.year).slice(-2)}`;
+}

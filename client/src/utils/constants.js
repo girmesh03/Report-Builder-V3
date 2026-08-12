@@ -20,6 +20,20 @@ export const REPORT_STATUSES = Object.freeze([
 ]);
 
 /**
+ * Domain — English status labels (mirror of §11.4; chrome copy,
+ * §7.6). The single label surface for §49.4 and the §46.13 badge —
+ * one occurrence per string (§48.6).
+ * @type {readonly Object<string, string>}
+ */
+export const REPORT_STATUS_LABELS = Object.freeze({
+  draft: 'Draft',
+  audio_attached: 'Audio attached',
+  transcribed: 'Transcribed',
+  reviewed: 'Reviewed',
+  completed: 'Completed',
+});
+
+/**
  * Domain — provider ids (mirror of §11.4).
  * @type {readonly string[]}
  */
@@ -130,6 +144,31 @@ export const TOAST_CATALOGUE = Object.freeze({
   }),
   search: Object.freeze({ noResults: 'No results for "{query}"' }),
 });
+
+/**
+ * Avatar upload constraints (mirror of §11.3, §29 chain).
+ * @type {number}
+ */
+export const AVATAR_MAX_SIZE_BYTES = 5242880;
+
+/**
+ * @type {readonly string[]}
+ */
+export const AVATAR_ALLOWED_MIME_TYPES = Object.freeze([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
+/**
+ * Domain — the official-text token prefix (mirror of §11.3
+ * `OFFICIAL_TOKEN_PREFIX`): marks entitled text the user must not
+ * freely alias (§35.3). The client renders `±` strings verbatim —
+ * never resolves, strips, or translates them (resolution is
+ * server-side at export, §37/§64).
+ * @type {string}
+ */
+export const OFFICIAL_TOKEN_PREFIX = '±';
 
 /**
  * Toast — auto-dismiss durations in ms (§60.5: success 5s, error and
