@@ -87,44 +87,40 @@ export default function ReportCard({
       <Box sx={{ flexGrow: 1 }} />
 
       <Divider />
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography noWrap variant="caption" color="text.secondary">
-            Updated {updatedAt ?? "—"}
-          </Typography>
-        </Box>
-        <Box sx={{ display: "flex", gap: 0.5, flexShrink: 0 }}>
-          <Tooltip title="View">
-            <IconButton size="small" aria-label="View" onClick={() => onView(report)}>
-              <VisibilityIcon sx={{ color: "primary.main", fontSize: 20 }} />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Edit">
-            <IconButton size="small" aria-label="Edit" onClick={() => onEdit(report)}>
-              <EditIcon sx={{ color: "warning.main", fontSize: 20 }} />
-            </IconButton>
-          </Tooltip>
-          {report.isArchived ? (
-            <>
-              <Tooltip title="Restore">
-                <IconButton size="small" aria-label="Restore" onClick={() => onRestore(report)}>
-                  <UnarchiveIcon sx={{ color: "text.secondary", fontSize: 20 }} />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton size="small" aria-label="Delete" onClick={() => onDelete(report)}>
-                  <DeleteIcon sx={{ color: "error.main", fontSize: 20 }} />
-                </IconButton>
-              </Tooltip>
-            </>
-          ) : (
-            <Tooltip title="Archive">
-              <IconButton size="small" aria-label="Archive" onClick={() => onArchive(report)}>
-                <ArchiveIcon sx={{ color: "text.secondary", fontSize: 20 }} />
+      <Typography variant="caption" color="text.secondary">
+        Updated {updatedAt ?? "—"}
+      </Typography>
+      <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
+        <Tooltip title="View">
+          <IconButton size="small" aria-label="View" onClick={() => onView(report)}>
+            <VisibilityIcon sx={{ color: "primary.main", fontSize: 20 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Edit">
+          <IconButton size="small" aria-label="Edit" onClick={() => onEdit(report)}>
+            <EditIcon sx={{ color: "warning.main", fontSize: 20 }} />
+          </IconButton>
+        </Tooltip>
+        {report.isArchived ? (
+          <>
+            <Tooltip title="Restore">
+              <IconButton size="small" aria-label="Restore" onClick={() => onRestore(report)}>
+                <UnarchiveIcon sx={{ color: "text.secondary", fontSize: 20 }} />
               </IconButton>
             </Tooltip>
-          )}
-        </Box>
+            <Tooltip title="Delete">
+              <IconButton size="small" aria-label="Delete" onClick={() => onDelete(report)}>
+                <DeleteIcon sx={{ color: "error.main", fontSize: 20 }} />
+              </IconButton>
+            </Tooltip>
+          </>
+        ) : (
+          <Tooltip title="Archive">
+            <IconButton size="small" aria-label="Archive" onClick={() => onArchive(report)}>
+              <ArchiveIcon sx={{ color: "text.secondary", fontSize: 20 }} />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
     </Card>
   );

@@ -147,7 +147,10 @@ export function Component() {
   const kpis = dashboard?.kpis;
   const charts = dashboard?.charts;
   const totalReports =
-    charts?.statusDistribution?.reduce((sum, row) => sum + (row.count ?? 0), 0) ?? 0;
+    charts?.statusDistribution?.reduce(
+      (sum, row) => sum + (Number.isFinite(row.count) ? row.count : 0),
+      0,
+    ) ?? 0;
 
   const renderKpis = () => (
     <Grid container spacing={2}>
@@ -192,12 +195,16 @@ export function Component() {
     const colors = statusColors(theme);
     const distribution = (charts?.statusDistribution ?? []).map((row) => ({
       id: row.status,
-      value: row.count,
+      value: Number.isFinite(row.count) ? row.count : 0,
       label: REPORT_STATUS_LABELS[row.status] ?? row.status,
       color: colors[row.status] ?? theme.palette.grey[500],
     }));
     const branches = charts?.activityByBranch ?? [];
     const trend = charts?.issuesTrend ?? [];
+    const trendMax = trend.reduce(
+      (max, row) => (Number.isFinite(row.count) && row.count > max ? row.count : max),
+      0,
+    );
 
     return (
       <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -262,7 +269,7 @@ export function Component() {
                     categoryGapRatio: 0.4,
                   },
                 ]}
-                series={[{ data: branches.map((row) => row.count), color: theme.palette.primary.main }]}
+                series={[{ data: branches.map((row) => (Number.isFinite(row.count) ? row.count : 0)), color: theme.palette.primary.main }]}
               />
             ) : (
               <Box sx={{ display: "flex", height: CHART_MIN_HEIGHT, alignItems: "center" }}>
@@ -288,8 +295,8 @@ export function Component() {
                     tickLabelInterval: (_value, index) => index % 5 === 0,
                   },
                 ]}
-                yAxis={[{ min: 0, max: "auto" }]}
-                series={[{ data: trend.map((row) => row.count), color: theme.palette.warning.main, valueFormatter: (value) => (value === null ? null : value) }]}
+                yAxis={[{ min: 0, max: trendMax }]}
+                series={[{ data: trend.map((row) => (Number.isFinite(row.count) ? row.count : null)), color: theme.palette.warning.main, valueFormatter: (value) => (value === null ? null : value) }]}
               />
             ) : (
               <Box sx={{ display: "flex", height: CHART_MIN_HEIGHT, alignItems: "center" }}>
@@ -380,7 +387,6 @@ export function Component() {
   return (
     <Box>
       <MuiPageHeader
-        eyebrow="Overview"
         title="Dashboard"
         subtitle="Your supervision reports at a glance"
         actions={

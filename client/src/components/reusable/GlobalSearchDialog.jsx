@@ -213,7 +213,7 @@ export default function GlobalSearchDialog({ open, onClose }) {
             }
           }}
           sx={{
-            "& input:placeholder-shown ~ .MuiInputAdornment-root .search-clear-btn":
+            "& .MuiInputBase-root input:placeholder-shown ~ .search-clear-btn":
               { visibility: "hidden" },
           }}
           startAdornment={

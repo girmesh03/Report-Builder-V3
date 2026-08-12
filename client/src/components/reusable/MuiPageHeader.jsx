@@ -2,8 +2,11 @@
  * @module components/reusable/MuiPageHeader
  *
  * The standard page header (§46.12) — the §43.2 header-strip motif:
- * eyebrow (small-caps, text.secondary) + title (h4) + optional
- * subtitle; right-side `actions` slot; `mb: 2`; bottom border.
+ * title (h4) + optional subtitle on one line with the right-side
+ * `actions` slot (inline, vertically centered); `mb: 2`; bottom
+ * border. The subtitle is suppressed below `sm` (xs) so the header
+ * stays a single line on phones; no eyebrow exists (removed R3-fix
+ * follow-up).
  */
 import PropTypes from "prop-types";
 import Box from "@mui/material/Box";
@@ -13,14 +16,12 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 
 /**
  * @param {Object} props
- * @param {string} [props.eyebrow] - Small-caps section label.
  * @param {string} props.title - Page title.
- * @param {string} [props.subtitle] - Optional subtitle line.
+ * @param {string} [props.subtitle] - Optional subtitle line (suppressed below sm).
  * @param {ReactNode} [props.actions] - Right-aligned header actions.
  * @param {boolean} [props.hideSubtitle] - Force-hide the subtitle.
  */
 export default function MuiPageHeader({
-  eyebrow,
   title,
   subtitle,
   actions,
@@ -34,7 +35,7 @@ export default function MuiPageHeader({
     <Box
       sx={{
         display: "flex",
-        alignItems: "flex-end",
+        alignItems: "center",
         justifyContent: "space-between",
         gap: 2,
         mb: 2,
@@ -43,21 +44,12 @@ export default function MuiPageHeader({
       }}
     >
       <Box sx={{ minWidth: 0 }}>
-        {eyebrow ? (
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              display: "block",
-              mb: 0.5,
-            }}
-          >
-            {eyebrow}
-          </Typography>
-        ) : null}
-        <Typography variant="h4" component="h1" sx={{ wordBreak: "break-word" }}>
+        <Typography
+          variant="h4"
+          component="h1"
+          noWrap
+          sx={{ maxWidth: "100%", textOverflow: "ellipsis" }}
+        >
           {title}
         </Typography>
         {!hide && subtitle ? (
@@ -72,7 +64,6 @@ export default function MuiPageHeader({
 }
 
 MuiPageHeader.propTypes = {
-  eyebrow: PropTypes.string,
   title: PropTypes.string.isRequired,
   subtitle: PropTypes.string,
   actions: PropTypes.node,

@@ -7838,8 +7838,11 @@ The chain is the single owner of session expiry on the client
    retry succeeds, return its result; if the retry 401s again, fail
    through as expiration.
 5. If refresh fails, the session is expired: clear auth state
-   (`authSlice`), redirect to `/login` (§41.5), and fail the
-   original request without a toast. The expiry redirect applies
+   (`authSlice`), landing on `/login` — the **§41.5 guard
+   redirect** (clearing the slice makes `ProtectedRoute` navigate;
+   no full-page reload, so the dev adapter's auto-auth never
+   double-hops) — and fail the original request without a toast.
+   The expiry landing applies
    to an **authenticated** session whose credentials just died
    (authenticated → request → 401 → one retry → on failure,
    session cleared, landing on `/login`); anonymous and
@@ -7996,8 +7999,7 @@ import primitives directly). Semantic roles (normative):
 shadow, §44.6), hairline dividers, a single-document content spine
 on md+ (details, wizard, report views) and stacked cards on xs–sm;
 the app-bar and sidebar are the only fixed chrome (§47). The
-"header strip" motif — a hairline rule above a small-caps eyebrow
-and a title — is the standard page-header treatment (§46.12) and
+"header strip" motif — a hairline rule above a title — is the standard page-header treatment (§46.12) and
 mirrors the report's own line structure without imitating its
 Amharic labels (§7.6 — chrome copy is English).
 
@@ -8383,7 +8385,10 @@ The page matrices state which controls hide labels when.
 ### 45.6 Dialog & popover modes
 
 - `MuiDialog` renders fullscreen when `down('sm')` **or**
-  (`down('md')` + landscape) — the §46.3 responsive contract.
+  (`down('md')` + landscape) — the §46.3 responsive contract. The
+  fullscreen paper carries **no border radius** (the theme's
+  `MuiDialog-paperFullScreen` sets `borderRadius: 0`, overriding the
+  dialog's 10px on the centered paper).
 - Menu/popovers (`MuiSelect` dropdown, avatar menu, export menu)
   render as anchored popovers above 600px and as bottom sheets or
   full-width lists below 600px per the §46 contracts.
@@ -8607,7 +8612,12 @@ in bold), states, and responsive behavior. Forms bind through the
 - **Contract:** page size comes from the owning list
   (`PAGINATION_DEFAULT_LIMIT` 10 / `PAGINATION_MAX_LIMIT` 100,
   §11.5); the grid's `MuiDataGrid` owns its own footer (§46.8).
-- **Responsive:** compact page buttons below 600px (§44.5).
+- **Responsive:** compact page buttons below 600px (§44.5) —
+  `size="small"` with `boundaryCount={0}`; the button row wraps
+  (the v9 `.MuiPagination-ul` already sets `flexWrap: wrap`) and is
+  centered via the `.MuiPagination-ul` class — **`slotProps` is not
+  used** (v9 Pagination has no `slots`/`slotProps` support and would
+  forward it to the root `<nav>` DOM element).
 
 ### 46.8 MuiDataGrid
 
@@ -8694,11 +8704,17 @@ in bold), states, and responsive behavior. Forms bind through the
 
 - **File:** `components/reusable/MuiPageHeader.jsx`.
 - **Purpose:** the standard page header — the §43.2 header-strip
-  motif: eyebrow (small-caps, `text.secondary`) + title (h4) +
-  optional subtitle; right-side `actions` slot; `mb: 2`; bottom
-  border 1px solid divider.
-- **Props:** `eyebrow`, `title`, `subtitle`, `actions`,
-  `hideSubtitle` (auto: subtitle hidden below 600px portrait).
+  motif: title (h4) + optional subtitle on one line with the
+  right-side `actions` slot (inline, vertically centered); `mb: 2`;
+  bottom border 1px solid divider. No eyebrow exists (removed in the
+  R3-fix follow-up).
+- **One-line rule:** the header is always a single row — the title
+  is `noWrap` with an ellipsis (`maxWidth: 100%`) so a long title
+  truncates instead of wrapping or crowding the actions; the
+  `actions` slot is `flexShrink: 0` at the right end.
+- **Props:** `title`, `subtitle`, `actions`,
+  `hideSubtitle` (auto: subtitle hidden below 600px portrait — the
+  header stays a single line on xs).
 - **States:** default only — loading/empty/error belong to the
   page sections.
 
@@ -8756,7 +8772,11 @@ in bold), states, and responsive behavior. Forms bind through the
   fires the search); React Hook Form `register('search')` —
   **typing renders nothing**: the field is uncontrolled and the
   clear button's visibility flips natively via the
-  `input:placeholder-shown` pseudo-class (empty input →
+  `input:placeholder-shown` pseudo-class (the dialog's adornments
+  are unwrapped `IconButton`s — no `InputAdornment` element — so
+  the rule targets the clear button itself as the later sibling of
+  the input inside `.MuiInputBase-root`: `input:placeholder-shown ~
+  .search-clear-btn` → empty input →
   `visibility: hidden` on the reserved slot, no re-render, no
   layout shift); search fires on Enter or on click of the action —
   **no debounce** (§9.6); results grouped by entity
@@ -9120,8 +9140,7 @@ surfaces via the §60 toast only on the destination.
 **Purpose & composition.** Session entry; also the target of the
 §41.5 guard redirect (`state.from`) and the §42 expiry redirect.
 Composition: centered card (paper surface, §43.2/§44.6) inside
-PublicLayout; page header eyebrow "Welcome back" + title "Log in"
-(§46.12); the `LoginForm`; the OAuth entry; the sign-up link
+PublicLayout; page header title "Log in" (§46.12); the `LoginForm`; the OAuth entry; the sign-up link
 (§48.5).
 
 **`LoginForm` (full specification — the §46.2 form pattern):**
@@ -9181,8 +9200,8 @@ decision anywhere — not added).
 **Purpose & composition.** Self-service registration (F1); the
 form collects **only `email` and `password`** (§3.2.2, §19.2) plus
 a confirm-password field on the client side. Composition: same
-centered card pattern; eyebrow "Create your account" + title
-"Sign up"; `RegisterForm`; OAuth entry; login link (§48.5).
+centered card pattern; header title "Sign up";
+`RegisterForm`; OAuth entry; login link (§48.5).
 
 **`RegisterForm`:**
 
@@ -9281,8 +9300,7 @@ finish", which the Reports list answers only after navigation.
 ### 49.2 Page composition
 
 Order (top to bottom) inside AppShell's Outlet (§47.3), with the
-per-page header first (§46.12): eyebrow "Overview", title
-"Dashboard", subtitle "Your supervision reports at a glance";
+per-page header first (§46.12): title "Dashboard", subtitle "Your supervision reports at a glance";
 `actions` slot hosts the primary action — "New report" (contained,
 success — the §46.3 create color, owner decision) → `/reports/new`
 (§52). Then: **KPIs** — Row of four
@@ -9324,7 +9342,10 @@ never from client-side datasets (ADR-034):
   active branch snapshot name (top N per the §38 contract).
 - **Issues trend** — a line of issue-related count over the recent
   days the §38 contract provides (the §6.11 vocabulary when
-  authored — pending contract).
+  authored — pending contract). The line's y-domain is **explicit**
+  (`min: 0`, `max` = the finite payload maximum) — never
+  `"auto"` — and every series value is finite-guarded (non-finite →
+  `null` gap), so a NaN path (`<path> attribute d`) is impossible.
 
 Charts degrade to the §60 empty state when their series is empty,
 and show a compact loading skeleton while pending (§49.6).
@@ -9350,7 +9371,7 @@ and show a compact loading skeleton while pending (§49.6).
 
 | Region | xs | sm | md | lg | lg+ |
 |---|---|---|---|---|---|
-| Page header | eyebrow+title stacked | same | actions inline right | inline right | inline right |
+| Page header | title + actions inline (no subtitle) | title + subtitle + actions inline right | actions inline right | inline right | inline right |
 | KPI cards | 1 column (stacked) | 2 columns | 4 columns | 4 columns | 4 columns |
 | Charts | stacked (1 column each) | 1 column | status donut + bars side by side, trend below full-width | 3 per grid row, equal thirds | equal thirds |
 | Latest reports | list rows (compact) | list rows | list rows | list rows | list rows |
@@ -9403,15 +9424,17 @@ there is no separate list page (§15.8).
 
 ### 50.2 Page composition
 
-Inside AppShell (§47.3), with page header first (§46.12): eyebrow
-"Reports", title "Reports", subtitle "Your daily supervision
+Inside AppShell (§47.3), with page header first (§46.12): title
+"Reports", subtitle "Your daily supervision
 reports" — **the header renders on md+ only** (below md the app-bar
-already owns the chrome; the page never repeats it). Then a single
-**action button group** (§46.3) owns the actions band in the
-header's place: **Filter** (start icon with the active-filter
-count badge), **List** / **Cards** (the §50.3 view toggle —
-md+ only), **Create** (contained, success — the §46.3 create
-color → `/reports/new`), every button icon + text. Beneath it
+already owns the chrome; the page never repeats it). The **action
+button group** (§46.3) sits **inside the header's `actions` slot on
+md+** — one line: title + **Filter** (start icon with the
+active-filter count badge), **List** / **Cards** (the §50.3 view
+toggle — md+ only), **Create** (contained, success — the §46.3
+create color → `/reports/new`), every button icon + text; **below md
+the group holds Filter + Create only and is right-aligned on its own
+row**. Beneath it
 the `MuiDataGrid` (§50.4, md+) or the card grid (§50.5 — the only
 view below md, 1/2/3 columns).
 
@@ -9469,7 +9492,11 @@ tooltips, §45.3/§46.8).
 branch snapshot names (ellipsized), `MuiStatusBadge`, Updated
 caption, and the same action icon row as
 §50.4 (§46.8 icon styling) — **no owner/supervisor caption**
-(per-user model §9). Grid: responsive Grid (`size` prop,
+(per-user model §9). The Updated caption sits on its own line,
+  and the action icon row renders on the line below it,
+  right-aligned — the two never share a row, so no overlap is
+  possible. Grid: responsive
+Grid (`size` prop,
 §46.2) — 1 column xs, 2 columns sm, 3 columns md, 4 columns
 lg; cards are not selectable (selection is a grid-mode feature,
 §50.7).
@@ -9590,9 +9617,9 @@ conversation.
 
 ### 51.2 Composition & header
 
-Inside AppShell (§47.3), page header first (§46.12): eyebrow
-"Report", title "Daily Report — {`reportDate` as `DD-MM-YY`}"
-(falls back to "New report" while uncaptured), subtitle =
+Inside AppShell (§47.3), page header first (§46.12): title
+"Daily Report — {`reportDate` as `DD-MM-YY`}" (falls back to "New
+report" while uncaptured), subtitle =
 `supervisorName` snapshot (§21.2, the `ስም` value — called by its
 chrome label "Supervisor"); `actions` slot per §51.5. Below the
 header, a **status band**: `MuiStatusBadge` (§46.13) + the
@@ -10330,8 +10357,8 @@ and F2 names branch management as a first-class capability.
 
 ### 56.2 Page composition
 
-Inside AppShell (§47.3), page header first (§46.12): eyebrow
-"Branches", title "Branches", subtitle "Your supervision
+Inside AppShell (§47.3), page header first (§46.12): title
+"Branches", subtitle "Your supervision
 branches"; `actions` slot: **"New branch"** (contained, §46.3)
 which opens the branch create dialog (§56.4). Below: the filter
 band and the `MuiDataGrid` (§56.3).
@@ -10384,7 +10411,7 @@ branch's identity, its reports, and its analytics — reached from
 the Branches grid (Name link, §56.3) and from global search
 results (§59.3). Inside AppShell (§47.3):
 
-1. **Page header** (§46.12): eyebrow "Branches", title = the
+1. **Page header** (§46.12): title = the
    branch `name`, subtitle = `location` with the `MuiStatusBadge`
    (`branchActive` — "Active" / "Archived", §46.13); no actions
    slot (edit/archive/delete stay on the grid rows of `/branches`,
@@ -10494,8 +10521,8 @@ control part of the register-model (§3.2.2, §19).
 
 ### 57.2 Page composition
 
-Inside AppShell (§47.3), page header first (§46.12): eyebrow
-"Profile", title "Profile", subtitle "Your account details";
+Inside AppShell (§47.3), page header first (§46.12): title
+"Profile", subtitle "Your account details";
 `actions` slot: **"Logout"** (outlined, §46.3) — §57.5. Body:
 a profile card (§44.6) with the avatar and identity, the profile
 form (§57.3), and the sessions card (§57.4).
@@ -12004,7 +12031,14 @@ end-to-end through a **client-side development mock adapter**:
   wins; registered accounts are in-memory only, so their sessions
   live for the page-load and are replaced by the seeded auto-auth
   on the next reload; real login/register flows stay reachable
-  after an explicit logout. (2) **Report list default** — `GET
+  after an explicit logout. The adapter's session TTL knobs mirror
+  the §28 constants (`ACCESS_TOKEN_TTL_MIN` = 15 min,
+  `REFRESH_TOKEN_TTL_DAYS` = 7 days) so daily development stays
+  continuously authenticated — page-to-page navigation never
+  churns the reauth chain and the refresh never dies mid-session
+  (the older 30s access knob existed to demo the chain; the §63
+  walk is still exercisable by temporarily lowering
+  `accessTokenTtlMs`). (2) **Report list default** — `GET
   /reports` returns **all** rows of the user when `isArchived` is
   absent (explicit `"true"`/`"false"` still filter), so archived
   rows and their Restore/Delete actions are exercisable before the

@@ -30,7 +30,12 @@ export default function MuiPagination({ page, count, onChange, disabled = false 
       disabled={disabled}
       size={isCompact ? "small" : "medium"}
       shape="rounded"
-      sx={{ display: "flex", justifyContent: "center", py: 2 }}
+      boundaryCount={isCompact ? 0 : 1}
+      siblingCount={1}
+      sx={{
+        py: 2,
+        "& .MuiPagination-ul": { justifyContent: "center" },
+      }}
     />
   );
 }

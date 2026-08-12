@@ -4,7 +4,9 @@
  * The only dialog wrapper (§44.4, §46.10). MuiConfirmDialog and the
  * date picker's mobile mode build on it; GlobalSearchDialog is the one
  * standalone exception (§46.15). Fullscreen below 600px or below 900px
- * in landscape (§45.6).
+ * in landscape (§45.6) — the slide-up transition rides MUI v9's
+ * `transition` slot (the legacy `TransitionComponent` prop leaks to
+ * the DOM root and is not used).
  */
 import PropTypes from "prop-types";
 import Dialog from "@mui/material/Dialog";
@@ -54,7 +56,7 @@ export default function MuiDialog({
       fullScreen={fullscreen}
       maxWidth={maxWidth}
       fullWidth={fullWidth}
-      TransitionComponent={fullscreen ? SlideTransition : undefined}
+      slots={{ transition: fullscreen ? SlideTransition : undefined }}
       disableEnforceFocus
       disableRestoreFocus
       slotProps={{

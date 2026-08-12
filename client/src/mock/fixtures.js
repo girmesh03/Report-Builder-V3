@@ -59,15 +59,19 @@ export const MOCK_USERS = deepFreeze([
 /**
  * Adapter behaviour knobs (fixture data, documented): a short latency
  * so loading states and the §42.3 chain are observable in the
- * exit-gate walk; the access token expires after 30s so the reauth
- * walk is practical; the refresh token outlives it by far (session
- * continuity per §28.2).
+ * exit-gate walk. The token TTLs mirror the real §28 constants
+ * (`ACCESS_TOKEN_TTL_MIN` = 15 min, `REFRESH_TOKEN_TTL_DAYS` = 7
+ * days) so daily development stays continuously authenticated —
+ * navigation never churns the reauth chain and the refresh never
+ * dies mid-session (owner decision, R3-fix follow-up). The reauth
+ * walk is still exercisable by temporarily lowering
+ * `accessTokenTtlMs`.
  * @type {readonly Object<string, number>}
  */
 export const MOCK_ADAPTER = deepFreeze({
   latencyMs: 250,
-  accessTokenTtlMs: 30000,
-  refreshTokenTtlMs: 3600000,
+  accessTokenTtlMs: 15 * 60 * 1000,
+  refreshTokenTtlMs: 7 * 24 * 60 * 60 * 1000,
 });
 
 /**

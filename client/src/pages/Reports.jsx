@@ -2,11 +2,12 @@
  * @module pages/Reports
  *
  * The §50 Reports page — the management surface of the daily
- * workflow. On md+ the header (§46.12) introduces the page, then a
- * single action button group (Filter with an active-count badge,
- * List/Cards view toggle, Create) replaces the old select row and
- * toggle. Below md the page header and the List/Cards buttons are
- * absent — the group holds only Filter + Create and the view is
+ * workflow. On md+ the header (§46.12) introduces the page with the
+ * action button group inline on the same line (Filter with an
+ * active-count badge, List/Cards view toggle, Create — all
+ * icon+text, right-aligned). Below md the page header and the
+ * List/Cards buttons are absent — the group holds only Filter +
+ * Create and is right-aligned on its own row; the view is
  * cards only (1 column xs, 2 sm, 3 md, 4 lg). Filter opens a
  * provisional dialog: the filter feature itself is TBD (OQ-009 —
  * what to filter, single vs multi branch, pagination, date vs
@@ -295,77 +296,73 @@ export function Component() {
     },
   };
 
+  const actionGroup = (
+    <ButtonGroup size="medium" variant="outlined" aria-label="Report actions">
+      <MuiButton
+        variant="outlined"
+        startIcon={
+          <Badge
+            badgeContent={0}
+            color="primary"
+            showZero={false}
+            sx={{
+              "& .MuiBadge-badge": {
+                fontSize: 10,
+                height: 18,
+                minWidth: 18,
+                lineHeight: "18px",
+              },
+            }}
+          >
+            <FilterListIcon fontSize="small" />
+          </Badge>
+        }
+        onClick={() => setFilterOpen(true)}
+      >
+        Filter
+      </MuiButton>
+      {!isBelowMd && (
+        <>
+          <MuiButton
+            variant={mode === "list" ? "contained" : "outlined"}
+            startIcon={<ViewListIcon fontSize="small" />}
+            onClick={() => setMode("list")}
+          >
+            List
+          </MuiButton>
+          <MuiButton
+            variant={mode === "cards" ? "contained" : "outlined"}
+            startIcon={<ViewModuleIcon fontSize="small" />}
+            onClick={() => setMode("cards")}
+          >
+            Cards
+          </MuiButton>
+        </>
+      )}
+      <MuiButton
+        variant="contained"
+        color="success"
+        startIcon={<AddIcon fontSize="small" />}
+        onClick={() => navigate("/reports/new")}
+      >
+        Create
+      </MuiButton>
+    </ButtonGroup>
+  );
+
   return (
     <Box>
-      {isBelowMd ? null : (
+      {isBelowMd ? (
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+          {actionGroup}
+        </Box>
+      ) : (
         <MuiPageHeader
-          eyebrow="Reports"
           title="Reports"
           subtitle="Your daily supervision reports"
+          actions={actionGroup}
         />
       )}
-
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 1.5,
-          mb: 2,
-        }}
-      >
-        <ButtonGroup size="medium" variant="outlined" aria-label="Report actions">
-          <MuiButton
-            variant="outlined"
-            startIcon={
-              <Badge
-                badgeContent={0}
-                color="primary"
-                showZero={false}
-                sx={{
-                  "& .MuiBadge-badge": {
-                    fontSize: 10,
-                    height: 18,
-                    minWidth: 18,
-                    lineHeight: "18px",
-                  },
-                }}
-              >
-                <FilterListIcon fontSize="small" />
-              </Badge>
-            }
-            onClick={() => setFilterOpen(true)}
-          >
-            Filter
-          </MuiButton>
-          {!isBelowMd && (
-            <>
-              <MuiButton
-                variant={mode === "list" ? "contained" : "outlined"}
-                startIcon={<ViewListIcon fontSize="small" />}
-                onClick={() => setMode("list")}
-              >
-                List
-              </MuiButton>
-              <MuiButton
-                variant={mode === "cards" ? "contained" : "outlined"}
-                startIcon={<ViewModuleIcon fontSize="small" />}
-                onClick={() => setMode("cards")}
-              >
-                Cards
-              </MuiButton>
-            </>
-          )}
-          <MuiButton
-            variant="contained"
-            color="success"
-            startIcon={<AddIcon fontSize="small" />}
-            onClick={() => navigate("/reports/new")}
-          >
-            Create
-          </MuiButton>
-        </ButtonGroup>
-      </Box>
 
       {isError ? (
         <ListErrorContent message={error?.message} onRetry={refetch} />

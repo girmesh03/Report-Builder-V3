@@ -4,8 +4,8 @@
  * The §48.3 Login page (`/login`) — guests only (PublicRoute,
  * §41.5): the centered paper card (surface role, §43.2/§44.6 —
  * the spec's paper card is kept here; the scaffold ban affects the
- * 404 only) with the header-strip eyebrow "Welcome back" + title
- * "Log in" (§46.12), `LoginForm`, the shared OAuth entry, and the
+ * 404 only) with the header-strip title "Log in" (§46.12), `LoginForm`,
+ * the shared OAuth entry, and the
  * sign-up link. Also the converge point of the §41.5 guard redirect
  * (`state.from`) and of the §42 expiry redirect — an expiry arrival
  * never toasts (401 silent-rule, §42.3). From lg a static brand
@@ -53,7 +53,7 @@ export function Component() {
             borderColor: "divider",
           }}
         >
-          <MuiPageHeader eyebrow="Welcome back" title="Log in" />
+          <MuiPageHeader title="Log in" />
           <LoginForm from={from} />
           <Box sx={{ mt: 2 }}>
             <GoogleOAuthButton />

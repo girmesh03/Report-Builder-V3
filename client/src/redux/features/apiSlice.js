@@ -54,9 +54,12 @@ let refreshPromise = null;
  * (the §42.3 retry marker; also the refresh call itself, and the
  * login mutation whose 401 is a rejection, §48.3) pass through.
  *
- * Redirect only fires for an authenticated session that just died:
- * an anonymous boot probe (auth state `initializing`/`guest`) fails
- * through silently so public pages never bounce to `/login`.
+ * The expiry landing is the §41.5 guard redirect: the chain clears
+ * auth state (making ProtectedRoute navigate to `/login`) — no
+ * full-page reload. Expiry clearing only applies to an
+ * authenticated session that just died: an anonymous boot probe
+ * (auth state `initializing`/`guest`) fails through silently so
+ * public pages never bounce to `/login`.
  *
  * @param {Object} args - fetchBaseQuery-style request args.
  * @param {Object} api - RTK Query baseQuery api.
@@ -101,12 +104,14 @@ const baseQueryWithReauth = async (args, api, extraOptions = {}) => {
 
 /**
  * Session-expiry landing (§42.3 step 5): clear the auth slice and
- * redirect to `/login` — silent, never a toast.
+ * let the §41.5 guard redirect to `/login` — silent, never a toast,
+ * no full-page reload (a reload would re-boot the app and, in the
+ * dev adapter, bounce through auto-auth back to the protected
+ * branch — the "here and there" loop).
  * @param {Object} api - RTK Query baseQuery api.
  */
 const expireSession = (api) => {
   api.dispatch({ type: AUTH_SESSION_EXPIRED });
-  window.location.assign("/login");
 };
 
 /**

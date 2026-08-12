@@ -44,7 +44,9 @@
  * authentication; an explicit logout clears the mirror until the
  * next reload. Within a page load the TTL semantics are unchanged:
  * an expired access token still 401s and the §42.3 reauth chain
- * ends on /login once the refresh TTL passes. Everything guarded
+ * rotates it; a genuinely expired refresh (TTLs mirror the §28
+ * constants, fixtures.js) fails through and the §41.5 guard lands
+ * on /login — no full-page reload. Everything guarded
  * for environments without `localStorage` (node runs, hardened
  * browsers); the key dies with the adapter at P7.
  */
@@ -293,11 +295,14 @@ const startSession = () => {
  * Starts (or replaces) the active session for a user and mirrors
  * the COMPLETE session — `userId` included — to storage (§66.10):
  * the mirror is an exact copy of the live session, so a reload can
- * restore and authenticate it (the old code persisted before the
- * `userId` merge, so the mirror could never authenticate again).
+ * restore and authenticate it. `activeSession` must be the merged
+ * object — `startSession()` assigns the userId-less base, so the
+ * merge is written back or every in-memory lookup (`sessionUser`,
+ * the refresh handler) would fail to find the user and 401-loop.
  */
 const startSessionForUser = (user) => {
   const session = { ...startSession(), userId: user._id };
+  activeSession = session;
   persistSession(session);
   return session;
 };
@@ -313,39 +318,31 @@ const startSessionForUser = (user) => {
  * Dies with the adapter at P7.
  */
 const startDevSessionIfNeeded = () => {
-  console.error("[r3debug] boot: activeSession=", activeSession, "users=", users.length);
   const hasLiveSession =
     activeSession &&
     activeSession.refresh &&
     Date.now() <= activeSession.refresh.expiresAt &&
     users.some((entry) => entry._id === activeSession.userId);
-  console.error("[r3debug] boot: hasLiveSession=", hasLiveSession);
   if (hasLiveSession) {
     return;
   }
   const seededUser = users[0];
-  console.error("[r3debug] boot: seeding user=", seededUser?._id);
   if (!seededUser) {
     return;
   }
   startSessionForUser(seededUser);
-  console.error("[r3debug] boot: after start, activeSession=", activeSession?._id);
 };
 
 startDevSessionIfNeeded();
 
 const sessionUser = () => {
   if (!activeSession) {
-    console.error("[r3debug] sessionUser: no active session");
     return null;
   }
   if (Date.now() > activeSession.access.expiresAt) {
-    console.error("[r3debug] sessionUser: access expired", activeSession.access.expiresAt, Date.now());
     return null;
   }
-  const found = users.find((user) => user._id === activeSession.userId) ?? null;
-  console.error("[r3debug] sessionUser: found=", found?._id);
-  return found;
+  return users.find((user) => user._id === activeSession.userId) ?? null;
 };
 
 /** Auth gate for every domain route (BR-13 scoping). */
