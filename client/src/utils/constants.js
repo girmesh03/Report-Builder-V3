@@ -182,3 +182,35 @@ export const TOAST_AUTO_DISMISS_MS = Object.freeze({
   error: 8000,
   warning: 8000,
 });
+
+/**
+ * Pickers — display formats (§46.6): the Ethiopian date picker shows
+ * `DD-MM-YY` (the adapter re-maps the tokens to Ethiopian parts) and
+ * the time picker shows 24h `HH:mm` (the print convention, §43.6).
+ * @type {string}
+ */
+export const PICKER_DATE_FORMAT = 'DD-MM-YY';
+export const PICKER_TIME_FORMAT = 'HH:mm';
+
+/**
+ * Pickers — English chrome labels of the Ethiopian months (§43.6,
+ * ADR-011): the 13 months map to English month names; Pagume renders
+ * as "Pagume" and never as a Gregorian equivalent. Indexed by
+ * Ethiopian month − 1.
+ * @type {readonly string[]}
+ */
+export const ETHIOPIAN_MONTH_LABELS = Object.freeze([
+  'September',
+  'October',
+  'November',
+  'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'Pagume',
+]);

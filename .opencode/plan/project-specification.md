@@ -2253,6 +2253,9 @@ by the UI:
 | `AI_MODELS`           | §11.4                | §54     |
 | `AI_REASONING_EFFORTS`| §11.4                | §54     |
 | `PAGINATION_*`        | §11.3                | §50     |
+| `PICKER_DATE_FORMAT`  | §46.6 (`DD-MM-YY`)   | §46.6   |
+| `PICKER_TIME_FORMAT`  | §46.6 (`HH:mm`)      | §46.6   |
+| `ETHIOPIAN_MONTH_LABELS` | §43.6 (English chrome) | §46.6 |
 | `AUDIO_*`             | §11.3 (MIME list)    | §53     |
 | `AVATAR_*`            | §11.3 (max size, MIME list) | §57 |
 | `OFFICIAL_TOKEN_PREFIX` | §11.3              | §51, §53, §58 |
@@ -3169,7 +3172,8 @@ client/
     |   |-- layout/                          # PublicLayout, AppShell, AppSidebar, PublicRoute,
     |   |                                    #   ProtectedRoute, Logo, ThemeToggle, AvatarMenu (§47)
     |   |-- reusable/                        # Mui* belt (§46), one file per component: MuiButton,
-    |   |                                    #   MuiTextField, MuiSelect, MuiDatePicker (+MuiTimePicker),
+    |   |                                    #   MuiTextField, MuiSelect, MuiDatePicker, MuiTimePicker,
+    |   |                                    #   PickerButtonField (shared slots.field trigger, §46.6),
     |   |                                    #   MuiPagination, MuiDataGrid, MuiConfirmDialog, MuiDialog,
     |   |                                    #   MuiEmptyState, MuiAppbar, MuiPageHeader, MuiStatusBadge, MuiAudioPlayer,
     |   |                                    #   MuiRecorder, MuiFileInput, MuiStatCard, MuiStepper,
@@ -8545,26 +8549,66 @@ in bold), states, and responsive behavior. Forms bind through the
 ### 46.6 MuiDatePicker & `ethiopianDate.js`
 
 - **Files:** `components/reusable/MuiDatePicker.jsx`,
-  `utils/ethiopianDate.js` and `utils/ethiopianDateAdapter.js`
-  (§15.5).
+  `components/reusable/MuiTimePicker.jsx`,
+  `components/reusable/PickerButtonField.jsx` (the shared
+  `slots.field` button trigger), `utils/ethiopianDate.js` and
+  `utils/ethiopianDateAdapter.js` (§15.5, amended 2026-08-14).
 - **Purpose:** the Ethiopian-calendar date picker with English
   day/month names (§43.6, ADR-011/ADR-032) — built on
   `@mui/x-date-pickers` community (no Pro features). When the
-  section needs a time value, the same component file renders the
-  matching `MuiTimePicker` behavior — a 12h AM/PM input surface
-  (`h:mm A`): selecting 12:00 keeps 12:00 with an explicit meridiem
-  on the dial; the stored dayjs value stays absolute, so domain
-  rendering keeps the 24h `HH:mm` convention (§43.6).
+  section needs a time value, the separate `MuiTimePicker.jsx`
+  renders the matching behavior — a **24h `HH:mm` input
+  surface** (amended 2026-08-14: `format="HH:mm"`; the clock runs
+  the **24h hour view** (`ampm={false}` — the v9 default is the
+  12h `h:mm A` dial, where tapping "12" with the AM meridiem
+  yields `00:00`), so tapping "12" yields `12:00`, never `00:00`;
+  the stored dayjs value stays absolute, so domain
+  rendering keeps the 24h `HH:mm` convention (§43.6)).
 - **Field display** (`utils/ethiopianDateAdapter.js`, §15.5): the
-  picker runs its own `LocalizationProvider` with
-  `EthiopianDateAdapter extends AdapterDayjs`, which re-maps the
+  app runs a **single** `LocalizationProvider` at the entry
+  (`main.jsx`, §41.4) with `EthiopianDateAdapter extends
+  AdapterDayjs` — the pickers render no provider of their own
+  (amended 2026-08-14). The adapter re-maps the
   `DD`/`MM`/`YY`/`YYYY` section tokens to the Ethiopian parts
   (v9 formats each field section per token —
-  `buildSectionsFromFormat`). The field therefore shows the
+  `buildSectionsFromFormat`); every other token (time,
+  separators, placeholders) behaves like the base adapter. The
+  field therefore shows the
   Ethiopian `DD-MM-YY` (e.g. `12-05-18`), never the Gregorian
   equivalent; the internal value and the day grid keep the
   proleptic-Gregorian-equivalent model, and typed section edits
   operate on that internal model (§43.6).
+- **Button field (amended 2026-08-14, step-1 contract).** Both
+  pickers render a **button-style field** through the v9
+  custom-field seam **`slots.field`**, following MUI's official
+  dashboard template pattern (`CustomDatePicker.js`, v9.3.1): the
+  shared field component (`PickerButtonField`, `component="div"` +
+  `role="button"`) splits its props with
+  `useSplitFieldProps(props, valueType)` ('date'/'time'), reads
+  `value`, `fieldFormat`, `disabled`/`readOnly`, `triggerStatus`,
+  the `triggerRef`/`rootRef` pair and the actions (`setOpen`,
+  `clearValue`) from `usePickerContext()`, and shows the
+  empty-state text from `useParsedFormat()`. The field hooks
+  (`useField`) never mount — no section list and no adornment
+  wiring — so the desktop/mobile pickers forward only root
+  `data-*`/`aria-*` props plus the merged `slots`/`slotProps`
+  (internal `ownerState` stripping happens inside the pickers).
+  The open-picker icon sits at the **start**
+  (`CalendarTodayRounded` for date, `AccessTimeRounded` for
+  time), the clear icon (`CloseRounded`) at the end and **only
+  while a value exists** — clearing calls
+  `pickerContext.clearValue()` which emits `onChange(null)` (the
+  Controller contract); the end-icon wrapper is pushed flush to
+  the button's right edge (`marginLeft: auto`, `marginRight: 0`)
+  instead of hugging the label (amended 2026-08-14);
+  Enter/Space on the button open the picker like a native button;
+  the trigger ref forks `triggerRef` + `rootRef` for popper
+  anchoring and outside-click detection. Both icons are the §43.6
+  chrome of §11.1's toolbar set. Stable
+  `DateButtonField`/`TimeButtonField` wrappers pin the `valueType`
+  (no inline slot arrows). (Amended 2026-08-14: replaces the
+  retired `slots.textField` seam and the invisible
+  `PickersSectionList` hack.)
 - **Conversion contract** (`ethiopianDate.js`):
   `ethiopianToGregorian(ethDate) → JS Date` and
   `gregorianToEthiopian(jsDate) → { day, month, year }` — a
@@ -8573,18 +8617,26 @@ in bold), states, and responsive behavior. Forms bind through the
   chrome headers (§43.6); input/display value `DD-MM-YY` numeric.
 - **Props:** `value`, `onChange` (value arrives via the picker's
   custom onChange — **`Controller` is required**, with a
-  justification comment, §46.2), `label`, `size` (**small**, into
-  the TextField slot), `views` (day/month/year if the owning form
+  justification comment, §46.2), `label`, `size` (**small** —
+  accepted for consumer parity; the button trigger is always
+  small), `views` (day/month/year if the owning form
   narrows modes — §52.3; the §50 filter date range waits on
-  OQ-009), `startAdornment`/
-  `endAdornment` (merged into the TextField's input slot),
+  OQ-009),
   `slotProps` (user values merge under the picker's own —
   contract fields win; the picker forces
   `desktopTrapFocus.disableEnforceFocus` and `dialog.disableEnforceFocus`
-  — the focus-trap fight fix, §46.6), `slots` (the Ethiopian
-  `CalendarHeader` mounts via `slots.calendarHeader` — the v9
-  API; user `slots` win), `disabled`, `error`/
-  `helperText`; `forwardRef` on both pickers.
+  — the focus-trap fight fix, §46.6; `slotProps.field` reaches
+  the button field — placeholder, error), `slots` (the Ethiopian
+  `CalendarHeader` mounts via `slots.calendarHeader` and the
+  `DateButtonField`/`TimeButtonField` via `slots.field` — the v9
+  API; user `slots` win), `disabled`, `error` (reaches the field
+  via `slotProps.field` — the picker's validation extraction does
+  not forward it; `helperText` is dropped — no room on a button);
+  `forwardRef` on both pickers. The retired
+  `openPickerButtonPosition`/`clearable`/`slotProps.textField`
+  props and the `startAdornment`/`endAdornment` wrapper props are
+  gone — the open/clear icons are picker-owned (amended
+  2026-08-14).
 - **CalendarHeader interaction:** the Ethiopic chrome label shows
   the Ethiopian month name + year and behaves exactly like v9's
   `handleToggleView` — 2 views → the other view, 3+ views →
@@ -8598,7 +8650,8 @@ in bold), states, and responsive behavior. Forms bind through the
   (popper mode); below 900px renders `MobileDatePicker` (dialog
   mode, fullscreen below 600px per §45.6).
 - **States:** empty (placeholder `DD-MM-YY`), invalid input
-  (error + helperText), focused, disabled; the §29 validators
+  (error — the `error.main` border tint of §46.1), focused,
+  disabled; the §29 validators
   remain the server-side authority (this component is the client
   input surface only).
 
@@ -8632,7 +8685,11 @@ in bold), states, and responsive behavior. Forms bind through the
   `getRowId={(row) => row._id}` (key doctrine §9.3 — never an
   `id` field),
   `paginationMode="server"`, `page`, `pageSize`, `onPaginationModelChange`, `onRowClick`, `checkboxSelection` (**true**),
-  `disableRowSelectionOnClick` (**true**), `onSelectionModelChange`,
+  `disableRowSelectionOnClick` (**true**), `rowSelectionModel`,
+  `onSelectionModelChange` (the wrapper boundary keeps the **array
+  form** and internally translates to the v9 `{ type, ids }`
+  model, which is the only shape v9.11 accepts — amended
+  2026-08-14),
   `slots`, `slotProps` (the v9 built-in toolbar's options —
   `csvOptions`, `printOptions.disableToolbarButton`), `sx`
   (default height 400, overridable); `pageSizeOptions={[10, 25, 50,

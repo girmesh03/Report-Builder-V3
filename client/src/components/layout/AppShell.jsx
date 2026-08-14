@@ -91,9 +91,9 @@ export default function AppShell({ children }) {
         <MuiAppbar variant="protected" leading={leading} actions={actions} />
         <Box sx={{ flexGrow: 1, overflowY: "auto", p: { xs: 1, md: 3 } }}>
           {navigation.state === "loading" ? (
-            <LoadingSpinner message="Loading…" minHeight="100%" />
+            <LoadingSpinner message="Navigating..." minHeight="100%" />
           ) : (
-            children ?? <Outlet />
+            (children ?? <Outlet />)
           )}
         </Box>
       </Box>

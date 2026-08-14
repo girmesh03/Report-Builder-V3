@@ -14,7 +14,7 @@
  *   guests only; authenticated sessions are redirected to
  *   `/dashboard` (§41.5, decision 4).
  * - Protected branch: ProtectedRoute → AppShell (Dashboard, Reports,
- *   ReportNew, ReportDetails, Branches, BranchDetails, Profile) —
+ *   ReportDetails, Branches, BranchDetails, Profile) —
  *   authenticated only.
  * - `*` → NotFound (selects its own layout, §41.5) — the catch-all
  *   ships **statically** (like AppErrorPage) so an unmatched URL
@@ -38,7 +38,7 @@ import { createRoot } from "react-dom/client";
 import { Provider } from "react-redux";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { EthiopianDateAdapter } from "./utils/ethiopianDateAdapter";
 import "@fontsource/inter/300.css";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -68,7 +68,7 @@ const router = createBrowserRouter([
     element: <App />,
     errorElement: <AppErrorPage />,
     hydrateFallbackElement: (
-      <LoadingSpinner message="Loading…" minHeight="90vh" />
+      <LoadingSpinner message="Initializing..." minHeight="90vh" />
     ),
     children: [
       {
@@ -178,7 +178,7 @@ const router = createBrowserRouter([
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <Provider store={store}>
-      <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <LocalizationProvider dateAdapter={EthiopianDateAdapter}>
         <RouterProvider router={router} />
       </LocalizationProvider>
     </Provider>

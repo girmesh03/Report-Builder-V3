@@ -3,8 +3,8 @@
  *
  * The report endpoint set of §42.6 (owning contract §31, §21),
  * injected exactly once into the single descriptor (ADR-026). It
- * covers the §31 lifecycle: creation (§31.2-1), header PATCH
- * (§31.5), the visits capture block (§31.2-2/§31.5), content
+ * covers the §31 lifecycle: header PATCH
+ * (§31.5), content
  * Mode-1 save / Mode-2/3 correction / revert (§31.6, §35), accept
  * (§31.6, BR-08), digest re-derivation, generation (§34.2) and the
  * two-path archive lifecycle (§31.7, BR-15/BR-16). Tag families:
@@ -24,11 +24,7 @@ const reportTag = (reportId) => ({ type: "Reports", id: reportId });
 export const {
   useListReportsQuery,
   useGetReportQuery,
-  useCreateReportMutation,
   useUpdateReportMutation,
-  useUpdateVisitsMutation,
-  useUpdateVisitMutation,
-  useRemoveVisitMutation,
   useAcceptReportMutation,
   useRederiveDigestMutation,
   useGenerateReportMutation,
@@ -53,38 +49,11 @@ export const {
       }),
       providesTags: (_result, _error, { reportId }) => [reportTag(reportId)],
     }),
-    createReport: build.mutation({
-      query: (body) => ({ url: "/reports", method: "POST", body }),
-      invalidatesTags: [REPORTS_LIST_TAG],
-    }),
     updateReport: build.mutation({
       query: ({ reportId, ...body }) => ({
         url: `/reports/${reportId}`,
         method: "PATCH",
         body,
-      }),
-      invalidatesTags: (_result, _error, { reportId }) => [reportTag(reportId)],
-    }),
-    updateVisits: build.mutation({
-      query: ({ reportId, ...body }) => ({
-        url: `/reports/${reportId}/visits`,
-        method: "PATCH",
-        body,
-      }),
-      invalidatesTags: (_result, _error, { reportId }) => [reportTag(reportId)],
-    }),
-    updateVisit: build.mutation({
-      query: ({ reportId, visitNo, ...body }) => ({
-        url: `/reports/${reportId}/visits/${visitNo}`,
-        method: "PUT",
-        body,
-      }),
-      invalidatesTags: (_result, _error, { reportId }) => [reportTag(reportId)],
-    }),
-    removeVisit: build.mutation({
-      query: ({ reportId, visitNo }) => ({
-        url: `/reports/${reportId}/visits/${visitNo}`,
-        method: "DELETE",
       }),
       invalidatesTags: (_result, _error, { reportId }) => [reportTag(reportId)],
     }),
