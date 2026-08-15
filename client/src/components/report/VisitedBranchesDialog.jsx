@@ -17,13 +17,15 @@
  *   appear after a branch's times are touched).
  * - The payload keeps list order, main first.
  *
- * Branches come from the page's shared query (RTK cache — "fetches
- * on open" is a warm-cache read); loading and empty states are
+ * Branches are fetched by the dialog itself on open — it is
+ * conditionally mounted by the step, so the query subscribes on open
+ * and the RTK cache dedupes against the page's identical query (no
+ * extra network call while fresh); loading and empty states are
  * rendered inside the dialog. Focus enters the dialog on mount and
  * the opening control is refocused by the step on close (the app's
  * MuiDialog does not restore focus itself).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Checkbox from "@mui/material/Checkbox";
@@ -36,11 +38,10 @@ import MuiEmptyState from "../reusable/MuiEmptyState";
 import MuiTimePicker from "../reusable/MuiTimePicker";
 import ListSkeleton from "../reusable/ListSkeleton";
 import { WIZARD } from "../../utils/constants";
+import { useListBranchesQuery } from "../../redux/features/branchesEndpoints";
 
 /**
  * @param {Object} props
- * @param {Array<Object>} props.branches - Active branches (DTO docs).
- * @param {boolean} [props.branchesLoading] - True while the first fetch runs.
  * @param {string|null} props.mainBranch - The main branch _id.
  * @param {Object|null} props.clockIn - Day-pair start (dayjs).
  * @param {Object|null} props.clockOut - Day-pair end (dayjs).
@@ -49,8 +50,6 @@ import { WIZARD } from "../../utils/constants";
  * @param {Function} props.onApply - Commits the visits array (main first).
  */
 export default function VisitedBranchesDialog({
-  branches,
-  branchesLoading = false,
   mainBranch,
   clockIn,
   clockOut,
@@ -58,6 +57,8 @@ export default function VisitedBranchesDialog({
   onClose,
   onApply,
 }) {
+  const { data, isLoading } = useListBranchesQuery({});
+  const branches = useMemo(() => data?.docs ?? [], [data]);
   const [draft, setDraft] = useState(() => {
     const map = {};
     visits.forEach((visit) => {
@@ -119,6 +120,7 @@ export default function VisitedBranchesDialog({
 
   return (
     <MuiDialog
+      open
       title={WIZARD.visited.pickerTitle}
       onClose={onClose}
       actions={
@@ -133,7 +135,7 @@ export default function VisitedBranchesDialog({
       }
     >
       <Box ref={rootRef} tabIndex={-1} sx={{ outline: "none", p: 1.5 }}>
-        {branchesLoading && branches.length === 0 ? (
+        {isLoading && branches.length === 0 ? (
           <ListSkeleton items={4} />
         ) : branches.length === 0 ? (
           <MuiEmptyState
@@ -165,7 +167,7 @@ export default function VisitedBranchesDialog({
                       checked={checked}
                       disabled={isMain}
                       onChange={() => toggle(branch._id)}
-                      inputProps={{ "aria-label": branch.name }}
+                      slotProps={{ input: { "aria-label": branch.name } }}
                     />
                     <Avatar sx={{ width: 32, height: 32 }}>{branch.name.charAt(0)}</Avatar>
                     <Box sx={{ minWidth: 0 }}>

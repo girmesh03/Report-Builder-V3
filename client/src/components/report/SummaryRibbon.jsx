@@ -1,24 +1,28 @@
 /**
  * @module components/report/SummaryRibbon
  *
- * The day-skeleton strip of the report-creation flow (§52): the
- * compact summary ribbon directly under the stepper that anchors
- * every step to the day — four evenly spaced two-line blocks (icon +
- * label row / value row) for the report date, the main branch, the
- * day's times and the supervisor name. Values come live from the
- * step-1 form and the auth profile; empty values render an em dash
- * so the strip never misleads.
+ * The report-creation header panel (§52): the page title and close
+ * action on the first row, the day-skeleton summary on the second —
+ * four two-line blocks (icon + label row / value row) for the report
+ * date, the main branch, the day's times and the supervisor name.
+ * Values come live from the step-1 form and the auth profile; empty
+ * values render an em dash so the strip never misleads.
  *
- * The ribbon is an informational surface: a subtle tinted, bordered
- * container (never a card) that visually separates context from the
- * editable form below. Items lay out on a responsive grid — two
- * columns on phones, four columns from sm up — and the strip hugs
- * the content column (layoutConfig.contentMaxWidth) from md up.
- * Chrome typography only (the Amharic content stack is for report
- * text, never interface text).
+ * On xs the panel is a full-bleed band — no border radius, no
+ * scrollbar — and the four blocks wrap into a two-column grid. From
+ * sm it becomes a subtle tinted, rounded panel centered at the
+ * content column width with the blocks in one evenly spread row
+ * (horizontal scroll only as an overflow fallback). Row 1 never
+ * scrolls or wraps. A divider follows the panel and the stepper sits
+ * after it (the owning page owns that spacing). Chrome typography
+ * only (the Amharic content stack is for report text, never
+ * interface text).
  */
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import CloseIcon from "@mui/icons-material/Close";
 import EventOutlinedIcon from "@mui/icons-material/EventOutlined";
 import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
 import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
@@ -39,7 +43,15 @@ const DASH = "—";
  */
 function RibbonBlock({ icon, label, value }) {
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, minWidth: 0 }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 0.25,
+        flex: { xs: "1 1 calc(50% - 8px)", sm: "0 0 auto" },
+        minWidth: 0,
+      }}
+    >
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "primary.main" }}>
         {icon}
         <Typography variant="caption" color="text.secondary">
@@ -60,9 +72,19 @@ function RibbonBlock({ icon, label, value }) {
  * @param {Object|null} [props.clockOut] - Day end (dayjs).
  * @param {string|null} [props.branchName] - Main branch name.
  * @param {string|null} [props.userName] - Supervisor full name (profile).
+ * @param {Function} props.onClose - Opens the leave-flow confirmation.
  */
-export default function SummaryRibbon({ date, clockIn, clockOut, branchName, userName }) {
-  const dateLabel = date ? formatEthiopianDate(ethiopianToGregorian(date)) : DASH;
+export default function SummaryRibbon({
+  date,
+  clockIn,
+  clockOut,
+  branchName,
+  userName,
+  onClose,
+}) {
+  const dateLabel = date
+    ? formatEthiopianDate(ethiopianToGregorian(date))
+    : DASH;
   const timesLabel =
     clockIn && clockOut
       ? `${clockIn.format(PICKER_TIME_FORMAT)} – ${clockOut.format(PICKER_TIME_FORMAT)}`
@@ -74,36 +96,62 @@ export default function SummaryRibbon({ date, clockIn, clockOut, branchName, use
         bgcolor: "action.selected",
         border: "1px solid",
         borderColor: "divider",
-        borderRadius: 2,
+        borderRadius: { sm: 2 },
         p: 1.5,
-        display: "grid",
-        gap: 2,
-        gridTemplateColumns: { xs: "repeat(2, 1fr)", sm: "repeat(4, 1fr)" },
+        display: "flex",
+        flexDirection: "column",
+        gap: 1.5,
+        width: { xs: "auto", sm: "100%" },
         maxWidth: layoutConfig.contentMaxWidth,
-        width: "100%",
-        mx: "auto",
+        mx: { xs: -1, sm: "auto" },
       }}
     >
-      <RibbonBlock
-        icon={<EventOutlinedIcon fontSize="small" />}
-        label={WIZARD.ribbon.date}
-        value={dateLabel}
-      />
-      <RibbonBlock
-        icon={<StorefrontOutlinedIcon fontSize="small" />}
-        label={WIZARD.ribbon.branch}
-        value={branchName ?? DASH}
-      />
-      <RibbonBlock
-        icon={<ScheduleOutlinedIcon fontSize="small" />}
-        label={WIZARD.ribbon.times}
-        value={timesLabel}
-      />
-      <RibbonBlock
-        icon={<PersonOutlineOutlinedIcon fontSize="small" />}
-        label={WIZARD.ribbon.supervisor}
-        value={userName ?? DASH}
-      />
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+          {WIZARD.pageTitle}
+        </Typography>
+        <Tooltip title={WIZARD.closeLabel}>
+          <IconButton aria-label={WIZARD.closeLabel} onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: { xs: "wrap", sm: "nowrap" },
+          gap: { xs: 2, sm: 3 },
+          overflowX: { sm: "auto" },
+          justifyContent: { sm: "space-between" },
+        }}
+      >
+        <RibbonBlock
+          icon={<EventOutlinedIcon fontSize="small" />}
+          label={WIZARD.ribbon.date}
+          value={dateLabel}
+        />
+        <RibbonBlock
+          icon={<StorefrontOutlinedIcon fontSize="small" />}
+          label={WIZARD.ribbon.branch}
+          value={branchName ?? DASH}
+        />
+        <RibbonBlock
+          icon={<ScheduleOutlinedIcon fontSize="small" />}
+          label={WIZARD.ribbon.times}
+          value={timesLabel}
+        />
+        <RibbonBlock
+          icon={<PersonOutlineOutlinedIcon fontSize="small" />}
+          label={WIZARD.ribbon.supervisor}
+          value={userName ?? DASH}
+        />
+      </Box>
     </Box>
   );
 }

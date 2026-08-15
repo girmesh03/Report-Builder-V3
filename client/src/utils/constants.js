@@ -234,12 +234,6 @@ export const WIZARD = Object.freeze({
     'Transcription',
     'Report',
   ]),
-  stepHeadings: Object.freeze([
-    'Step 1 — Basic info & Visits',
-    'Step 2 — Audio',
-    'Step 3 — Transcription',
-    'Step 4 — Report',
-  ]),
   sectionSummaryLine: 'This section has issues, review them below',
   nav: Object.freeze({
     previous: 'Previous',
@@ -259,7 +253,6 @@ export const WIZARD = Object.freeze({
     loading: 'Loading branches…',
     emptyTitle: 'No branches yet',
     emptyDescription: 'Create a branch from the Branches page, then return here.',
-    emptyNote: 'No visited branches — the whole day is at the main branch',
     mainLockHint: 'The main branch is always part of the day',
   }),
   fieldLabels: Object.freeze({
