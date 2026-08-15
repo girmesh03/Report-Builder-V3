@@ -72,6 +72,7 @@ const MuiTimePicker = forwardRef(function MuiTimePicker(props, ref) {
         field: {
           placeholder,
           error,
+          fullWidth: true,
           ...(slotProps?.field ?? {}),
         },
         desktopTrapFocus: {

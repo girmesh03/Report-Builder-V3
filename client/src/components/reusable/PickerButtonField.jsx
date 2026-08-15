@@ -129,6 +129,7 @@ export default function ButtonField({ valueType, ...props }) {
         justifyContent: "flex-start",
         textTransform: "none",
         fontWeight: 400,
+        minHeight: 40,
         color: isEmpty ? "text.secondary" : "text.primary",
         borderColor: error ? "error.main" : "divider",
         "&:hover": error ? { borderColor: "error.main" } : undefined,

@@ -193,6 +193,7 @@ const MuiDatePicker = forwardRef(function MuiDatePicker(props, ref) {
       field: {
         placeholder,
         error,
+        fullWidth: true,
         ...(slotProps?.field ?? {}),
       },
       calendarHeader: {

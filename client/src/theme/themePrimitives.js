@@ -329,4 +329,10 @@ export const layoutConfig = Object.freeze({
   drawerWidth: 240,
   headerHeight: 64,
   mobileBreakpoint: "md",
+  /**
+   * Readable measure for centered content (the wizard's step content
+   * and summary ribbon, §52): max-width in px, `mx: auto` at use
+   * sites; below this width the box is naturally full-width.
+   */
+  contentMaxWidth: 680,
 });

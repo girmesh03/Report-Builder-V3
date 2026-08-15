@@ -214,3 +214,80 @@ export const ETHIOPIAN_MONTH_LABELS = Object.freeze([
   'August',
   'Pagume',
 ]);
+
+/**
+ * Report-creation wizard — every copy string of the four-step
+ * creation flow (the §52 wizard surface): the step labels and
+ * headings, the nav-bar labels, the leave-flow confirmation, the
+ * visited-branch picker copy, the step-1 field labels and validation
+ * messages, the summary ribbon's block labels, and the placeholder
+ * surface for the not-yet-built steps. No copy lives in the pages
+ * (§60.7 copy-from-owning-section; §11 no magic literals).
+ * @type {readonly Object}
+ */
+export const WIZARD = Object.freeze({
+  pageTitle: 'New report',
+  closeLabel: 'Close',
+  steps: Object.freeze([
+    'Basic info & Visits',
+    'Audio',
+    'Transcription',
+    'Report',
+  ]),
+  stepHeadings: Object.freeze([
+    'Step 1 — Basic info & Visits',
+    'Step 2 — Audio',
+    'Step 3 — Transcription',
+    'Step 4 — Report',
+  ]),
+  sectionSummaryLine: 'This section has issues, review them below',
+  nav: Object.freeze({
+    previous: 'Previous',
+    next: 'Next',
+  }),
+  close: Object.freeze({
+    title: 'Leave the flow?',
+    message: 'The report is not created yet — nothing you entered will be saved.',
+    confirm: 'Leave',
+    cancel: 'Stay',
+  }),
+  visited: Object.freeze({
+    button: 'Add visited branches',
+    pickerTitle: 'Visited branches',
+    apply: 'Apply',
+    cancel: 'Cancel',
+    loading: 'Loading branches…',
+    emptyTitle: 'No branches yet',
+    emptyDescription: 'Create a branch from the Branches page, then return here.',
+    emptyNote: 'No visited branches — the whole day is at the main branch',
+    mainLockHint: 'The main branch is always part of the day',
+  }),
+  fieldLabels: Object.freeze({
+    date: 'Report date',
+    clockIn: 'Clock in',
+    clockOut: 'Clock out',
+    branch: 'Main branch',
+    visited: 'Visited branches',
+  }),
+  ribbon: Object.freeze({
+    date: 'Report date',
+    branch: 'Main branch',
+    times: 'Day times',
+    supervisor: 'Supervisor',
+  }),
+  step1: Object.freeze({
+    dateRequired: 'Pick the report date',
+    clockInRequired: 'Enter the time you got in',
+    clockOutRequired: 'Enter the time you got out',
+    clockOutAfterClockIn: 'Exit time must be later than entry time',
+    branchRequired: 'Choose the main branch',
+    branchPlaceholder: 'Choose a branch',
+    visitTimesRequired: "Enter this branch's times",
+    visitClockOutAfterClockIn:
+      'Exit time must be later than entry time for this branch',
+  }),
+  placeholder: Object.freeze({
+    title: 'Coming in a later step',
+    description: "This step's surface arrives with its own implementation.",
+  }),
+});
