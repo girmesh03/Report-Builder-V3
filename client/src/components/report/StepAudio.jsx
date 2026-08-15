@@ -4,28 +4,30 @@
  * The wizard's audio step (§52.6, CR-048…CR-065): one narration
  * surface for the whole day — the record orb (CR-051), a quiet
  * attach action and whole-canvas drops (CR-050/053), take cards
- * with playback and actions (CR-056…059), progress dots with a
- * living hint (CR-060), and the raw-report peek (CR-061). Next is
- * the page's gate: disabled until at least one take exists (CR-063);
- * the page builds the §4.10 payload from the step-1 values plus the
- * staged clip ids and creates the report (CR-064), then navigates
- * to its details page (CR-013).
+ * with playback and actions (CR-056…059), and the story progress
+ * (take-count dots above the Narrations divider, CR-060). With
+ * takes, the surface is one centered column: orb region, attach,
+ * dots, the divider, then the cards (round-3 layout amendment).
+ * Next is the page's gate: disabled until at least one take exists
+ * (CR-063); the page builds the §4.10 payload from the step-1
+ * values plus the staged clip ids and creates the report (CR-064),
+ * then navigates to its details page (CR-013).
  *
  * The step is controlled — the page owns the takes rows (CR-011:
  * going back to step 1 must show exactly what was recorded, so the
  * data survives the step's unmount). Every gate mirrors the §11.3
  * mirrors (MIME allowlist, 50 MB size cap, 15-minute duration cap);
  * rejects surface in the toast and inline helpers (CR-054/055), and
- * the same-file skip is a note only (CR-053).
+ * the same-file skip is a note only (CR-053). Re-record readies the
+ * orb (dashed ring + take number, CR-058) and highlights the target
+ * card until the take is stopped.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 import Box from "@mui/material/Box";
-import Chip from "@mui/material/Chip";
-import Collapse from "@mui/material/Collapse";
+import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MuiButton from "../reusable/MuiButton";
 import MuiConfirmDialog from "../reusable/MuiConfirmDialog";
 import RecordOrb from "./RecordOrb";
@@ -43,7 +45,6 @@ import {
   AUDIO_MAX_SIZE_BYTES,
   AUDIO_MAX_DURATION_SEC,
 } from "../../utils/constants";
-import { ethiopianToGregorian, formatEthiopianDate } from "../../utils/ethiopianDate";
 import { orange } from "../../theme/themePrimitives";
 
 const makeFormData = (file, durationSec) => {
@@ -75,11 +76,8 @@ const readDurationSec = (file) =>
  * @param {Object[]} props.takes - The page-owned take rows:
  *   `{ clip, name, size, busy }`; `clip` is null while uploading.
  * @param {Function} props.setTakes - Page state setter for the rows.
- * @param {Object} props.values - The watched step-1 form values (peek chips).
- * @param {string|null} props.userName - The profile's full name (peek chip).
- * @param {Function} props.branchNameOf - Branch id → name (peek chip).
  */
-export default function StepAudio({ takes, setTakes, values, userName, branchNameOf }) {
+export default function StepAudio({ takes, setTakes }) {
   const fileInputRef = useRef(null);
   const replaceIndexRef = useRef(null);
   const takesRef = useRef(takes);
@@ -90,7 +88,6 @@ export default function StepAudio({ takes, setTakes, values, userName, branchNam
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [replaceIndex, setReplaceIndex] = useState(null);
   const [dragOver, setDragOver] = useState(false);
-  const [peekOpen, setPeekOpen] = useState(false);
   const [notes, setNotes] = useState([]);
 
   useEffect(() => {
@@ -130,11 +127,13 @@ export default function StepAudio({ takes, setTakes, values, userName, branchNam
       const fileName = `take-${takesRef.current.length + 1}.webm`;
       const file = new File([blob], fileName, { type: blob.type || "audio/webm" });
       const target = replaceIndexRef.current;
-      if (target === null) {
+      const targetTake = target !== null ? takesRef.current[target] : null;
+      updateReplaceIndex(null);
+      if (target === null || !targetTake?.clip) {
         await addTake(file, durationSec);
         return;
       }
-      const oldClipId = takesRef.current[target]?.clip?._id;
+      const oldClipId = targetTake.clip._id;
       setTakes((prev) =>
         prev.map((take, i) => (i === target ? { ...take, busy: true } : take)),
       );
@@ -158,7 +157,6 @@ export default function StepAudio({ takes, setTakes, values, userName, branchNam
         );
         showToast("error", TOAST_CATALOGUE.audio.uploadFailed);
       }
-      updateReplaceIndex(null);
     },
     [addTake, deleteClip, setTakes, updateReplaceIndex, uploadStagedClip],
   );
@@ -232,6 +230,9 @@ export default function StepAudio({ takes, setTakes, values, userName, branchNam
   const handleDeleteConfirmed = async () => {
     const index = confirmDelete;
     setConfirmDelete(null);
+    if (index === replaceIndexRef.current) {
+      updateReplaceIndex(null);
+    }
     const clipId = takesRef.current[index]?.clip?._id;
     if (!clipId) {
       return;
@@ -244,25 +245,6 @@ export default function StepAudio({ takes, setTakes, values, userName, branchNam
       showToast("error", error?.message ?? TOAST_CATALOGUE.error.generic);
     }
   };
-
-  const takeCount = takes.filter((take) => take.clip).length;
-  const hintCopy =
-    takeCount === 0
-      ? WIZARD.audio.progressHint.empty
-      : takeCount <= 2
-        ? WIZARD.audio.progressHint.few
-        : WIZARD.audio.progressHint.many;
-
-  const dateLabel = formatEthiopianDate(ethiopianToGregorian(values.date));
-  const timesLabel = `${values.clockIn?.format("HH:mm") ?? "—"} – ${
-    values.clockOut?.format("HH:mm") ?? "—"
-  }`;
-  const narrationLine =
-    takeCount === 0
-      ? "—"
-      : takeCount === 1
-        ? WIZARD.audio.narrationOne
-        : WIZARD.audio.narrationMany.replace("{count}", takeCount);
 
   const replaceHint = replaceIndex !== null ? (
     <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
@@ -288,7 +270,13 @@ export default function StepAudio({ takes, setTakes, values, userName, branchNam
 
   const orbRegion = (
     <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
-      <RecordOrb state={recordState} elapsed={elapsed} onStart={start} onStop={stop} />
+      <RecordOrb
+        state={recordState}
+        elapsed={elapsed}
+        onStart={start}
+        onStop={stop}
+        replaceNumber={replaceIndex !== null ? replaceIndex + 1 : null}
+      />
       {replaceHint}
     </Box>
   );
@@ -331,103 +319,65 @@ export default function StepAudio({ takes, setTakes, values, userName, branchNam
             </Typography>
           </Box>
         ) : (
-          <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 2 }}>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 1.5,
+            }}
+          >
+            {orbRegion}
+            {attachAction}
+            {notes.length > 0 ? (
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 0.5,
+                }}
+              >
+                {notes.map((note) => (
+                  <Typography key={note} variant="caption" color="warning.main">
+                    {note}
+                  </Typography>
+                ))}
+              </Box>
+            ) : null}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              {takes.map((take, index) => (
+                <Box
+                  key={take.clip?._id ?? `dot-${index}`}
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    backgroundColor: orange[400],
+                    opacity: take.busy ? 0.4 : 1,
+                  }}
+                />
+              ))}
+            </Box>
+            <Divider sx={{ width: "100%", my: 0.5 }}>{WIZARD.audio.narrations}</Divider>
             <Box
               sx={{
-                flex: 1,
-                minWidth: 0,
+                width: "100%",
                 display: "flex",
                 flexDirection: "column",
                 gap: 1.5,
               }}
             >
-              {notes.length > 0 ? (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-                  {notes.map((note) => (
-                    <Typography key={note} variant="caption" color="warning.main">
-                      {note}
-                    </Typography>
-                  ))}
-                </Box>
-              ) : null}
               {takes.map((take, index) => (
                 <TakeCard
                   key={take.clip?._id ?? `pending-${index}`}
                   take={take}
                   index={index}
+                  armed={replaceIndex === index}
                   onReRecord={() => updateReplaceIndex(index)}
                   onDelete={() => setConfirmDelete(index)}
                 />
               ))}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                {takes.map((take, index) => (
-                  <Box
-                    key={take.clip?._id ?? `dot-${index}`}
-                    sx={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: "50%",
-                      backgroundColor: orange[400],
-                      opacity: take.busy ? 0.4 : 1,
-                    }}
-                  />
-                ))}
-                <Typography variant="caption" color="text.secondary">
-                  {hintCopy}
-                </Typography>
-              </Box>
-              <Box>
-                <MuiButton
-                  variant="text"
-                  size="small"
-                  endIcon={
-                    <ExpandMoreIcon
-                      fontSize="small"
-                      sx={{
-                        transform: peekOpen ? "rotate(180deg)" : "none",
-                        transition: "transform 150ms ease",
-                      }}
-                    />
-                  }
-                  onClick={() => setPeekOpen((open) => !open)}
-                >
-                  {WIZARD.audio.peekToggle}
-                </MuiButton>
-                <Collapse in={peekOpen}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 1,
-                      p: 1.5,
-                      borderRadius: 2,
-                      border: "1px solid",
-                      borderColor: "divider",
-                      bgcolor: "background.paper",
-                    }}
-                  >
-                    <Typography variant="subtitle2">{WIZARD.audio.peekTitle}</Typography>
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-                      <Chip size="small" label={dateLabel} variant="outlined" />
-                      <Chip size="small" label={branchNameOf(values.branch)} variant="outlined" />
-                      <Chip size="small" label={timesLabel} variant="outlined" />
-                      <Chip size="small" label={userName ?? "—"} variant="outlined" />
-                    </Box>
-                    <Typography variant="body2">{narrationLine}</Typography>
-                  </Box>
-                </Collapse>
-              </Box>
-              {attachAction}
-            </Box>
-            <Box
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: { xs: "flex-end", md: "center" },
-                gap: 1,
-              }}
-            >
-              {orbRegion}
             </Box>
           </Box>
         )}
@@ -469,7 +419,4 @@ StepAudio.propTypes = {
     }),
   ).isRequired,
   setTakes: PropTypes.func.isRequired,
-  values: PropTypes.object.isRequired,
-  userName: PropTypes.string,
-  branchNameOf: PropTypes.func.isRequired,
 };

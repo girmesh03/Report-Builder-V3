@@ -58,10 +58,12 @@ const Equalizer = () => (
  * @param {Object} props.take - The take row: `{ clip, name, size, busy }`; `clip`
  *   is the metadata-only DTO (§22.7) and is null while the upload is in flight.
  * @param {number} props.index - Zero-based position in the takes list (displayed + 1).
+ * @param {boolean} [props.armed] - True while this take is the re-record target
+ *   (the orb readies to replace it, CR-058): the card is outlined in orange.
  * @param {Function} props.onReRecord - Readies the orb to replace this take.
  * @param {Function} props.onDelete - Opens the delete confirmation.
  */
-export default function TakeCard({ take, index, onReRecord, onDelete }) {
+export default function TakeCard({ take, index, armed = false, onReRecord, onDelete }) {
   const [playing, setPlaying] = useState(false);
   const { data: playData } = usePlayAudioQuery(take.clip?._id ?? null, {
     skip: !take.clip,
@@ -103,9 +105,9 @@ export default function TakeCard({ take, index, onReRecord, onDelete }) {
         gap: 0.5,
         p: 1.5,
         borderRadius: 2,
-        border: "1px solid",
-        borderColor: "divider",
-        bgcolor: "background.paper",
+        border: armed ? "2px solid" : "1px solid",
+        borderColor: armed ? orange[500] : "divider",
+        bgcolor: armed ? orange[50] : "background.paper",
       }}
     >
       {playing ? <Equalizer /> : null}
@@ -160,6 +162,7 @@ TakeCard.propTypes = {
     busy: PropTypes.bool,
   }).isRequired,
   index: PropTypes.number.isRequired,
+  armed: PropTypes.bool,
   onReRecord: PropTypes.func.isRequired,
   onDelete: PropTypes.func.isRequired,
 };

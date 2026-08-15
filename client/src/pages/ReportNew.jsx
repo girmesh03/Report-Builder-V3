@@ -197,13 +197,7 @@ export function Component() {
             branchNameOf={branchNameOf}
           />
         ) : activeStep === 1 ? (
-          <StepAudio
-            takes={takes}
-            setTakes={setTakes}
-            values={watched}
-            userName={user?.fullName ?? null}
-            branchNameOf={branchNameOf}
-          />
+          <StepAudio takes={takes} setTakes={setTakes} />
         ) : (
           <StepPlaceholder />
         )}
