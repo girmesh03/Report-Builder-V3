@@ -21,9 +21,11 @@ import { TOAST_CATALOGUE } from "../../utils/constants";
 
 /**
  * §10.5 default; the env var is injected by Vite at build time.
+ * Exported for the §46.17 stream-URL derivation (callers build the
+ * authenticated `GET /audios/:id/play` URL from a clip DTO's `_id`).
  * @type {string}
  */
-const API_BASE_URL =
+export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
 /**

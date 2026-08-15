@@ -13,12 +13,14 @@
  * layoutConfig.contentMaxWidth. Step changes move focus to the step
  * content.
  *
- * Step 1 (Basic info & Visits) is implemented; steps 2–4 render a
- * placeholder surface. Next on step 1 validates the step (the two
- * client-mirrored rules) and advances on success — nothing is posted
- * here: the report comes into existence at the audio step's
- * submission, so leaving or closing the browser before then saves
- * nothing.
+ * Step 1 (Basic info & Visits) and step 2 (Audio) are implemented;
+ * steps 3–4 render a placeholder surface. Next on step 1 validates
+ * the step (the two client-mirrored rules) and advances on success;
+ * Next on step 2 creates the report — the §4.10 one-payload
+ * submission (step-1 metadata + the staged clip ids, CR-064) — and
+ * navigates to the new report's details page (CR-013). Nothing is
+ * posted before then: leaving or closing the browser before the
+ * audio submission saves no report (CR-006).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -32,14 +34,17 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import MuiConfirmDialog from "../components/reusable/MuiConfirmDialog";
 import MuiEmptyState from "../components/reusable/MuiEmptyState";
 import MuiStepper from "../components/reusable/MuiStepper";
+import StepAudio from "../components/report/StepAudio";
 import StepBasicInfo from "../components/report/StepBasicInfo";
 import StepNavBar from "../components/report/StepNavBar";
 import SummaryRibbon from "../components/report/SummaryRibbon";
 import { selectAuthUser } from "../redux/features/authSlice";
 import { useListBranchesQuery } from "../redux/features/branchesEndpoints";
+import { useCreateReportMutation } from "../redux/features/reportsEndpoints";
 import { layoutConfig } from "../theme/themePrimitives";
-import { WIZARD } from "../utils/constants";
-import { gregorianToEthiopian } from "../utils/ethiopianDate";
+import { WIZARD, TOAST_CATALOGUE } from "../utils/constants";
+import { showToast } from "../utils/toast";
+import { ethiopianToGregorian, gregorianToEthiopian } from "../utils/ethiopianDate";
 import { validateStep1 } from "../utils/wizardValidation";
 
 /**
@@ -62,8 +67,10 @@ export function Component() {
   const navigate = useNavigate();
   const user = useSelector(selectAuthUser);
   const { data, isLoading: branchesLoading } = useListBranchesQuery({});
+  const [createReport, { isLoading: creatingReport }] = useCreateReportMutation();
   const [activeStep, setActiveStep] = useState(0);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [takes, setTakes] = useState([]);
   const contentRef = useRef(null);
   const stepRef = useRef(null);
 
@@ -72,6 +79,15 @@ export function Component() {
     const byId = new Map(branches.map((branch) => [branch._id, branch.name]));
     return (branchId) => byId.get(branchId) ?? "—";
   }, [branches]);
+
+  const clipIds = useMemo(
+    () =>
+      takes
+        .map((take) => take.clip?._id)
+        .filter((clipId) => typeof clipId === "string"),
+    [takes],
+  );
+  const uploadsPending = takes.some((take) => take.busy);
 
   const form = useForm({
     mode: "onBlur",
@@ -100,6 +116,28 @@ export function Component() {
         stepRef.current?.focusFirstError();
         return;
       }
+    }
+    if (activeStep === 1) {
+      try {
+        const report = await createReport({
+          date: ethiopianToGregorian(watched.date).toISOString(),
+          clockIn: watched.clockIn?.format("HH:mm"),
+          clockOut: watched.clockOut?.format("HH:mm"),
+          branch: watched.branch,
+          visits: (watched.visits ?? []).map((visit) => ({
+            branch: visit.branch,
+            clockIn: visit.clockIn?.format("HH:mm"),
+            clockOut: visit.clockOut?.format("HH:mm"),
+          })),
+          audios: clipIds,
+        }).unwrap();
+        showToast("success", TOAST_CATALOGUE.report.created);
+        navigate(`/reports/${report._id}`);
+      } catch (error) {
+        showToast("error", error?.message ?? TOAST_CATALOGUE.error.generic);
+        contentRef.current?.focus();
+      }
+      return;
     }
     setActiveStep((current) => Math.min(current + 1, WIZARD.steps.length - 1));
   };
@@ -158,6 +196,14 @@ export function Component() {
             branchesLoading={branchesLoading}
             branchNameOf={branchNameOf}
           />
+        ) : activeStep === 1 ? (
+          <StepAudio
+            takes={takes}
+            setTakes={setTakes}
+            values={watched}
+            userName={user?.fullName ?? null}
+            branchNameOf={branchNameOf}
+          />
         ) : (
           <StepPlaceholder />
         )}
@@ -177,7 +223,11 @@ export function Component() {
           onPrev={handlePrev}
           onNext={handleNext}
           prevDisabled={activeStep === 0}
-          nextDisabled={activeStep === 0 && !step1Ready}
+          nextDisabled={
+            (activeStep === 0 && !step1Ready) ||
+            (activeStep === 1 && (clipIds.length === 0 || uploadsPending))
+          }
+          nextLoading={creatingReport}
         />
       </Box>
 

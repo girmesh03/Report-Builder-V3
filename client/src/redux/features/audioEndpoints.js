@@ -11,7 +11,17 @@
  *
  * Playback URLs are derived by callers (§46.17 contract): the DTO
  * carries no URL field — the authenticated stream is
- * `GET /audios/:audioId/play` built from the DTO's `_id`.
+ * `GET /audios/:audioId/play` built from the DTO's `_id`. In
+ * development the §66.10 adapter cannot serve the stream to the
+ * `<audio>` element, so the dev seam resolves the same URL through
+ * the `playAudio` query (`GET /audios/:audioId/play` returning the
+ * playback URL); production callers never call it.
+ *
+ * The wizard's step-2 surface stages takes BEFORE the report exists
+ * (CR-064 — the report is created at submission, §1.1): `POST
+ * /audios` uploads a report-less clip (`report: null`); the §4.10
+ * report creation binds it. The report-bound upload above stays for
+ * the resumed-report surfaces (§53/§54).
  */
 import { apiSlice } from "./apiSlice";
 
@@ -22,7 +32,9 @@ export const {
   useListClipsQuery,
   useGetAudioQuery,
   useUploadClipMutation,
+  useUploadStagedClipMutation,
   useDeleteClipMutation,
+  usePlayAudioQuery,
 } = apiSlice.injectEndpoints({
   overrideExisting: false,
   endpoints: (build) => ({
@@ -44,6 +56,10 @@ export const {
       }),
       invalidatesTags: [CLIPS_LIST_TAG, "Reports"],
     }),
+    uploadStagedClip: build.mutation({
+      query: (formData) => ({ url: "/audios", method: "POST", body: formData }),
+      invalidatesTags: [CLIPS_LIST_TAG],
+    }),
     deleteClip: build.mutation({
       query: (audioId) => ({ url: `/audios/${audioId}`, method: "DELETE" }),
       invalidatesTags: (_result, _error, audioId) => [
@@ -51,6 +67,10 @@ export const {
         CLIPS_LIST_TAG,
         "Reports",
       ],
+    }),
+    playAudio: build.query({
+      query: (audioId) => ({ url: `/audios/${audioId}/play` }),
+      providesTags: (_result, _error, audioId) => [audioTag(audioId)],
     }),
   }),
 });

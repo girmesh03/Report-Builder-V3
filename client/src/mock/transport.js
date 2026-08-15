@@ -373,6 +373,60 @@ const formatDate = (value) => (value ? dayjs(value).format("DD-MM-YY") : null);
 
 const compareDesc = (a, b) => (a < b ? 1 : a > b ? -1 : 0);
 
+/** Reads a picked File/Blob into a data URI (the staged-upload bytes). */
+const readFileAsDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("read failed"));
+    reader.readAsDataURL(file);
+  });
+
+/**
+ * The base type of a multipart audio file: browser recorders ship
+ * codec parameters (`audio/webm;codecs=opus`) that a real server
+ * accepts — the §11.3 allowlist matches the base type only, and the
+ * stored DTO type is the base type (clean §22.7 metadata).
+ */
+const baseMimeType = (type) => String(type ?? "").split(";")[0].trim();
+
+/**
+ * A 1-second 8kHz 8-bit mono silent WAV, synthesized at module init —
+ * the playback seam's stand-in for seeded clips that hold no bytes.
+ */
+const makeSilentWavDataUri = () => {
+  const sampleRate = 8000;
+  const dataSize = sampleRate;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeString = (offset, text) => {
+    for (let index = 0; index < text.length; index += 1) {
+      view.setUint8(offset + index, text.charCodeAt(index));
+    }
+  };
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let index = 44; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+  return `data:audio/wav;base64,${btoa(binary)}`;
+};
+
+const SILENT_WAV_DATA_URI = makeSilentWavDataUri();
+
 const perUser = (user, rows) => rows.filter((row) => row.user === user._id);
 
 const reportById = (reportId) => reports.find((report) => report._id === reportId);
@@ -575,23 +629,88 @@ const getReportHandler = (user, reportId, params) => {
   return { data: successEnvelope(toReportDto(report, params?.withContent === "true")) };
 };
 
+/**
+ * The §4.10 wizard creation: the report is created at submission
+ * from the step-1 metadata + the staged clip ids in ONE payload
+ * (CR-064). No supervisor name is sent — the report names the user
+ * from the profile. The report is created `draft` and stays a draft
+ * until the transcription step (CR-064); the old
+ * `draft → audio_attached` transition (§31.4) is reserved for the
+ * resumed-report upload path (`uploadClipHandler`). Visits may be
+ * empty — with no visited branches the whole day is at the main
+ * branch (CR-043) — so `validateVisitBlock`'s ≥1 rule does not
+ * apply here. Staged clips (`report: null`) bind to the report's
+ * day slot (`visitNo 1`, §4.10); the binding is invisible transport
+ * detail — the step UI never asks which visit (CR-048).
+ */
 const createReportHandler = (user, body) => {
   const details = [];
-  const supervisorName = (body?.supervisorName ?? "").trim();
-  if (!supervisorName) {
-    details.push({ field: "supervisorName", message: "Supervisor name is required" });
+  const date = body?.date ?? null;
+  const clockIn = body?.clockIn ?? "";
+  const clockOut = body?.clockOut ?? "";
+  if (!date) {
+    details.push({ field: "date", message: "Report date is required" });
+  }
+  if (!clockIn) {
+    details.push({ field: "clockIn", message: "Clock in is required" });
+  }
+  if (!clockOut) {
+    details.push({ field: "clockOut", message: "Clock out is required" });
+  }
+  const branch = branchOfUser(user, body?.branch);
+  if (!branch) {
+    details.push({ field: "branch", message: "Choose an active branch" });
+  }
+  const visits = Array.isArray(body?.visits) ? body.visits : [];
+  visits.forEach((visit, index) => {
+    const field = `visits[${index}]`;
+    const visitBranch = branchOfUser(user, visit?.branch);
+    if (!visitBranch) {
+      details.push({ field: `${field}.branch`, message: "Choose an active branch" });
+      return;
+    }
+    if (!visit.clockIn || !visit.clockOut) {
+      details.push({
+        field: `${field}.clockIn`,
+        message: "Clock in and clock out are required per visit",
+      });
+    }
+  });
+  const audioIds = Array.isArray(body?.audios) ? body.audios : [];
+  if (audioIds.length === 0) {
+    details.push({ field: "audios", message: "Record or attach at least one take" });
   }
   if (details.length) {
     return error(httpStatus.UNPROCESSABLE_ENTITY, "Check the highlighted fields", details);
   }
+  for (const audioId of audioIds) {
+    const clip = clips.find((entry) => entry._id === audioId && entry.user === user._id);
+    if (!clip || clip.report !== null) {
+      return error(httpStatus.UNPROCESSABLE_ENTITY, "Some takes are no longer available");
+    }
+  }
+  const branchesByName = new Map(branches.map((item) => [item._id, item]));
+  const visitRows = visits.map((visit, index) => ({
+    visitNo: index + 1,
+    branchName: branchesByName.get(visit.branch).name,
+    clockIn: visit.clockIn,
+    clockOut: visit.clockOut,
+  }));
+  const reportBranches =
+    visitRows.length > 0
+      ? visitRows.map((visit) => {
+          const entry = branches.find((item) => item.name === visit.branchName);
+          return { branch: entry._id, name: visit.branchName };
+        })
+      : [{ branch: branch._id, name: branch.name }];
   const report = {
     _id: `r-${String(counters.digest).padStart(4, "0")}`,
     user: user._id,
-    reportDate: body?.reportDate ?? null,
-    supervisorName,
+    reportDate: date,
+    supervisorName: user.fullName,
     status: "draft",
-    branches: [],
-    visits: [],
+    branches: reportBranches,
+    visits: visitRows,
     raw: null,
     latest: null,
     branchDigest: null,
@@ -601,6 +720,12 @@ const createReportHandler = (user, body) => {
     updatedAt: new Date().toISOString(),
   };
   reports.push(report);
+  for (const audioId of audioIds) {
+    const clip = clips.find((entry) => entry._id === audioId);
+    clip.report = report._id;
+    clip.visitNo = 1;
+    clip.updatedAt = new Date().toISOString();
+  }
   return { data: successEnvelope(toReportDto(report, true), "Report created") };
 };
 
@@ -953,7 +1078,7 @@ const uploadClipHandler = (user, reportId, visitNo, body, formData) => {
   if (!file || typeof file.name !== "string") {
     return error(httpStatus.UNPROCESSABLE_ENTITY, "Choose an audio file to upload");
   }
-  if (!AUDIO_ALLOWED_MIME_TYPES.includes(file.type)) {
+  if (!AUDIO_ALLOWED_MIME_TYPES.includes(baseMimeType(file.type))) {
     return error(httpStatus.UNPROCESSABLE_ENTITY, "Only audio files are accepted");
   }
   if (file.size > AUDIO_MAX_SIZE_BYTES) {
@@ -964,7 +1089,7 @@ const uploadClipHandler = (user, reportId, visitNo, body, formData) => {
     user: user._id,
     report: reportId,
     visitNo: Number(visitNo),
-    mimeType: file.type,
+    mimeType: baseMimeType(file.type),
     sizeBytes: file.size,
     durationSec: Math.min(90 + (counters.transcription % 10) * 17, AUDIO_MAX_DURATION_SEC),
     transcription: null,
@@ -979,6 +1104,66 @@ const uploadClipHandler = (user, reportId, visitNo, body, formData) => {
     report.updatedAt = new Date().toISOString();
   }
   return { data: successEnvelope(toClipDto(clip), "Clip uploaded") };
+};
+
+/**
+ * The §4.10 staged upload (wizard step 2): a report-less clip
+ * (`report: null`) held until the report creation binds it
+ * (`createReportHandler`). Same MIME/size gates as the report-bound
+ * upload. The bytes are kept as a data URI so the dev play seam
+ * (`GET /audios/:id/play`) can serve them to the `<audio>` element;
+ * the DTO stays metadata-only (§22.7). The signature's `body` slot
+ * mirrors the multipart dispatch contract — the wizard sends
+ * everything in the FormData.
+ */
+const uploadStagedClipHandler = async (user, body, formData) => {
+  const file = formData?.get("clip");
+  if (!file || typeof file.name !== "string") {
+    return error(httpStatus.UNPROCESSABLE_ENTITY, "Choose an audio file to upload");
+  }
+  if (!AUDIO_ALLOWED_MIME_TYPES.includes(baseMimeType(file.type))) {
+    return error(httpStatus.UNPROCESSABLE_ENTITY, "Only audio files are accepted");
+  }
+  if (file.size > AUDIO_MAX_SIZE_BYTES) {
+    return error(httpStatus.UNPROCESSABLE_ENTITY, "The audio file is too large (max 50 MB)");
+  }
+  const rawDuration = Number.parseInt(formData?.get("durationSec") ?? body?.durationSec, 10);
+  const durationSec =
+    Number.isFinite(rawDuration) && rawDuration > 0
+      ? Math.min(rawDuration, AUDIO_MAX_DURATION_SEC)
+      : 1;
+  const audioData = await readFileAsDataUrl(file);
+  const clip = {
+    _id: `clip-${String(counters.clip++).padStart(4, "0")}`,
+    user: user._id,
+    report: null,
+    visitNo: null,
+    mimeType: baseMimeType(file.type),
+    sizeBytes: file.size,
+    durationSec,
+    transcription: null,
+    audioData,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  clips.push(clip);
+  return { data: successEnvelope(toClipDto(clip), "Clip staged") };
+};
+
+/**
+ * The §46.17 dev play seam: returns the playback URL for the
+ * `<audio>` element. Uploaded clips replay their stored bytes; the
+ * seeded clips hold no bytes, so they resolve to a synthesized
+ * silent WAV (their metadata — durations, sizes — stays fixture
+ * truth). The production caller never calls this route — it builds
+ * the stream URL from the DTO's `_id` (§46.17 contract).
+ */
+const playAudioHandler = (user, audioId) => {
+  const clip = clips.find((entry) => entry._id === audioId && entry.user === user._id);
+  if (!clip) {
+    return error(httpStatus.NOT_FOUND, AUDIO_NOT_FOUND_MESSAGE);
+  }
+  return { data: successEnvelope({ url: clip.audioData ?? SILENT_WAV_DATA_URI }) };
 };
 
 const deleteClipHandler = (user, audioId) => {
@@ -1647,6 +1832,8 @@ const paths = [
   { re: /^\/reports\/([^/]+)$/, method: "PATCH", fn: updateReportHandler, arity: 3 },
   { re: /^\/reports\/([^/]+)$/, method: "DELETE", fn: deleteReportHandler, arity: 2 },
   { re: /^\/reports$/, method: "POST", fn: createReportHandler, arity: 2 },
+  { re: /^\/audios\/([^/]+)\/play$/, method: "GET", fn: playAudioHandler, arity: 2 },
+  { re: /^\/audios$/, method: "POST", fn: uploadStagedClipHandler, arity: 3 },
   { re: /^\/audios\/([^/]+)$/, method: "GET", fn: getAudioHandler, arity: 2 },
   { re: /^\/audios\/([^/]+)$/, method: "DELETE", fn: deleteClipHandler, arity: 2 },
   { re: /^\/branches\/([^/]+)\/archive$/, method: "POST", fn: archiveBranchHandler, arity: 2 },

@@ -21,6 +21,8 @@ import Tooltip from "@mui/material/Tooltip";
  * @param {Object} props.audio - The metadata-only DTO of §22.7.
  * @param {string} [props.audioUrl] - Playback URL from the §32 audio endpoint.
  * @param {string} [props.duration] - Display duration (e.g. "MM:SS").
+ * @param {Function} [props.onPlay] - Fires when playback starts (e.g. the take card's equalizer).
+ * @param {Function} [props.onPause] - Fires when playback pauses.
  * @param {Function} [props.onEnded] - Fires when playback completes.
  * @param {string} [props.errorMessage] - Playback error text.
  */
@@ -28,6 +30,8 @@ export default function MuiAudioPlayer({
   audio,
   audioUrl,
   duration,
+  onPlay,
+  onPause,
   onEnded,
   errorMessage,
 }) {
@@ -52,9 +56,17 @@ export default function MuiAudioPlayer({
     }
   };
 
-  const onPlay = () => setIsPlaying(true);
-  const onPause = () => setIsPlaying(false);
-  const onEndedInternal = () => {
+  const handlePlay = () => {
+    setIsPlaying(true);
+    if (onPlay) onPlay();
+  };
+
+  const handlePause = () => {
+    setIsPlaying(false);
+    if (onPause) onPause();
+  };
+
+  const handleEnded = () => {
     setIsPlaying(false);
     setHasEnded(true);
     setCurrentTime(0);
@@ -76,9 +88,9 @@ export default function MuiAudioPlayer({
           ref={audioRef}
           src={audioUrl}
           onTimeUpdate={onTimeUpdate}
-          onPlay={onPlay}
-          onPause={onPause}
-          onEnded={onEndedInternal}
+          onPlay={handlePlay}
+          onPause={handlePause}
+          onEnded={handleEnded}
           preload="metadata"
         />
       ) : null}
@@ -128,6 +140,8 @@ MuiAudioPlayer.propTypes = {
   }),
   audioUrl: PropTypes.string,
   duration: PropTypes.string,
+  onPlay: PropTypes.func,
+  onPause: PropTypes.func,
   onEnded: PropTypes.func,
   errorMessage: PropTypes.string,
 };

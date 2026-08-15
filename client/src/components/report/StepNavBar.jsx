@@ -23,12 +23,14 @@ import { WIZARD } from "../../utils/constants";
  * @param {Function} props.onNext - Validates and advances.
  * @param {boolean} [props.prevDisabled] - True on the first step.
  * @param {boolean} [props.nextDisabled] - True while the step's must-haves are unmet.
+ * @param {boolean} [props.nextLoading] - Submission in flight (the audio step's create).
  */
 export default function StepNavBar({
   onPrev,
   onNext,
   prevDisabled = false,
   nextDisabled = false,
+  nextLoading = false,
 }) {
   return (
     <Box
@@ -55,6 +57,7 @@ export default function StepNavBar({
         endIcon={<ChevronRightIcon />}
         onClick={onNext}
         disabled={nextDisabled}
+        loading={nextLoading}
       >
         {WIZARD.nav.next}
       </MuiButton>

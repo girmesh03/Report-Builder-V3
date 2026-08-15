@@ -24,6 +24,7 @@ const reportTag = (reportId) => ({ type: "Reports", id: reportId });
 export const {
   useListReportsQuery,
   useGetReportQuery,
+  useCreateReportMutation,
   useUpdateReportMutation,
   useAcceptReportMutation,
   useRederiveDigestMutation,
@@ -41,6 +42,10 @@ export const {
     listReports: build.query({
       query: (params) => ({ url: "/reports", params }),
       providesTags: [REPORTS_LIST_TAG],
+    }),
+    createReport: build.mutation({
+      query: (body) => ({ url: "/reports", method: "POST", body }),
+      invalidatesTags: [REPORTS_LIST_TAG],
     }),
     getReport: build.query({
       query: ({ reportId, withContent }) => ({
