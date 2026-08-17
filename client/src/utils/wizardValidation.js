@@ -53,6 +53,23 @@ export function validateBranch(value) {
 }
 
 /**
+ * The supervisor's name (§52.4): a required 1..100 field — the same
+ * rule the create validator enforces server-side.
+ * @param {string|null} value
+ * @returns {true|string}
+ */
+export function validateSupervisorName(value) {
+  const text = String(value ?? "").trim();
+  if (text.length === 0) {
+    return WIZARD.step1.supervisorRequired;
+  }
+  if (text.length > 100) {
+    return WIZARD.step1.supervisorTooLong;
+  }
+  return true;
+}
+
+/**
  * Visits validation: with two or more visits every branch after the
  * main carries its own required, ordered pair. The main visit (index
  * 0) rides the day pair and is never checked here — it is synced to
@@ -84,6 +101,7 @@ export function validateStep1(values) {
     ['clockIn', validateClockIn(values.clockIn)],
     ['clockOut', validateClockOut(values.clockOut, values.clockIn)],
     ['branch', validateBranch(values.branch)],
+    ['supervisorName', validateSupervisorName(values.supervisorName)],
     ['visits', validateVisits(values.visits)],
   ];
   checks.forEach(([key, message]) => {

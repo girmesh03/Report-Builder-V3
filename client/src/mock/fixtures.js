@@ -4,7 +4,7 @@
  * §66.10 adapter fixture data — the §40 fixture contract for the
  * domain surfaces (the adapter extends to the domain fixtures with
  * its owning phases; this phase is P4). Seed: the §25.3 persona
- * `ቤዛ አያሌው` (beza.ayalew@gmail.com) and the BR-13 second user
+ * `ቤዛ አያሌው` (beza.ayalew@gmail.com) and the second (personally scoped) user
  * (henok.getnet@gmail.com); branches with Amharic names (content
  * data — the UI chrome stays English, §7.6); reports spanning every
  * `REPORT_STATUSES` member incl. Type-1/Type-2 days (§6.4), one
@@ -13,7 +13,7 @@
  * content in the §6.8 style with `±` tokens verbatim; clips bound
  * `{ report, visitNo }` (§32.2) with metadata-only DTO surfaces
  * (§22.7 — no `filePath`); per-clip transcriptions (raw/latest
- * single-undo, BR-11; one differing pair); one conversation thread
+ * single-undo; one differing pair); one conversation thread
  * (§24 roles); and the session list of §28.3.
  *
  * This is a **phase artifact** (§66.10): dev-only data, deleted
@@ -30,7 +30,7 @@ const deepFreeze = (value) => {
 /**
  * Demo credentials (adapter fixture data, shown at the step-5
  * review): persona `ቤዛ አያሌው` / beza.ayalew@gmail.com and the second
- * BR-13 user. Emails derive the profile name per §19.2.
+ * second user. Emails derive the profile name per §19.2.
  * @type {readonly Object[]}
  */
 export const MOCK_USERS = deepFreeze([
@@ -77,7 +77,7 @@ export const MOCK_ADAPTER = deepFreeze({
 /**
  * Branch seeds (§20): seven active branches of the persona + one
  * archived (the tombstone walk — reports keep their `branches[].name`
- * snapshot, BR-14). Locations are content data.
+ * snapshot). Locations are content data.
  * @type {readonly Object[]}
  */
 export const MOCK_BRANCHES = deepFreeze([
@@ -165,7 +165,7 @@ export const MOCK_BRANCHES = deepFreeze([
 
 /**
  * Report-level content seeds (§21.2): `raw` is the plain-text
- * generation truth (OQ-007: plain text — never rewritten, BR-11);
+ * generation truth (OQ-007: plain text — never rewritten);
  * `latest` is the current rich-text HTML surface (OQ-007: HTML,
  * sanitized on write/render §61). The `±` prefix marks official
  * text — client renders verbatim, never resolves (§35.3/§53.3).
@@ -308,7 +308,7 @@ const latestR012 = latestFromRaw(RAW_R012);
  * Report seeds (§21, §31): every status member present; Type-1 and
  * Type-2 days (§6.4); one archived report (tombstone walk); one
  * `reviewed` report whose digest has a non-empty `unassignedItems`
- * (the §31.6 accept-gate walk); one report of the BR-13 second
+ * (the §31.6 accept-gate walk); one report of the second
  * user (ownership scoping — never visible to the persona's pages).
  * @type {readonly Object[]}
  */
@@ -821,7 +821,7 @@ export const MOCK_CLIPS = deepFreeze([
 
 /**
  * Transcription seeds (§23): per-clip `raw`/`latest` single-undo
- * (BR-11); `tr-0003` has a differing pair — the §51.4 "Restore
+ * `tr-0003` has a differing pair — the §51.4 "Restore
  * original" walk. Content is fixture Amharic (§33 pipeline output
  * shape; `stt.*` audit only, ADR-019).
  * @type {readonly Object[]}

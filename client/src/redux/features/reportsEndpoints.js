@@ -6,8 +6,8 @@
  * covers the §31 lifecycle: header PATCH
  * (§31.5), content
  * Mode-1 save / Mode-2/3 correction / revert (§31.6, §35), accept
- * (§31.6, BR-08), digest re-derivation, generation (§34.2) and the
- * two-path archive lifecycle (§31.7, BR-15/BR-16). Tag families:
+ * (§31.6), digest re-derivation, generation (§34.2) and the
+ * two-path archive lifecycle (§31.7). Tag families:
  * mutations that change report rows invalidate `Reports` (no manual
  * refetch, ADR-033); content writes also clear the server-side
  * digest, which the dashboard family re-reads via its own

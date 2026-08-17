@@ -30,21 +30,22 @@
  * confirmation dialog guards the unsaved draft: leaving or
  * closing the browser before the create saves no report.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router";
 import { useSelector } from "react-redux";
 import { useForm, useWatch } from "react-hook-form";
+import dayjs from "dayjs";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
-import ConstructionOutlinedIcon from "@mui/icons-material/ConstructionOutlined";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import MuiConfirmDialog from "../components/reusable/MuiConfirmDialog";
-import MuiEmptyState from "../components/reusable/MuiEmptyState";
+import LoadingSpinner from "../components/reusable/LoadingSpinner";
 import MuiStepper from "../components/reusable/MuiStepper";
 import StepAudio from "../components/report/StepAudio";
 import StepBasicInfo from "../components/report/StepBasicInfo";
 import StepNavBar from "../components/report/StepNavBar";
+import StepReport from "../components/report/StepReport";
 import StepTranscription from "../components/report/StepTranscription";
 import SummaryRibbon from "../components/report/SummaryRibbon";
 import { selectAuthUser } from "../redux/features/authSlice";
@@ -52,6 +53,7 @@ import { useListBranchesQuery } from "../redux/features/branchesEndpoints";
 import { useUploadClipMutation } from "../redux/features/audioEndpoints";
 import {
   useCreateReportMutation,
+  useGetReportQuery,
   useUpdateReportMutation,
   useUpdateVisitsMutation,
 } from "../redux/features/reportsEndpoints";
@@ -64,45 +66,51 @@ import {
 } from "../utils/ethiopianDate";
 import { validateStep1 } from "../utils/wizardValidation";
 
-/**
- * The quiet stand-in for the report step (step 4) until its surface
- * lands in the report round.
- */
-function StepPlaceholder() {
-  return (
-    <MuiEmptyState
-      icon={<ConstructionOutlinedIcon />}
-      title={WIZARD.placeholder.title}
-      description={WIZARD.placeholder.description}
-      minHeight="280px"
-    />
-  );
-}
-
 export function Component() {
   const theme = useTheme();
   const isBelowMd = useMediaQuery(theme.breakpoints.down("md"));
   const navigate = useNavigate();
+  const { reportId: routeReportId } = useParams();
+  // Edit-mode re-entry (§52.8, round-report-step): the wizard is also
+  // the report's editor surface at /reports/:reportId/wizard — the
+  // created report is loaded, the form prefilled, and the stepper
+  // entered at the step matching the report's status.
+  const isEdit = Boolean(routeReportId);
   const user = useSelector(selectAuthUser);
   const { data, isLoading: branchesLoading } = useListBranchesQuery({});
+  const {
+    data: editReportData,
+    isLoading: editLoading,
+  } = useGetReportQuery(
+    { reportId: routeReportId, withContent: true },
+    { skip: !routeReportId },
+  );
   const [createReport, { isLoading: creatingReport }] =
     useCreateReportMutation();
   const [updateReport] = useUpdateReportMutation();
   const [updateVisits] = useUpdateVisitsMutation();
   const [uploadClip] = useUploadClipMutation();
   const [activeStep, setActiveStep] = useState(0);
-  const [reportId, setReportId] = useState(null);
+  const [createdReportId, setCreatedReportId] = useState(null);
+  const reportId = routeReportId ?? createdReportId;
   const [attaching, setAttaching] = useState(false);
   const [transcriptionReady, setTranscriptionReady] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [takes, setTakes] = useState([]);
   const contentRef = useRef(null);
   const stepRef = useRef(null);
+  const stepReportRef = useRef(null);
+  const entryAppliedRef = useRef(false);
 
   const branches = useMemo(() => data?.docs ?? [], [data]);
   const branchNameOf = useMemo(() => {
     const byId = new Map(branches.map((branch) => [branch._id, branch.name]));
     return (branchId) => byId.get(branchId) ?? "—";
+  }, [branches]);
+  const branchIdOf = useMemo(() => {
+    const byName = new Map(branches.map((branch) => [branch.name, branch._id]));
+    return (branchName) => byName.get(branchName) ?? null;
   }, [branches]);
 
   const clipIds = useMemo(
@@ -121,6 +129,7 @@ export function Component() {
       clockIn: null,
       clockOut: null,
       branch: null,
+      supervisorName: user?.fullName ?? "",
       visits: [],
     },
   });
@@ -128,15 +137,68 @@ export function Component() {
   const watched = useWatch({ control: form.control });
   const step1Ready = Object.keys(validateStep1(watched)).length === 0;
 
+  // Edit-mode entry (§52.8): once the report is loaded, prefill the
+  // form (the report's own values — the auth user only seeds the Add
+  // flow). The stepper's entry step is DERIVED from the status (draft /
+  // audio_attached → 0, transcribed → 2, reviewed → 1, completed → 3)
+  // until the user steps, then user navigation owns it — no setState
+  // in effect. The visits DTO carries branch NAMES, so the prefill
+  // resolves them back to ids through the branches list (an archived
+  // branch resolves to null — the picker then re-commits only the
+  // active ones).
+  useEffect(() => {
+    if (!isEdit || !editReportData || entryAppliedRef.current) {
+      return;
+    }
+    entryAppliedRef.current = true;
+    form.reset({
+      date: gregorianToEthiopian(new Date(editReportData.reportDate)),
+      clockIn: editReportData.clockIn
+        ? dayjs(editReportData.clockIn, "HH:mm")
+        : null,
+      clockOut: editReportData.clockOut
+        ? dayjs(editReportData.clockOut, "HH:mm")
+        : null,
+      branch: editReportData.branches?.[0]?.branch ?? null,
+      supervisorName: editReportData.supervisorName ?? "",
+      visits: (editReportData.visits ?? []).map((visit) => ({
+        branch: branchIdOf(visit.branchName),
+        clockIn: visit.clockIn ? dayjs(visit.clockIn, "HH:mm") : null,
+        clockOut: visit.clockOut ? dayjs(visit.clockOut, "HH:mm") : null,
+      })),
+    });
+  }, [isEdit, editReportData, form, branchIdOf]);
+
+  const entryStepOf = (status) => {
+    if (status === "transcribed") {
+      return 2;
+    }
+    if (status === "reviewed") {
+      return 1;
+    }
+    if (status === "completed") {
+      return 3;
+    }
+    return 0;
+  };
+  const [userStepped, setUserStepped] = useState(false);
+  const goToStep = useCallback((step) => {
+    setUserStepped(true);
+    setActiveStep(step);
+  }, []);
+  const shownStep =
+    isEdit && !userStepped ? entryStepOf(editReportData?.status) : activeStep;
+
   useEffect(() => {
     contentRef.current?.focus();
-  }, [activeStep]);
+  }, [shownStep]);
 
   const step1Payload = () => ({
     date: ethiopianToGregorian(watched.date).toISOString(),
     clockIn: watched.clockIn?.format("HH:mm"),
     clockOut: watched.clockOut?.format("HH:mm"),
     branch: watched.branch,
+    supervisorName: String(watched.supervisorName ?? "").trim(),
     visits: (watched.visits ?? []).map((visit) => ({
       branch: visit.branch,
       clockIn: visit.clockIn?.format("HH:mm"),
@@ -163,7 +225,9 @@ export function Component() {
           message,
         });
       } else if (
-        ["date", "clockIn", "clockOut", "branch"].includes(field)
+        ["date", "clockIn", "clockOut", "branch", "supervisorName"].includes(
+          field,
+        )
       ) {
         form.setError(field, { message });
       }
@@ -189,7 +253,7 @@ export function Component() {
           updateReport({ reportId, reportDate: payload.date }).unwrap(),
           updateVisits({ reportId, visits: payload.visits }).unwrap(),
         ]);
-        setActiveStep(1);
+        goToStep(1);
       } catch (error) {
         applyServerDetails(error);
         showToast(
@@ -203,9 +267,9 @@ export function Component() {
     }
     try {
       const report = await createReport(payload).unwrap();
-      setReportId(report._id);
+      setCreatedReportId(report._id);
       showToast("success", TOAST_CATALOGUE.report.created);
-      setActiveStep(1);
+      goToStep(1);
     } catch (error) {
       applyServerDetails(error);
       showToast(
@@ -254,22 +318,28 @@ export function Component() {
       return;
     }
     showToast("success", TOAST_CATALOGUE.audio.attached);
-    setActiveStep(2);
+    goToStep(2);
   };
 
   const handleNext = () => {
-    if (activeStep === 0) {
+    if (shownStep === 0) {
       handleStep1Next();
       return;
     }
-    if (activeStep === 1) {
+    if (shownStep === 1) {
       handleStep2Next();
       return;
     }
-    setActiveStep((current) => Math.min(current + 1, WIZARD.steps.length - 1));
+    if (shownStep === 2) {
+      goToStep(3);
+      return;
+    }
+    // Step 4: the report step's own finish act (Mode-1 save-if-dirty
+    // → the §51 details page); a blocked finish stays on the step.
+    stepReportRef.current?.finish();
   };
 
-  const handlePrev = () => setActiveStep((current) => Math.max(0, current - 1));
+  const handlePrev = () => goToStep(Math.max(0, shownStep - 1));
 
   const confirmLeave = () => {
     setCloseOpen(false);
@@ -277,12 +347,24 @@ export function Component() {
   };
 
   const handleClose = () => {
+    if (isEdit) {
+      // Edit-mode close: back to the report's own page (§51).
+      navigate(`/reports/${reportId}`);
+      return;
+    }
     if (reportId) {
       navigate("/reports");
       return;
     }
     setCloseOpen(true);
   };
+
+  // Edit-mode ribbon: the report's own supervisor names the day; the
+  // Add flow seeds the ribbon with the signed-in user.
+  const ribbonUserName =
+    isEdit && editReportData?.supervisorName
+      ? editReportData.supervisorName
+      : (user?.fullName ?? null);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column" }}>
@@ -299,20 +381,35 @@ export function Component() {
           clockIn={watched.clockIn}
           clockOut={watched.clockOut}
           branchName={watched.branch ? branchNameOf(watched.branch) : null}
-          userName={user?.fullName ?? null}
+          userName={ribbonUserName}
           onClose={handleClose}
         />
 
         <Divider
           sx={{ my: 2, maxWidth: layoutConfig.contentMaxWidth, mx: "auto" }}
         />
-        <Box sx={{ maxWidth: layoutConfig.contentMaxWidth, mx: "auto" }}>
-          <MuiStepper
-            steps={WIZARD.steps}
-            activeStep={activeStep}
-            onStepClick={setActiveStep}
-          />
-        </Box>
+        {isEdit && editLoading ? (
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              minHeight: 320,
+            }}
+          >
+            <LoadingSpinner />
+          </Box>
+        ) : (
+          <>
+            <Box sx={{ maxWidth: layoutConfig.contentMaxWidth, mx: "auto" }}>
+              <MuiStepper
+                steps={WIZARD.steps}
+                activeStep={shownStep}
+                onStepClick={goToStep}
+              />
+            </Box>
+          </>
+        )}
       </Box>
 
       <Box
@@ -327,23 +424,31 @@ export function Component() {
           mx: "auto",
         }}
       >
-        {activeStep === 0 ? (
-          <StepBasicInfo
-            ref={stepRef}
-            control={form.control}
-            branches={branches}
-            branchesLoading={branchesLoading}
-            branchNameOf={branchNameOf}
-          />
-        ) : activeStep === 1 ? (
-          <StepAudio takes={takes} setTakes={setTakes} />
-        ) : activeStep === 2 ? (
-          <StepTranscription
-            reportId={reportId}
-            onReadyChange={setTranscriptionReady}
-          />
-        ) : (
-          <StepPlaceholder />
+        {isEdit && editLoading ? null : (
+          <>
+            {shownStep === 0 ? (
+              <StepBasicInfo
+                ref={stepRef}
+                control={form.control}
+                branches={branches}
+                branchesLoading={branchesLoading}
+                branchNameOf={branchNameOf}
+              />
+            ) : shownStep === 1 ? (
+              <StepAudio takes={takes} setTakes={setTakes} />
+            ) : shownStep === 2 ? (
+              <StepTranscription
+                reportId={reportId}
+                onReadyChange={setTranscriptionReady}
+              />
+            ) : (
+              <StepReport
+                ref={stepReportRef}
+                reportId={reportId}
+                onBusyChange={setReportBusy}
+              />
+            )}
+          </>
         )}
       </Box>
 
@@ -360,14 +465,22 @@ export function Component() {
         <StepNavBar
           onPrev={handlePrev}
           onNext={handleNext}
-          prevDisabled={activeStep === 0}
+          prevDisabled={shownStep === 0}
           nextDisabled={
-            (activeStep === 0 && !step1Ready) ||
-            (activeStep === 1 &&
+            (shownStep === 0 && !step1Ready) ||
+            (shownStep === 1 &&
               (clipIds.length === 0 || uploadsPending || attaching)) ||
-            (activeStep === 2 && !transcriptionReady)
+            (shownStep === 2 && !transcriptionReady) ||
+            (shownStep === 3 && reportBusy)
           }
-          nextLoading={creatingReport || attaching}
+          nextLoading={creatingReport || attaching || reportBusy}
+          nextLabel={
+            shownStep === 3
+              ? isEdit
+                ? WIZARD.report.finishLabel
+                : WIZARD.report.createLabel
+              : WIZARD.nav.next
+          }
         />
       </Box>
 

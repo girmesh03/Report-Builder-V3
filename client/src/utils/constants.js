@@ -151,6 +151,8 @@ export const TOAST_CATALOGUE = Object.freeze({
     archived: 'Report archived',
     restored: 'Report restored',
     deleted: 'Report deleted',
+    saved: 'Report content saved',
+    reverted: 'Report reverted to the original',
   }),
   branch: Object.freeze({
     created: 'Branch created',
@@ -309,6 +311,7 @@ export const WIZARD = Object.freeze({
     clockIn: 'Clock in',
     clockOut: 'Clock out',
     branch: 'Main branch',
+    supervisor: 'Supervisor',
     visited: 'Visited branches',
   }),
   ribbon: Object.freeze({
@@ -324,13 +327,11 @@ export const WIZARD = Object.freeze({
     clockOutAfterClockIn: 'Exit time must be later than entry time',
     branchRequired: 'Choose the main branch',
     branchPlaceholder: 'Choose a branch',
+    supervisorRequired: 'Enter the supervisor\u2019s name',
+    supervisorTooLong: 'The supervisor\u2019s name is too long (100 max)',
     visitTimesRequired: "Enter this branch's times",
     visitClockOutAfterClockIn:
       'Exit time must be later than entry time for this branch',
-  }),
-  placeholder: Object.freeze({
-    title: 'Coming in a later step',
-    description: "This step's surface arrives with its own implementation.",
   }),
   audio: Object.freeze({
     inviteTitle: "Tell the day's story",
@@ -387,6 +388,32 @@ export const WIZARD = Object.freeze({
     unsaved: 'Unsaved changes',
     saving: 'Saving…',
     noChanges: 'No changes yet',
+  }),
+  report: Object.freeze({
+    title: 'The report',
+    generate: 'Generate the report',
+    generating: 'Writing the report…',
+    generateHint:
+      'The report is written from today\u2019s takes — generated content stays editable for review.',
+    generateEmptyTitle: 'The day is heard',
+    generateEmptyDescription:
+      'Generate the report from the reviewed transcription, then edit it here.',
+    generateFirst: 'Generate the report before finishing',
+    emptyBlock: 'The report has no text yet — write or generate it first',
+    tokenGuide:
+      '\u00B1: leave this token untouched \u2014 it maps to official text',
+    tokenGuideToggle: 'Show the official-token guidance',
+    exportLabel: 'Export',
+    exportMenu: Object.freeze({
+      print: 'Print / Save as PDF',
+      txt: 'Download TXT',
+      xlsx: 'Download XLSX',
+      xlsxComing: 'Coming with the export round',
+      csv: 'Export selected table as CSV',
+      csvComing: 'Available with the export round',
+    }),
+    finishLabel: 'Finish',
+    createLabel: 'Create',
   }),
   toolbar: Object.freeze({
     bold: 'Bold',

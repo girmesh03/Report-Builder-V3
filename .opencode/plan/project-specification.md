@@ -3238,7 +3238,16 @@ client/
     |   |                                    #   round-7: StorySection.jsx and the whole
     |   |                                    #   components/reports/ folder are DELETED — the
     |   |                                    #   transcription step composes the two cards and
-    |   |                                    #   the correction dialog)
+    |   |                                    #   the correction dialog);
+    |   |                                    #   round-report-step (2026-08-17): StepReport,
+    |   |                                    #   GenerateCard, ReportBodyCard, CorrectionOpener,
+    |   |                                    #   EditorFooter (the shared §53.5 footer), ExportMenu,
+    |   |                                    #   useEditorHost.js (the §53.6 host #2: draft/dirty/
+    |   |                                    #   error/saving/reverting + Mode-1 handleSave +
+    |   |                                    #   revert + applyCandidate) and useCorrection.js
+    |   |                                    #   (the §54.3 candidate rule) — the transcription
+    |   |                                    #   card is REFACTORED onto the same host/candidate
+    |   |                                    #   rules (ADR-033; one correction implementation);
     |   |-- reports/                          # DELETED at round 7 (§54, §15.6): the correction
     |   |                                    #   surface folders correct-instruction/,
     |   |                                    #   correct-voice/, unassigned-panel/ dissolved — the
@@ -6245,14 +6254,19 @@ section (§32–§39) hangs on this section.
 The five creation steps are the server side of the wizard (§52);
 the step list replicates the creation order of §6.3's field list
 (reportDate, supervisorName) and the steps below — no separate
-client registry exists.
+client registry exists. (Round-report-step amendment, C1: the
+§52 wizard merges Visits into step 1, so §31.2-1 is the only
+step-1 endpoint; §31.2-2 … §31.2-5 remain the act order.)
 
 **§31.2-1** `POST /reports` (access): `{ supervisorName,
 reportDate }` (reportDate optional Date ISO) → 201 CREATED,
 ReportDto at `draft`, `raw`/`latest` null, `visits: []`,
 `branches: []`. The report row exists before visits/audio;
-wizard step 1 maps here. No `lng`/`lat` exists anywhere (§21.2)
-— no coordinate endpoint exists, and none is planned.
+wizard step 1 maps here (round-report-step: the payload now
+carries the editable `supervisorName` from the step-1 field,
+seeded from the user's display name when absent). No `lng`/`lat`
+exists anywhere (§21.2) — no coordinate endpoint exists, and
+none is planned.
 Validation: `supervisorName` 1..100.
 
 **§31.2-2** `PATCH /reports/:reportId/visits` (access): replaces
@@ -7753,6 +7767,7 @@ The route set is decided here and detailed by the page sections:
 | `/dashboard` | Dashboard page | Protected | §49 |
 | `/reports` | Reports page (list/grid toggle) | Protected | §50 |
 | `/reports/new` | Report Creation Wizard | Protected | §52 |
+| `/reports/:reportId/wizard` | Report Creation Wizard (Edit mode, round-report-step C2) | Protected | §52.3 |
 | `/reports/:reportId` | Report Details page | Protected | §51 |
 | `/branches` | Branches page | Protected | §56 |
 | `/branches/:branchId` | Branch Details page | Protected | §56.5 |
@@ -10056,20 +10071,26 @@ duplicate flows (ADR-033).
 
 ### 52.2 Step model & navigation
 
-Steps in order (labels are chrome copy, §7.6): **1. Basic info →
-2. Visits → 3. Audio → 4. Transcription → 5. Report**. The
-**step list replicates the creation order of §31.2-1 through
-§31.2-5** (fields per §6.3) — the wizard is the correct
-client side of that order; one ListItem per step (lead +
-trailing) leading to the section index (`data` from the form
-values when valid, `Sequential` stepper §46.5).
+Steps in order (labels are chrome copy, §7.6): **1. Basic info &
+Visits → 2. Audio → 3. Transcription → 4. Report** — the
+**four-step merged model (round-report-step amendment, C1)**: the
+Visits step of the original five-step list is merged into step 1
+(the visit pair UI lives in `VisitedBranchesDialog` on the same
+form); §52.3/§52.8/§31.2-1 and the entry indexes below use the
+merged numbering. The step list replicates the creation order of
+§31.2-1 (§31.2-2 … §31.2-5 remain server-side act order) —
+fields per §6.3 — the wizard is the correct client side of that
+order; one ListItem per step (lead + trailing) leading to the
+section index (`data` from the form values when valid,
+`Sequential` stepper §46.5).
 
 - **Nav rules:** Prev/Next buttons (text buttons with start/
   end icons); Next is blocked when the current step is
   invalid (completion strategy §46.5); the stepper shows which
   steps are complete; the **leave guard** of §52.11.
 - **Final CTA (Add mode):** last button = "Create" (contained;
-  loading state on submit, §46.3).
+  loading state on submit, §46.3) — the report step's Next label
+  is "Create" (Add) / "Finish" (Edit), C9.
 
 ### 52.3 Add vs Edit entry modes
 
@@ -10085,15 +10106,17 @@ values when valid, `Sequential` stepper §46.5).
   on the client — §31.2-1 owns creation; each completed step saves
   through its endpoint, §52.10).
 - **Edit** (`/reports/:reportId/wizard`, §50.4/§51.5 Edit):
-  enters the wizard at the **status-matched step** — draft →
-  step 1; audio_attached → step 2 (the visits step of an
-  untouched report); transcribed → step 4; reviewed → step 3
-  (audio can still be added/removed and re-transcription and all
-  three correction modes are open, §23.4/§34.7); completed →
-  step 5 (the final-report surface — the three correction modes
-  stay available via §35/§54; audio and transcription are frozen,
+  enters the wizard at the **status-matched step** (merged
+  numbering, C1) — draft / audio_attached → step 1;
+  transcribed → step 3; reviewed → step 2 (audio can still be
+  added/removed and re-transcription and all three correction
+  modes are open, §23.4/§34.7); completed → step 4 (the
+  final-report surface — the three correction modes stay
+  available via §35/§54; audio and transcription are frozen,
   BR-12 end) — computed from the §31 status index. The current
-  report's `latest` content (§21.2) fills the step forms. Editing
+  report's `latest` content (§21.2) fills the step forms
+  (the RHF prefill resolves the visits DTO's branch names back
+  to ids through the active-branches list). Editing
   posts through the §35 PATCH (Mode-1 Save) on each completed
   step.
 
@@ -10205,17 +10228,33 @@ force:
   `applyCandidate()` and the draft follows — boundary reads
   (`getContent()` on Save) always agree with the live document.
 
-### 52.8 Step 5 — Report
+### 52.8 Step 4 — Report
 
 The step hosts the **§54 report-mode** surface (Mode-1 Save =
 §35 PATCH on completion; the finished report view; navigation to
-§51 on finish). Read-only until the §21.4 generation exists. At
-`completed` the step stays editable through the §54 Modes 1–3
-(corrections only, BR-10) and becomes the **final-report
-surface**: the finished-report view with the §58 print/export
-actions; audio and transcription changes are frozen (BR-12 end,
-§31.4). "Create" (Add) / "Finish" (Edit) completes the flow →
-§51.
+§51 on finish) as a **posture machine** (round-report-step, F65):
+`transcribed` → the **generation desk** (`GenerateCard`: the step's
+empty state + the generate act, §34.2 — server-guarded; success →
+`generation.ready` toast + the query refetch seeds the body card);
+`reviewed` → the **report body card** (`ReportBodyCard`: the §53.6
+editor host #2 — the borderless MuiEditor `id="report-editor"`,
+the ± official-token guidance strip with its toggle (§54.8,
+presence computed at the seed/candidate/save boundaries), the
+stale-`latest` notice when the persisted story moved while mounted,
+the §53.5 footer, the circular correction opener); `completed`
+(Edit re-entry) → the same body card + the §58 export menu;
+any other status → the step's empty state (nothing is fabricated
+where nothing is known, §52.7). Read-only until the §21.4
+generation exists = **no editor pre-generation**, never a
+`readOnly` editor (C5). At `completed` the step stays editable
+through the §54 Modes 1–3 (corrections only) and becomes the
+**final-report surface**: the finished-report view with the §58
+print/export actions; audio and transcription changes are frozen
+(BR-12 end, §31.4). "Create" (Add) / "Finish" (Edit) completes
+the flow → §51 (C9): the Mode-1 leave-guard — save-if-dirty
+(the `?? ""` boundary read, §53.5), empty body blocks with the
+highlighted field + helper, a `transcribed` report refuses finish
+with the generate-first toast.
 
 ### 52.9 Field contract application (normative)
 
@@ -11155,6 +11194,14 @@ report in paper/digital form (export is §3.1.2 F7's surface).
   `latest` into the target file; BR-18/SC-5), and "Export
   selected table as CSV" when the current report has a
   table/section view.
+- **Wizard final-report surface (round-report-step, provisional —
+  §58 lands the full suite):** the completed report's body card
+  shows the Export menu (Print / Save as PDF + Download TXT live;
+  the XLSX and CSV affordances render DISABLED with their
+  coming-soon titles until this section's round). The TXT sink
+  serializes the §58.3 export payload (`content`, `reportDate`,
+  `supervisorName`, `branchNames`) fetched on demand — the printed
+  page and the downloaded file always describe the same report.
 - TXT/XLSX honor the same rules as print: they serialize the
   `latest` content the §37.5 surface returned, `±` tokens
   verbatim (the resolution stays §35.3/§64's), and the §43.6
@@ -12596,6 +12643,14 @@ end-to-end through a **client-side development mock adapter**:
   two-path lifecycle; the adapter simulates the retention window
   (archive retention message; delete of an archived row removes it
   outright per §50.6's simulated path).
+- **Round-report-step fix:** `POST /reports` (`createReportHandler`)
+  previously minted `_id: r-${counters.digest}` **without
+  incrementing** — every create before a digest operation reused the
+  same id, duplicating report rows and letting `reportOwnerOrNull`
+  resolve later writes against the FIRST (stale) row; the handler
+  now increments the shared counter (`counters.digest++`), keeping
+  create ids strictly unique for the adapter's lifetime (fixture
+  rows stay r-0001..r-0012; created rows start at r-0100+).
 - **Deletion gate (P7):** the adapter is removed when the real
   transport lands; a grep gate (its module absent from the
   client tree) closes the record. The adapter is a phase
@@ -12890,6 +12945,43 @@ Records (closed):
   (`reports-YYYY-MM-DD.*`); the PDF path inherits the print
   document title (set to the report date during print, §58.3).
   No other section changes; the §58.6 cross-check mirrors here.
+- **Round-report-step resolutions (C1–C10), CLOSED 2026-08-17.**
+  The §52 report-step round resolved ten design conflicts by
+  owner decision; each cites its deciding amendment:
+  - **C1** — keep the four merged steps (1. Basic info & Visits,
+    2. Audio, 3. Transcription, 4. Report); no five-step split.
+    Amended: §52.2/§52.3/§52.8/§31.2-1 (merged numbering).
+  - **C2** — Edit mode included in the round: the
+    `/reports/:reportId/wizard` route + status-matched entry
+    (§52.3). Amended: §41.3 route row.
+  - **C3** — the report step's transient surfaces: GenerateCard /
+    ReportBodyCard postures (§52.8).
+  - **C4** — no per-keystroke editor visits; the §35 PATCH stays
+    the save gate (§53.5 unchanged; the round's content boundary
+    is `?? ""`).
+  - **C5** — pre-generation = no editor, never a `readOnly`
+    editor (§52.8).
+  - **C6** — "generated + generation.ready + save → §51" with the
+    Mode-1 save-if-dirty guard; the §49 latest list and the §50
+    grid keep their surfaces (§52.8).
+  - **C7** — the step's generated-desk UI ships live (the §54.8
+    ± strip guidance lives on the body card) and the §49.2
+    generated-desk card is NOT backfilled this round (deferred
+    to §49's round; provisional under OQ-008's pattern).
+  - **C8** — the empty body blocks finish with the highlighted
+    field + helper (the §46.4 None→error protocol in the §53.5
+    footer; supervisorName validated client-side at 1..100 per
+    §46.4 mirrors).
+  - **C9** — report-step CTA label = "Create" (Add) / "Finish"
+    (Edit) (§52.2/§52.8; the stale step-5 "Finish is not this
+    bar's job" note is amended in the same change).
+  - **C10** — the export trio renders as an ExportMenu (Print +
+    TXT live, XLSX/CSV disabled with coming-soon titles) — §58
+    provisional (§58.2).
+  - **F65 (finding, not a decision):** the mock's
+    `createReportHandler` minted report ids without incrementing
+    its shared counter, duplicating rows across creates — fixed
+    and recorded at §66.10.
 
 Records (open):
 

@@ -3,8 +3,7 @@
  *
  * The branch endpoint set of §42.6 (owning contract §30, §20),
  * injected exactly once into the single descriptor (ADR-026). The
- * two-path lifecycle (archive → restore → permanent delete, BR-14/
- * BR-15/BR-16) is driven by the page actions; mutations invalidate
+ * two-path lifecycle (archive → restore → permanent delete) is driven by the page actions; mutations invalidate
  * the whole `Branches` family — no manual refetch (ADR-033).
  */
 import { apiSlice } from "./apiSlice";

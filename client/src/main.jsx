@@ -135,6 +135,13 @@ const router = createBrowserRouter([
                 },
               },
               {
+                path: "/reports/:reportId/wizard",
+                lazy: {
+                  Component: () =>
+                    import("./pages/ReportNew.jsx").then((m) => m.Component),
+                },
+              },
+              {
                 path: "/reports/:reportId",
                 lazy: {
                   Component: () =>

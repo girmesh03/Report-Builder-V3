@@ -14,24 +14,16 @@
  * the step's empty state — nothing is fabricated where nothing is
  * known (§52.7).
  */
-import { useCallback, useState } from "react";
 import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
 import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
 import { alpha } from "@mui/material/styles";
 import AutoStoriesIcon from "@mui/icons-material/AutoStories";
-import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
-import CheckCircleOutlinedIcon from "@mui/icons-material/CheckCircleOutlined";
-import RestoreIcon from "@mui/icons-material/Restore";
-import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
 import MuiEditor from "../reusable/MuiEditor";
 import MuiEmptyState from "../reusable/MuiEmptyState";
-import CorrectionDialog from "./CorrectionDialog";
+import CorrectionOpener from "./CorrectionOpener";
+import EditorFooter from "./EditorFooter";
 import { WIZARD } from "../../utils/constants";
 
 const EDITOR_MIN_HEIGHT = { xs: 200, sm: 220, md: 260, lg: 320 };
@@ -77,45 +69,12 @@ export default function TranscriptionCard({
   reportId,
   ref,
 }) {
-  const [dialogOpen, setDialogOpen] = useState(false);
-
-  const handleCloseDialog = useCallback(() => {
-    setDialogOpen(false);
-  }, []);
-
-  const status = saving
-    ? WIZARD.modes.saving
-    : justSaved
-      ? WIZARD.modes.savedJustNow
-      : dirty
-        ? WIZARD.modes.unsaved
-        : lastSavedAt
-          ? WIZARD.modes.savedAt.replace("{time}", lastSavedAt)
-          : WIZARD.modes.noChanges;
-
   const headerAction = (
-    <Tooltip title={WIZARD.transcription.addCorrection}>
-      <span>
-        <IconButton
-          onClick={() => setDialogOpen(true)}
-          disabled={!ready}
-          aria-label={WIZARD.transcription.addCorrection}
-          sx={{
-            width: 36,
-            height: 36,
-            bgcolor: "primary.main",
-            color: "primary.contrastText",
-            "&:hover": { bgcolor: "primary.dark" },
-            "&.Mui-disabled": {
-              bgcolor: "action.disabledBackground",
-              color: "action.disabled",
-            },
-          }}
-        >
-          <AutoFixHighIcon fontSize="small" />
-        </IconButton>
-      </span>
-    </Tooltip>
+    <CorrectionOpener
+      disabled={!ready}
+      reportId={reportId}
+      onApply={onApplyCorrection}
+    />
   );
 
   return (
@@ -168,59 +127,16 @@ export default function TranscriptionCard({
               fieldError={fieldError}
             />
           </CardContent>
-          <CardActions
-            sx={{
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 1,
-              px: 2,
-            }}
-          >
-            <Typography
-              variant="caption"
-              color={justSaved ? "success.main" : "text.secondary"}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                minHeight: 18,
-              }}
-            >
-              {justSaved ? <CheckCircleOutlinedIcon fontSize="small" /> : null}
-              {status}
-            </Typography>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                ml: "auto",
-              }}
-            >
-              <IconButton
-                size="small"
-                aria-label={WIZARD.modes.revertToOriginal}
-                onClick={onRevert}
-                disabled={!canRevert || saving}
-                loading={reverting}
-                sx={{ width: 32, height: 32 }}
-              >
-                <RestoreIcon fontSize="small" />
-              </IconButton>
-              <IconButton
-                size="small"
-                aria-label={WIZARD.modes.save}
-                onClick={onSave}
-                disabled={reverting}
-                loading={saving}
-                color={dirty ? "error" : justSaved ? "success" : "default"}
-                sx={{ width: 32, height: 32 }}
-              >
-                <SaveOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Box>
-          </CardActions>
+          <EditorFooter
+            lastSavedAt={lastSavedAt}
+            saving={saving}
+            reverting={reverting}
+            justSaved={justSaved}
+            dirty={dirty}
+            canRevert={canRevert}
+            onSave={onSave}
+            onRevert={onRevert}
+          />
         </>
       ) : (
         <CardContent sx={{ minHeight: 280 }}>
@@ -231,12 +147,6 @@ export default function TranscriptionCard({
           />
         </CardContent>
       )}
-      <CorrectionDialog
-        open={dialogOpen}
-        onClose={handleCloseDialog}
-        reportId={reportId}
-        onApply={onApplyCorrection}
-      />
     </Card>
   );
 }

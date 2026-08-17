@@ -13,7 +13,7 @@
  * an in-memory active session (access + refresh tokens, §28.2 TTL
  * semantics); `POST /auth/refresh` rotates tokens and the access
  * token expires on its §28.2 window, exercising the §42.3 reauth
- * chain. Domain routes are personally scoped (BR-13) and mirror the
+ * chain. Domain routes are personally scoped and mirror the
  * §31.4 transition guards (last-clip rewind, accept gate, 403 on
  * archived/completed etc.), the §30 two-path lifecycle, the §31.6
  * accept 422 (unassigned-items gate), the §39 text search, the §38
@@ -346,7 +346,7 @@ const sessionUser = () => {
   return users.find((user) => user._id === activeSession.userId) ?? null;
 };
 
-/** Auth gate for every domain route (BR-13 scoping). */
+/** Auth gate for every domain route (personal scoping). */
 const requireUser = () => {
   const user = sessionUser();
   if (!user) {
@@ -637,8 +637,9 @@ const getReportHandler = (user, reportId, params) => {
  * act, `uploadClipHandler`'s `stagedClipId` path); the report is
  * created `draft` and stays a draft until the attach act flips it
  * `audio_attached`. A failed create keeps the user on step
- * 1 with the server's message applied to the fields (§52.11). No
- * supervisor name is sent — the report names the user from the
+ * 1 with the server's message applied to the fields (§52.11).
+ * The editable `supervisorName` (round-report-step, §52.4) is sent
+ * with the create; when absent the report names the user from the
  * profile. Visits may be empty — with no visited branches the whole
  * day is at the main branch — so `validateVisitBlock`'s ≥1
  * rule does not apply here.
@@ -656,6 +657,15 @@ const createReportHandler = (user, body) => {
   }
   if (!clockOut) {
     details.push({ field: "clockOut", message: "Clock out is required" });
+  }
+  const supervisorName = String(body?.supervisorName ?? user.fullName).trim();
+  if (!supervisorName) {
+    details.push({ field: "supervisorName", message: "Supervisor name is required" });
+  } else if (supervisorName.length > 100) {
+    details.push({
+      field: "supervisorName",
+      message: "The supervisor's name is too long (100 max)",
+    });
   }
   const branch = branchOfUser(user, body?.branch);
   if (!branch) {
@@ -694,10 +704,10 @@ const createReportHandler = (user, body) => {
         })
       : [{ branch: branch._id, name: branch.name }];
   const report = {
-    _id: `r-${String(counters.digest).padStart(4, "0")}`,
+    _id: `r-${String(counters.digest++).padStart(4, "0")}`,
     user: user._id,
     reportDate: date,
-    supervisorName: user.fullName,
+    supervisorName,
     status: "draft",
     branches: reportBranches,
     visits: visitRows,
@@ -1110,7 +1120,7 @@ const transcribeInstructionHandler = (user, reportId, body, formData) => {
 };
 
 /**
- * Single-undo restore (BR-11). After generation (`raw` present) the
+ * Single-undo restore. After generation (`raw` present) the
  * undo returns `latest` to `raw`. BEFORE generation (round-4
  * amendment — the transcription step's "Revert to original") the
  * story is the client-joined take texts, so the undo restores

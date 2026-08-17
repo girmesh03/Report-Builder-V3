@@ -109,7 +109,7 @@ export function gregorianToEthiopian(jsDate) {
 /**
  * The §43.6 display formatter: a stored date renders as its
  * Ethiopian `DD-MM-YY` (numeric notation, English chrome — ADR-011).
- * Null-safe: a missing value stays missing (BR-19).
+ * Null-safe: a missing value stays missing.
  * @param {Date|string} value - The stored date (UTC Date or ISO string).
  * @returns {string|null} `DD-MM-YY` or null.
  */

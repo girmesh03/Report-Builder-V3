@@ -2,7 +2,7 @@
  * @module redux/features/transcriptionEndpoints
  *
  * The transcription endpoint set of §42.6 (owning contract §33,
- * §23). The per-clip `raw`/`latest` single-undo layout (BR-11) is
+ * §23). The per-clip `raw`/`latest` single-undo layout is
  * server-side; the client reads TranscriptionDtos and drives
  * re-transcription (§33.6, ADR-030 — at `reviewed` it invalidates
  * the review lock and rewinds to `transcribed`) and the per-clip

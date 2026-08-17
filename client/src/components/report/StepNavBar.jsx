@@ -6,9 +6,9 @@
  * wraps it in a sticky shell) and in reading order at the end of the
  * step content from md up. Its buttons, labels and behavior are
  * identical at every size. Next is disabled by the owning page while
- * the current step's must-haves are unmet. "Finish" is not this
- * bar's job — the report step's final button arrives with that
- * step's own implementation.
+ * the current step's must-haves are unmet. On the report step (last
+ * step) the Next label becomes "Create" (Add) / "Finish" (Edit) —
+ * the step's own finish action, §52.8/§52.2 (round-report-step C9).
  */
 import Box from "@mui/material/Box";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";

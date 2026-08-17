@@ -32,11 +32,14 @@ import {
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Grid from "@mui/material/Grid";
+import InputAdornment from "@mui/material/InputAdornment";
 import Typography from "@mui/material/Typography";
 import AddIcon from "@mui/icons-material/Add";
+import BadgeOutlinedIcon from "@mui/icons-material/BadgeOutlined";
 import MuiButton from "../reusable/MuiButton";
 import MuiDatePicker from "../reusable/MuiDatePicker";
 import MuiSelect from "../reusable/MuiSelect";
+import MuiTextField from "../reusable/MuiTextField";
 import MuiTimePicker from "../reusable/MuiTimePicker";
 import VisitedBranchesDialog from "./VisitedBranchesDialog";
 import { PICKER_TIME_FORMAT, WIZARD } from "../../utils/constants";
@@ -45,10 +48,18 @@ import {
   validateClockIn,
   validateClockOut,
   validateDate,
+  validateSupervisorName,
   validateVisits,
 } from "../../utils/wizardValidation";
 
-const FIELD_ORDER = ["date", "clockIn", "clockOut", "branch", "visits"];
+const FIELD_ORDER = [
+  "date",
+  "clockIn",
+  "clockOut",
+  "branch",
+  "supervisorName",
+  "visits",
+];
 
 /**
  * One labeled field: caption label above, the control, and a
@@ -101,6 +112,7 @@ const StepBasicInfo = forwardRef(function StepBasicInfo(
   const clockInRef = useRef(null);
   const clockOutRef = useRef(null);
   const branchRef = useRef(null);
+  const supervisorRef = useRef(null);
   const visitsRef = useRef(null);
 
   useImperativeHandle(
@@ -113,6 +125,7 @@ const StepBasicInfo = forwardRef(function StepBasicInfo(
           clockIn: clockInRef,
           clockOut: clockOutRef,
           branch: branchRef,
+          supervisorName: supervisorRef,
           visits: visitsRef,
         };
         if (first) {
@@ -120,7 +133,7 @@ const StepBasicInfo = forwardRef(function StepBasicInfo(
         }
       },
     }),
-    [errors, dateRef, clockInRef, clockOutRef, branchRef, visitsRef],
+    [errors, dateRef, clockInRef, clockOutRef, branchRef, supervisorRef, visitsRef],
   );
 
   const visits = values.visits ?? [];
@@ -193,6 +206,33 @@ const StepBasicInfo = forwardRef(function StepBasicInfo(
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <FieldBlock
+            label={WIZARD.fieldLabels.supervisor}
+            error={errors.supervisorName}
+            ref={supervisorRef}
+          >
+            <Controller
+              name="supervisorName"
+              control={control}
+              rules={{ validate: validateSupervisorName }}
+              render={({ field }) => (
+                <MuiTextField
+                  {...field}
+                  value={field.value ?? ""}
+                  error={Boolean(errors.supervisorName)}
+                  startAdornment={
+                    <InputAdornment position="start">
+                      <BadgeOutlinedIcon />
+                    </InputAdornment>
+                  }
+                />
+              )}
+            />
+          </FieldBlock>
+        </Grid>
+      </Grid>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <FieldBlock
             label={WIZARD.fieldLabels.branch}
             error={errors.branch}
             ref={branchRef}
@@ -222,45 +262,6 @@ const StepBasicInfo = forwardRef(function StepBasicInfo(
               )}
             />
           </FieldBlock>
-        </Grid>
-      </Grid>
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Box ref={visitsRef} tabIndex={-1} sx={{ outline: "none" }}>
-            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-              {WIZARD.fieldLabels.visited}
-            </Typography>
-            <MuiButton
-              variant="outlined"
-              startIcon={<AddIcon />}
-              onClick={() => setVisitedOpen(true)}
-              fullWidth
-            >
-              {WIZARD.visited.button}
-            </MuiButton>
-            <Typography
-              variant="caption"
-              color="error"
-              aria-hidden={!errors.visits}
-              sx={{ display: "block", mt: 0.5, minHeight: "1.25em" }}
-            >
-              {errors.visits?.message ?? ""}
-            </Typography>
-            {visits.length === 0 ? null : (
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
-                {visits.map((visit) => (
-                  <Chip
-                    key={visit.branch}
-                    size="small"
-                    variant="outlined"
-                    label={`${branchNameOf(visit.branch)} — ${
-                      visit.clockIn?.format(PICKER_TIME_FORMAT) ?? "–"
-                    } – ${visit.clockOut?.format(PICKER_TIME_FORMAT) ?? "–"}`}
-                  />
-                ))}
-              </Box>
-            )}
-          </Box>
         </Grid>
         <Grid size={{ xs: 6, md: 3 }}>
           <FieldBlock
@@ -307,6 +308,45 @@ const StepBasicInfo = forwardRef(function StepBasicInfo(
               )}
             />
           </FieldBlock>
+        </Grid>
+      </Grid>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12 }}>
+          <Box ref={visitsRef} tabIndex={-1} sx={{ outline: "none" }}>
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              {WIZARD.fieldLabels.visited}
+            </Typography>
+            <MuiButton
+              variant="outlined"
+              startIcon={<AddIcon />}
+              onClick={() => setVisitedOpen(true)}
+              fullWidth
+            >
+              {WIZARD.visited.button}
+            </MuiButton>
+            <Typography
+              variant="caption"
+              color="error"
+              aria-hidden={!errors.visits}
+              sx={{ display: "block", mt: 0.5, minHeight: "1.25em" }}
+            >
+              {errors.visits?.message ?? ""}
+            </Typography>
+            {visits.length === 0 ? null : (
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}>
+                {visits.map((visit) => (
+                  <Chip
+                    key={visit.branch}
+                    size="small"
+                    variant="outlined"
+                    label={`${branchNameOf(visit.branch)} — ${
+                      visit.clockIn?.format(PICKER_TIME_FORMAT) ?? "–"
+                    } – ${visit.clockOut?.format(PICKER_TIME_FORMAT) ?? "–"}`}
+                  />
+                ))}
+              </Box>
+            )}
+          </Box>
         </Grid>
       </Grid>
       {visitedOpen ? (
