@@ -29,7 +29,10 @@ import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import PersonOutlineOutlinedIcon from "@mui/icons-material/PersonOutlineOutlined";
 import { layoutConfig } from "../../theme/themePrimitives";
 import { PICKER_TIME_FORMAT, WIZARD } from "../../utils/constants";
-import { ethiopianToGregorian, formatEthiopianDate } from "../../utils/ethiopianDate";
+import {
+  ethiopianToGregorian,
+  formatEthiopianDate,
+} from "../../utils/ethiopianDate";
 
 const DASH = "—";
 
@@ -52,7 +55,14 @@ function RibbonBlock({ icon, label, value }) {
         minWidth: 0,
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "primary.main" }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 0.5,
+          color: "primary.main",
+        }}
+      >
         {icon}
         <Typography variant="caption" color="text.secondary">
           {label}

@@ -6,6 +6,10 @@
  * reaches the client; the URL comes from the §32 audio endpoint.
  * The play control is a filled audio-orange disc (§43.2 — the
  * deeper tone marks the active playing state).
+ *
+ * `compact` (round-4 amendment): the ledger row's player —
+ * disc + duration only, no progress bar, no caption row; the owning
+ * surface draws its own status line.
  */
 import { useRef, useState, useCallback } from "react";
 import PropTypes from "prop-types";
@@ -24,6 +28,7 @@ import { orange } from "../../theme/themePrimitives";
  * @param {Object} props.audio - The metadata-only DTO of §22.7.
  * @param {string} [props.audioUrl] - Playback URL from the §32 audio endpoint.
  * @param {string} [props.duration] - Display duration (e.g. "MM:SS").
+ * @param {boolean} [props.compact] - Ledger-row mode: disc + duration, no progress bar.
  * @param {Function} [props.onPlay] - Fires when playback starts (e.g. the take card's equalizer).
  * @param {Function} [props.onPause] - Fires when playback pauses.
  * @param {Function} [props.onEnded] - Fires when playback completes.
@@ -33,6 +38,7 @@ export default function MuiAudioPlayer({
   audio,
   audioUrl,
   duration,
+  compact = false,
   onPlay,
   onPause,
   onEnded,
@@ -138,16 +144,28 @@ export default function MuiAudioPlayer({
         </span>
       </Tooltip>
       {audioUrl ? (
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <LinearProgress
-            variant="determinate"
-            value={progressValue}
-            sx={{ height: 4, borderRadius: 2 }}
-          />
-          <Typography variant="caption" color="text.secondary">
-            {formatTime(currentTime)} / {duration || formatTime(audio?.duration ?? 0)}
-          </Typography>
-        </Box>
+        compact ? (
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {duration || formatTime(audio?.duration ?? 0)}
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <LinearProgress
+              variant="determinate"
+              value={progressValue}
+              sx={{ height: 4, borderRadius: 2 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {formatTime(currentTime)} / {duration || formatTime(audio?.duration ?? 0)}
+            </Typography>
+          </Box>
+        )
       ) : null}
       {errorMessage ? (
         <Typography variant="caption" color="error.main">
@@ -165,6 +183,7 @@ MuiAudioPlayer.propTypes = {
   }),
   audioUrl: PropTypes.string,
   duration: PropTypes.string,
+  compact: PropTypes.bool,
   onPlay: PropTypes.func,
   onPause: PropTypes.func,
   onEnded: PropTypes.func,

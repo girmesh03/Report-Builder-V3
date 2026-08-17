@@ -1,12 +1,12 @@
 /**
  * @module components/report/TakeCard
  *
- * One take of the audio step (CR-056/057, §52.6): the earliest
+ * One take of the audio step (§52.6): the earliest
  * takes first, each with the shared audio player (loading / playing
  * / paused / ended / error states, §46.17), a three-bar equalizer
  * that animates while playing, the take's number, and its actions —
- * re-record (the orb readies to replace it, CR-058) and delete
- * (CR-059). While the take is uploading the card shows a busy
+ * re-record (the orb readies to replace it) and delete.
+ * While the take is uploading the card shows a busy
  * progress row instead — nothing is clickable until the clip
  * exists. Playback resolution follows the §46.17 contract: the
  * production caller builds the authenticated stream URL from the
@@ -59,7 +59,7 @@ const Equalizer = () => (
  *   is the metadata-only DTO (§22.7) and is null while the upload is in flight.
  * @param {number} props.index - Zero-based position in the takes list (displayed + 1).
  * @param {boolean} [props.armed] - True while this take is the re-record target
- *   (the orb readies to replace it, CR-058): the card is outlined in orange.
+ *   (the orb readies to replace it): the card is outlined in orange.
  * @param {Function} props.onReRecord - Readies the orb to replace this take.
  * @param {Function} props.onDelete - Opens the delete confirmation.
  */

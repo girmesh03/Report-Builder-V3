@@ -13,14 +13,22 @@
  * layoutConfig.contentMaxWidth. Step changes move focus to the step
  * content.
  *
- * Step 1 (Basic info & Visits) and step 2 (Audio) are implemented;
- * steps 3–4 render a placeholder surface. Next on step 1 validates
- * the step (the two client-mirrored rules) and advances on success;
- * Next on step 2 creates the report — the §4.10 one-payload
- * submission (step-1 metadata + the staged clip ids, CR-064) — and
- * navigates to the new report's details page (CR-013). Nothing is
- * posted before then: leaving or closing the browser before the
- * audio submission saves no report (CR-006).
+ * Flow (round-4 amendment — two-payload creation, §4.10):
+ * step 1's Next CREATES the report (metadata + visits only) →
+ * `draft`; a failed create keeps the user on step 1 with the
+ * server's message applied to the fields (§52.11). Step 2's Next is
+ * the ATTACH act: each still-staged take binds to the report
+ * (uploadClip with its staged id) → `audio_attached`; on any failure
+ * the bound takes stay bound, the rest stay staged, and the user
+ * stays on step 2. Going back to step 1 preserves everything — the
+ * re-entry writes PATCH the date and visits (no second report is
+ * created). Step 3 (transcription) gates Next on the report being
+ * `transcribed`.
+ *
+ * Close: after the report exists the close action leaves directly
+ * (the report is saved — nothing to confirm, §52.11); before that a
+ * confirmation dialog guards the unsaved draft: leaving or
+ * closing the browser before the create saves no report.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -37,18 +45,28 @@ import MuiStepper from "../components/reusable/MuiStepper";
 import StepAudio from "../components/report/StepAudio";
 import StepBasicInfo from "../components/report/StepBasicInfo";
 import StepNavBar from "../components/report/StepNavBar";
+import StepTranscription from "../components/report/StepTranscription";
 import SummaryRibbon from "../components/report/SummaryRibbon";
 import { selectAuthUser } from "../redux/features/authSlice";
 import { useListBranchesQuery } from "../redux/features/branchesEndpoints";
-import { useCreateReportMutation } from "../redux/features/reportsEndpoints";
+import { useUploadClipMutation } from "../redux/features/audioEndpoints";
+import {
+  useCreateReportMutation,
+  useUpdateReportMutation,
+  useUpdateVisitsMutation,
+} from "../redux/features/reportsEndpoints";
 import { layoutConfig } from "../theme/themePrimitives";
 import { WIZARD, TOAST_CATALOGUE } from "../utils/constants";
 import { showToast } from "../utils/toast";
-import { ethiopianToGregorian, gregorianToEthiopian } from "../utils/ethiopianDate";
+import {
+  ethiopianToGregorian,
+  gregorianToEthiopian,
+} from "../utils/ethiopianDate";
 import { validateStep1 } from "../utils/wizardValidation";
 
 /**
- * The quiet stand-in for steps 2–4 until their surfaces land.
+ * The quiet stand-in for the report step (step 4) until its surface
+ * lands in the report round.
  */
 function StepPlaceholder() {
   return (
@@ -67,8 +85,15 @@ export function Component() {
   const navigate = useNavigate();
   const user = useSelector(selectAuthUser);
   const { data, isLoading: branchesLoading } = useListBranchesQuery({});
-  const [createReport, { isLoading: creatingReport }] = useCreateReportMutation();
+  const [createReport, { isLoading: creatingReport }] =
+    useCreateReportMutation();
+  const [updateReport] = useUpdateReportMutation();
+  const [updateVisits] = useUpdateVisitsMutation();
+  const [uploadClip] = useUploadClipMutation();
   const [activeStep, setActiveStep] = useState(0);
+  const [reportId, setReportId] = useState(null);
+  const [attaching, setAttaching] = useState(false);
+  const [transcriptionReady, setTranscriptionReady] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [takes, setTakes] = useState([]);
   const contentRef = useRef(null);
@@ -107,44 +132,156 @@ export function Component() {
     contentRef.current?.focus();
   }, [activeStep]);
 
-  const handlePrev = () => setActiveStep((current) => Math.max(0, current - 1));
+  const step1Payload = () => ({
+    date: ethiopianToGregorian(watched.date).toISOString(),
+    clockIn: watched.clockIn?.format("HH:mm"),
+    clockOut: watched.clockOut?.format("HH:mm"),
+    branch: watched.branch,
+    visits: (watched.visits ?? []).map((visit) => ({
+      branch: visit.branch,
+      clockIn: visit.clockIn?.format("HH:mm"),
+      clockOut: visit.clockOut?.format("HH:mm"),
+    })),
+  });
 
-  const handleNext = async () => {
-    if (activeStep === 0) {
-      const valid = await form.trigger();
-      if (!valid) {
-        stepRef.current?.focusFirstError();
-        return;
+  /**
+   * The server's 422 `fieldErrors` are applied to the step-1 fields
+   * (field names mirror the create validator's). Round-8.2 amendment:
+   * the §42.4 normalization already maps `details` → `fieldErrors` —
+   * the old read of `error.data.details` never survived it, so
+   * "check the highlighted fields" highlighted nothing (§48.3).
+   */
+  const applyServerDetails = (error) => {
+    const fieldErrors = error?.fieldErrors;
+    if (!fieldErrors) {
+      return;
+    }
+    Object.entries(fieldErrors).forEach(([field, message]) => {
+      const match = /^visits\[(\d+)\]\.(\w+)$/.exec(field ?? "");
+      if (match) {
+        form.setError(`visits.${match[1]}.${match[2]}`, {
+          message,
+        });
+      } else if (
+        ["date", "clockIn", "clockOut", "branch"].includes(field)
+      ) {
+        form.setError(field, { message });
+      }
+    });
+  };
+
+  /**
+   * Step 1 Next — CREATE (first time) or PATCH (re-entry). The report
+   * is created from metadata + visits ONLY; the takes bind at the
+   * step-2 attach act. On failure: stay on step 1, fields carry the
+   * server's message, nothing is lost.
+   */
+  const handleStep1Next = async () => {
+    const valid = await form.trigger();
+    if (!valid) {
+      stepRef.current?.focusFirstError();
+      return;
+    }
+    const payload = step1Payload();
+    if (reportId) {
+      try {
+        await Promise.all([
+          updateReport({ reportId, reportDate: payload.date }).unwrap(),
+          updateVisits({ reportId, visits: payload.visits }).unwrap(),
+        ]);
+        setActiveStep(1);
+      } catch (error) {
+        applyServerDetails(error);
+        showToast(
+          "error",
+          error?.data?.message ??
+            error?.message ??
+            TOAST_CATALOGUE.error.generic,
+        );
+      }
+      return;
+    }
+    try {
+      const report = await createReport(payload).unwrap();
+      setReportId(report._id);
+      showToast("success", TOAST_CATALOGUE.report.created);
+      setActiveStep(1);
+    } catch (error) {
+      applyServerDetails(error);
+      showToast(
+        "error",
+        error?.data?.message ?? error?.message ?? TOAST_CATALOGUE.error.generic,
+      );
+      contentRef.current?.focus();
+    }
+  };
+
+  /**
+   * Step 2 Next — the ATTACH act (§4.10): every take still
+   * staged binds by its staged id; on any failure the bound takes
+   * stay bound (their rows are marked `attached` so the retry only
+   * re-sends the rest), the user stays on step 2, and the takes are
+   * kept. All bound → advance to step 3.
+   */
+  const handleStep2Next = async () => {
+    if (!reportId) {
+      return;
+    }
+    setAttaching(true);
+    const pending = takes.filter((take) => take.clip?._id && !take.attached);
+    let failed = false;
+    for (const take of pending) {
+      const formData = new FormData();
+      formData.append("stagedClipId", take.clip._id);
+      try {
+        const clip = await uploadClip({
+          reportId,
+          visitNo: 1,
+          formData,
+        }).unwrap();
+        setTakes((prev) =>
+          prev.map((row) =>
+            row.clip?._id === clip._id ? { ...row, attached: true } : row,
+          ),
+        );
+      } catch {
+        failed = true;
       }
     }
+    setAttaching(false);
+    if (failed) {
+      showToast("error", TOAST_CATALOGUE.audio.attachFailed);
+      return;
+    }
+    showToast("success", TOAST_CATALOGUE.audio.attached);
+    setActiveStep(2);
+  };
+
+  const handleNext = () => {
+    if (activeStep === 0) {
+      handleStep1Next();
+      return;
+    }
     if (activeStep === 1) {
-      try {
-        const report = await createReport({
-          date: ethiopianToGregorian(watched.date).toISOString(),
-          clockIn: watched.clockIn?.format("HH:mm"),
-          clockOut: watched.clockOut?.format("HH:mm"),
-          branch: watched.branch,
-          visits: (watched.visits ?? []).map((visit) => ({
-            branch: visit.branch,
-            clockIn: visit.clockIn?.format("HH:mm"),
-            clockOut: visit.clockOut?.format("HH:mm"),
-          })),
-          audios: clipIds,
-        }).unwrap();
-        showToast("success", TOAST_CATALOGUE.report.created);
-        navigate(`/reports/${report._id}`);
-      } catch (error) {
-        showToast("error", error?.message ?? TOAST_CATALOGUE.error.generic);
-        contentRef.current?.focus();
-      }
+      handleStep2Next();
       return;
     }
     setActiveStep((current) => Math.min(current + 1, WIZARD.steps.length - 1));
   };
 
+  const handlePrev = () => setActiveStep((current) => Math.max(0, current - 1));
+
   const confirmLeave = () => {
     setCloseOpen(false);
     navigate("/reports");
+  };
+
+  const handleClose = () => {
+    if (reportId) {
+      navigate("/reports");
+      return;
+    }
+    setCloseOpen(true);
   };
 
   return (
@@ -163,10 +300,12 @@ export function Component() {
           clockOut={watched.clockOut}
           branchName={watched.branch ? branchNameOf(watched.branch) : null}
           userName={user?.fullName ?? null}
-          onClose={() => setCloseOpen(true)}
+          onClose={handleClose}
         />
 
-        <Divider sx={{ my: 2, maxWidth: layoutConfig.contentMaxWidth, mx: "auto" }} />
+        <Divider
+          sx={{ my: 2, maxWidth: layoutConfig.contentMaxWidth, mx: "auto" }}
+        />
         <Box sx={{ maxWidth: layoutConfig.contentMaxWidth, mx: "auto" }}>
           <MuiStepper
             steps={WIZARD.steps}
@@ -198,6 +337,11 @@ export function Component() {
           />
         ) : activeStep === 1 ? (
           <StepAudio takes={takes} setTakes={setTakes} />
+        ) : activeStep === 2 ? (
+          <StepTranscription
+            reportId={reportId}
+            onReadyChange={setTranscriptionReady}
+          />
         ) : (
           <StepPlaceholder />
         )}
@@ -219,9 +363,11 @@ export function Component() {
           prevDisabled={activeStep === 0}
           nextDisabled={
             (activeStep === 0 && !step1Ready) ||
-            (activeStep === 1 && (clipIds.length === 0 || uploadsPending))
+            (activeStep === 1 &&
+              (clipIds.length === 0 || uploadsPending || attaching)) ||
+            (activeStep === 2 && !transcriptionReady)
           }
-          nextLoading={creatingReport}
+          nextLoading={creatingReport || attaching}
         />
       </Box>
 

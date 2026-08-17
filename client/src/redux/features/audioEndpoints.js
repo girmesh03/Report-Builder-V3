@@ -18,7 +18,7 @@
  * playback URL); production callers never call it.
  *
  * The wizard's step-2 surface stages takes BEFORE the report exists
- * (CR-064 — the report is created at submission, §1.1): `POST
+ * (the report is created at submission, §4.10): `POST
  * /audios` uploads a report-less clip (`report: null`); the §4.10
  * report creation binds it. The report-bound upload above stays for
  * the resumed-report surfaces (§53/§54).

@@ -1,13 +1,13 @@
 /**
  * @module components/report/RecordOrb
  *
- * The audio step's record control (CR-051, §52.6): a warm-orange orb
+ * The audio step's record control (§52.6): a warm-orange orb
  * (§43.2 — orange is reserved for audio) that rests as a filled
  * circle with a mic glyph and, while recording, swells into a ring
  * with a rounded stop square and a soft outward pulse, with the live
  * `MM:SS` timer below (tabular figures so the digits never shift).
  *
- * Re-record arming (CR-058, round-3 amendment): with
+ * Re-record arming (round-3 amendment): with
  * `replaceNumber` set the idle orb becomes a dashed ring holding the
  * target take's number in a small solid disc — distinct from idle
  * (mic) and recording (solid ring + stop + pulse); while recording

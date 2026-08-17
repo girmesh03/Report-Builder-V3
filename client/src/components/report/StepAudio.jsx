@@ -1,25 +1,25 @@
 /**
  * @module components/report/StepAudio
  *
- * The wizard's audio step (§52.6, CR-048…CR-065): one narration
- * surface for the whole day — the record orb (CR-051), a quiet
- * attach action and whole-canvas drops (CR-050/053), take cards
- * with playback and actions (CR-056…059), and the story progress
- * (take-count dots above the Narrations divider, CR-060). With
+ * The wizard's audio step (§52.6): one narration
+ * surface for the whole day — the record orb, a quiet
+ * attach action and whole-canvas drops, take cards
+ * with playback and actions, and the story progress
+ * (take-count dots above the Narrations divider). With
  * takes, the surface is one centered column: orb region, attach,
  * dots, the divider, then the cards (round-3 layout amendment).
- * Next is the page's gate: disabled until at least one take exists
- * (CR-063); the page builds the §4.10 payload from the step-1
- * values plus the staged clip ids and creates the report (CR-064),
- * then navigates to its details page (CR-013).
+ * Next is the page's gate: disabled until at least one take exists;
+ * the page builds the §4.10 payload from the step-1
+ * values plus the staged clip ids and creates the report,
+ * then navigates to its details page.
  *
- * The step is controlled — the page owns the takes rows (CR-011:
+ * The step is controlled — the page owns the takes rows:
  * going back to step 1 must show exactly what was recorded, so the
- * data survives the step's unmount). Every gate mirrors the §11.3
+ * data survives the step's unmount. Every gate mirrors the §11.3
  * mirrors (MIME allowlist, 50 MB size cap, 15-minute duration cap);
- * rejects surface in the toast and inline helpers (CR-054/055), and
- * the same-file skip is a note only (CR-053). Re-record readies the
- * orb (dashed ring + take number, CR-058) and highlights the target
+ * rejects surface in the toast and inline helpers, and
+ * the same-file skip is a note only. Re-record readies the
+ * orb (dashed ring + take number) and highlights the target
  * card until the take is stopped.
  */
 import { useCallback, useEffect, useRef, useState } from "react";

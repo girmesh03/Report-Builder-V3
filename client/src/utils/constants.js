@@ -40,6 +40,21 @@ export const REPORT_STATUS_LABELS = Object.freeze({
 export const AI_PROVIDERS = Object.freeze(['addis', 'gemini', 'nvidia']);
 
 /**
+ * Domain — provider display labels (mirror of §11.4; the §16.2 model
+ * registry shows the provider's default model, this map names the
+ * provider itself for the correction dialog's selector). The NVIDIA
+ * wire id renders as its hosted model's name ("deepseek flash 4",
+ * §16.2) — chrome-only, the wire id stays `nvidia` (round-7
+ * amendment).
+ * @type {readonly Object<string, string>}
+ */
+export const AI_PROVIDER_LABELS = Object.freeze({
+  addis: 'Addis',
+  gemini: 'Gemini',
+  nvidia: 'Deepseek',
+});
+
+/**
  * Domain — a selectable model entry (mirror of §11.4, §16.2).
  * @typedef {Object} ModelEntry
  * @property {string} id - Provider-native model id.
@@ -107,6 +122,23 @@ export const AUDIO_ALLOWED_MIME_TYPES = Object.freeze([
 ]);
 
 /**
+ * Editor font-size option menu (round-8 amendment: the 10–16px
+ * preset ladder, §46.16). `value: 0` is the unset sentinel — the
+ * editor clears the selection's font size (the inherited ~17px
+ * writing size). Values are applied with a `px` suffix by the
+ * toolbar (the text-style extension emits the inline style bare).
+ * @type {readonly Array<readonly {value: number, label: string}>}
+ */
+export const FONT_SIZES = Object.freeze([
+  Object.freeze({ value: 0, label: 'Default' }),
+  Object.freeze({ value: 10, label: '10' }),
+  Object.freeze({ value: 11, label: '11' }),
+  Object.freeze({ value: 12, label: '12' }),
+  Object.freeze({ value: 14, label: '14' }),
+  Object.freeze({ value: 16, label: '16' }),
+]);
+
+/**
  * Toast — the §60.6 catalogue, single-sourced (one occurrence per
  * string). Chrome copy in English (§7.6). The `{query}` placeholder
  * is substituted by callers at trigger time.
@@ -132,13 +164,22 @@ export const TOAST_CATALOGUE = Object.freeze({
     permissionDenied: 'Microphone unavailable — attach an audio file instead',
     cap: 'Recording stopped at the 15-minute cap',
     uploadFailed: 'The take failed to upload — try again',
+    attachFailed: 'The takes could not be attached — they are kept',
+    attached: 'Takes attached to the report',
     rejectedMime: 'Unsupported audio format — MP3, WAV, MP4 or WebM only',
     rejectedSize: 'That audio is larger than the 50 MB cap',
     rejectedDuration: 'That audio is longer than the 15-minute cap',
   }),
-  transcription: Object.freeze({ ready: 'Transcription ready' }),
+  transcription: Object.freeze({
+    ready: 'Transcription ready',
+    retried: 'Take re-transcribed',
+    saved: 'Transcription saved',
+    reverted: 'Reverted to the original',
+  }),
   generation: Object.freeze({ ready: 'Report generated — please review' }),
-  correction: Object.freeze({ accepted: 'Correction accepted', reverted: 'Correction reverted' }),
+  correction: Object.freeze({
+    generated: 'Correction generated — review and save',
+  }),
   export: Object.freeze({ ready: 'Export ready' }),
   auth: Object.freeze({
     loggedOut: 'You have been logged out',
@@ -314,5 +355,55 @@ export const WIZARD = Object.freeze({
     sizeNote: 'Larger than the 50 MB cap — not added',
     durationNote: 'Longer than the 15-minute cap — not added',
     uploading: 'Uploading…',
+  }),
+  transcription: Object.freeze({
+    ledgerTitle: "The day's takes",
+    ledgerSubtitle: 'Clips recorded in the audio step',
+    transcribe: 'Transcribe',
+    transcribing: 'Transcribing…',
+    storyDivider: "The day's story",
+    storySubtitle: "The day's account — corrected and saved",
+    addCorrection: 'Add a correction instruction',
+    failedLine: "Couldn't transcribe this take",
+    retry: 'Retry',
+    reTranscribe: 'Re-transcribe this take',
+    storyChangeNotice: 'Content changed — please review',
+    emptyTitle: 'Nothing here yet',
+    emptyDescription:
+      'Record at least one take in the audio step, then return here to transcribe.',
+  }),
+  modes: Object.freeze({
+    revision: 'Refine the story',
+    instructionPlaceholder: 'Type what should be corrected...',
+    recordInstruction: 'Record the correction instruction',
+    transcribingInstruction: 'Transcribing your instruction…',
+    save: 'Save',
+    revertToOriginal: 'Revert to original',
+    apply: 'Apply',
+    cancel: 'Cancel',
+    aiProvider: 'AI Provider',
+    savedAt: 'Saved {time}',
+    savedJustNow: 'Saved just now',
+    unsaved: 'Unsaved changes',
+    saving: 'Saving…',
+    noChanges: 'No changes yet',
+  }),
+  toolbar: Object.freeze({
+    bold: 'Bold',
+    italic: 'Italic',
+    underline: 'Underline',
+    paragraph: 'Paragraph',
+    heading1: 'Heading 1',
+    heading2: 'Heading 2',
+    heading3: 'Heading 3',
+    fontSize: 'Font size',
+    bulletList: 'Bullet list',
+    orderedList: 'Numbered list',
+    alignLeft: 'Align left',
+    alignCenter: 'Align center',
+    alignRight: 'Align right',
+    alignJustify: 'Justify',
+    undo: 'Undo',
+    redo: 'Redo',
   }),
 });

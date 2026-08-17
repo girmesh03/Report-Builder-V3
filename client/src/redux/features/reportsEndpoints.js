@@ -26,11 +26,15 @@ export const {
   useGetReportQuery,
   useCreateReportMutation,
   useUpdateReportMutation,
+  useUpdateVisitsMutation,
   useAcceptReportMutation,
   useRederiveDigestMutation,
   useGenerateReportMutation,
   useUpdateContentMutation,
   useCorrectContentMutation,
+  useTranscribeInstructionMutation,
+  useAcceptCorrectionMutation,
+  useRevertCorrectionMutation,
   useRevertContentMutation,
   useArchiveReportMutation,
   useRestoreReportMutation,
@@ -46,6 +50,14 @@ export const {
     createReport: build.mutation({
       query: (body) => ({ url: "/reports", method: "POST", body }),
       invalidatesTags: [REPORTS_LIST_TAG],
+    }),
+    updateVisits: build.mutation({
+      query: ({ reportId, ...body }) => ({
+        url: `/reports/${reportId}/visits`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { reportId }) => [reportTag(reportId)],
     }),
     getReport: build.query({
       query: ({ reportId, withContent }) => ({
@@ -83,10 +95,17 @@ export const {
       invalidatesTags: (_result, _error, { reportId }) => [reportTag(reportId)],
     }),
     correctContent: build.mutation({
-      query: ({ reportId, ...body }) => ({
+      query: ({ reportId, formData, ...jsonBody }) => ({
         url: `/reports/${reportId}/correct`,
         method: "POST",
-        body,
+        body: formData instanceof FormData ? formData : jsonBody,
+      }),
+    }),
+    transcribeInstruction: build.mutation({
+      query: ({ reportId, formData }) => ({
+        url: `/reports/${reportId}/correct/transcribe`,
+        method: "POST",
+        body: formData,
       }),
     }),
     revertContent: build.mutation({

@@ -8,7 +8,7 @@
  * `{ blob, durationSec }`; `onCap` fires when the cap stops the
  * session (the caller's info toast), `onPermissionError` when
  * getUserMedia rejects (the caller's warning toast + the attach
- * fallback, §52.6). The orb in the wizard's audio step (CR-051) and
+ * fallback, §52.6). The orb in the wizard's audio step and
  * the chat strip's recorder share these exact semantics.
  */
 import { useCallback, useEffect, useRef, useState } from "react";

@@ -70,6 +70,7 @@ import {
   AVATAR_ALLOWED_MIME_TYPES,
   AVATAR_MAX_SIZE_BYTES,
   OFFICIAL_TOKEN_PREFIX,
+  AI_PROVIDERS,
 } from "../utils/constants";
 import { gregorianToEthiopian } from "../utils/ethiopianDate";
 
@@ -630,18 +631,17 @@ const getReportHandler = (user, reportId, params) => {
 };
 
 /**
- * The §4.10 wizard creation: the report is created at submission
- * from the step-1 metadata + the staged clip ids in ONE payload
- * (CR-064). No supervisor name is sent — the report names the user
- * from the profile. The report is created `draft` and stays a draft
- * until the transcription step (CR-064); the old
- * `draft → audio_attached` transition (§31.4) is reserved for the
- * resumed-report upload path (`uploadClipHandler`). Visits may be
- * empty — with no visited branches the whole day is at the main
- * branch (CR-043) — so `validateVisitBlock`'s ≥1 rule does not
- * apply here. Staged clips (`report: null`) bind to the report's
- * day slot (`visitNo 1`, §4.10); the binding is invisible transport
- * detail — the step UI never asks which visit (CR-048).
+ * The §4.10 wizard creation (round-4 amendment — two-payload flow):
+ * step 1's Next creates the report from the step-1 metadata ONLY
+ * (no `audios` in the payload — the staged takes bind in the attach
+ * act, `uploadClipHandler`'s `stagedClipId` path); the report is
+ * created `draft` and stays a draft until the attach act flips it
+ * `audio_attached`. A failed create keeps the user on step
+ * 1 with the server's message applied to the fields (§52.11). No
+ * supervisor name is sent — the report names the user from the
+ * profile. Visits may be empty — with no visited branches the whole
+ * day is at the main branch — so `validateVisitBlock`'s ≥1
+ * rule does not apply here.
  */
 const createReportHandler = (user, body) => {
   const details = [];
@@ -676,18 +676,8 @@ const createReportHandler = (user, body) => {
       });
     }
   });
-  const audioIds = Array.isArray(body?.audios) ? body.audios : [];
-  if (audioIds.length === 0) {
-    details.push({ field: "audios", message: "Record or attach at least one take" });
-  }
   if (details.length) {
     return error(httpStatus.UNPROCESSABLE_ENTITY, "Check the highlighted fields", details);
-  }
-  for (const audioId of audioIds) {
-    const clip = clips.find((entry) => entry._id === audioId && entry.user === user._id);
-    if (!clip || clip.report !== null) {
-      return error(httpStatus.UNPROCESSABLE_ENTITY, "Some takes are no longer available");
-    }
   }
   const branchesByName = new Map(branches.map((item) => [item._id, item]));
   const visitRows = visits.map((visit, index) => ({
@@ -720,12 +710,6 @@ const createReportHandler = (user, body) => {
     updatedAt: new Date().toISOString(),
   };
   reports.push(report);
-  for (const audioId of audioIds) {
-    const clip = clips.find((entry) => entry._id === audioId);
-    clip.report = report._id;
-    clip.visitNo = 1;
-    clip.updatedAt = new Date().toISOString();
-  }
   return { data: successEnvelope(toReportDto(report, true), "Report created") };
 };
 
@@ -788,21 +772,50 @@ const updateVisitsHandler = (user, reportId, body) => {
   if (report.status === "completed") {
     return error(httpStatus.FORBIDDEN, STATUS_FORBIDDEN_MESSAGE);
   }
-  const details = validateVisitBlock(user, body?.visits);
+  // An empty visit block is legal — with no visited branches
+  // the whole day is at the main branch; the branch of the report row
+  // itself carries that default. `validateVisitBlock`'s ≥1 rule does
+  // not apply to the whole-block write.
+  const visits = Array.isArray(body?.visits) ? body.visits : [];
+  const details = [];
+  visits.forEach((visit, index) => {
+    const field = `visits[${index}]`;
+    const branch = branchOfUser(user, visit?.branchId);
+    if (!branch) {
+      details.push({ field: `${field}.branchId`, message: "Choose an active branch" });
+      return;
+    }
+    if (!visit.clockIn || !visit.clockOut) {
+      details.push({
+        field: `${field}.clockIn`,
+        message: "Clock in and clock out are required per visit",
+      });
+    }
+  });
   if (details.length) {
     return error(httpStatus.UNPROCESSABLE_ENTITY, "Check the highlighted fields", details);
   }
   const branchesByName = new Map(branches.map((branch) => [branch._id, branch]));
-  report.visits = body.visits.map((visit, index) => ({
+  report.visits = visits.map((visit, index) => ({
     visitNo: index + 1,
     branchName: branchesByName.get(visit.branchId).name,
     clockIn: visit.clockIn,
     clockOut: visit.clockOut,
   }));
-  report.branches = report.visits.map((visit) => {
-    const branch = branches.find((entry) => entry.name === visit.branchName);
-    return { branch: branch._id, name: visit.branchName };
-  });
+  report.branches =
+    report.visits.length > 0
+      ? report.visits.map((visit) => {
+          const branch = branches.find((entry) => entry.name === visit.branchName);
+          return { branch: branch._id, name: visit.branchName };
+        })
+      : (() => {
+          const main = report.branches?.[0] ?? null;
+          if (main) {
+            return [{ branch: main.branch, name: main.name }];
+          }
+          const fallback = branches.find((entry) => entry.user === user._id && !entry.isArchived);
+          return fallback ? [{ branch: fallback._id, name: fallback.name }] : [];
+        })();
   report.branchDigest = null;
   report.updatedAt = new Date().toISOString();
   return { data: successEnvelope(toReportDto(report), "Visits saved") };
@@ -922,7 +935,7 @@ const updateContentHandler = (user, reportId, body) => {
     return error(httpStatus.FORBIDDEN, ARCHIVED_FORBIDDEN_MESSAGE);
   }
   const content = body?.content ?? "";
-  if (typeof content !== "string" || !content.trim()) {
+  if (typeof content !== "string" || !stripTags(content).trim()) {
     return error(
       httpStatus.UNPROCESSABLE_ENTITY,
       "Check the highlighted fields",
@@ -935,6 +948,67 @@ const updateContentHandler = (user, reportId, body) => {
   return { data: successEnvelope(toReportDto(report, true), "Content saved") };
 };
 
+/**
+ * §66.10 text-only helper: strips HTML tags for TEXT-level guards —
+ * an empty TipTap document serializes as `<p></p>` (truthy), so
+ * `.trim()` checks on serialized HTML would let empty content save
+ * (round-8.4 amendment — the mock mirrors the P6 validator, which
+ * checks document text, not markup).
+ */
+const stripTags = (html) => String(html).replace(/<[^>]*>/g, "");
+
+/**
+ * §66.10 deterministic mirror of the §35.4 Mode-2 engine (round-8.3
+ * amendment): the candidate is the FULL corrected content snapshot —
+ * the report's story (`latest`, or the generated draft when no save
+ * happened yet) with the addressed partial edit applied; every other
+ * paragraph stays byte-identical (§35.3 partial-edit rule) and `±`
+ * tokens are returned verbatim (never stripped, moved or resolved,
+ * §35.3). The addressed transform follows the reason vocabulary: a
+ * verb-duplication instruction deduplicates the first consecutively
+ * doubled verb in a `±`-free content paragraph; a case-FE instruction
+ * moves the first `±`-free paragraph naming an "FE" case to the end
+ * of the story. When the addressed pattern is absent the story is
+ * returned unchanged with the reason (nothing in scope to edit — the
+ * §35.3 diff gate accepts the unchanged section); when it is present
+ * the real edit lands, no marker is needed.
+ */
+const buildCorrectionCandidate = (report, instruction) => {
+  const base = report.latest || generateContent(report).latest;
+  const paragraphs = base.split("\n").filter(Boolean);
+  const isFree = (paragraph) => !paragraph.trimStart().startsWith(OFFICIAL_TOKEN_PREFIX);
+  const mentionsVerb = /ግስ|ድግግም|ተደጋገመ/i.test(instruction);
+  if (mentionsVerb) {
+    const index = paragraphs.findIndex(
+      (paragraph) => isFree(paragraph) && /(\S+)\s+\1/.test(stripTags(paragraph)),
+    );
+    if (index !== -1) {
+      paragraphs[index] = paragraphs[index].replace(/(\S+)\s+\1/g, "$1");
+    }
+  } else {
+    const index = paragraphs.findIndex(
+      (paragraph) => isFree(paragraph) && /FE/i.test(stripTags(paragraph)),
+    );
+    if (index !== -1) {
+      const [moved] = paragraphs.splice(index, 1);
+      paragraphs.push(moved);
+    }
+  }
+  return paragraphs.join("\n");
+};
+
+/**
+ * §54.7 correction generation (round-6 amendment — candidate model).
+ * Modes 1–3 at the transcription step all land here: the generated
+ * candidate is RETURNED in the response — the client fills the live
+ * editor with it as an editable draft; nothing is staged on the
+ * report and there is no accept step (Save on the transcription
+ * surface persists the candidate through the content PATCH, §31.6).
+ * Voice mode reads the instruction clip and substitutes a
+ * deterministic canned Amharic instruction — the mock cannot
+ * transcribe the voice clip (documented limitation); the reason line
+ * follows the same instruction-signal rules as the text mode.
+ */
 const correctContentHandler = (user, reportId, body, formData) => {
   const report = reportOwnerOrNull(user, reportId);
   if (!report) {
@@ -943,34 +1017,107 @@ const correctContentHandler = (user, reportId, body, formData) => {
   if (report.isArchived) {
     return error(httpStatus.FORBIDDEN, ARCHIVED_FORBIDDEN_MESSAGE);
   }
-  const mode = formData?.get("mode") ?? body?.mode ?? "text";
-  const instruction = formData?.get("instruction") ?? body?.instruction ?? "";
-  if (!String(instruction).trim()) {
+  const mode = formData?.get?.("mode") ?? body?.mode ?? "text";
+  const provider = String(formData?.get?.("provider") ?? body?.provider ?? "addis").trim();
+  if (!AI_PROVIDERS.includes(provider)) {
+    return error(httpStatus.UNPROCESSABLE_ENTITY, "Unknown AI provider");
+  }
+  let instruction = String(formData?.get?.("instruction") ?? body?.instruction ?? "").trim();
+  if (mode === "voice") {
+    const file = formData?.get?.("clip");
+    if (!file || typeof file.name !== "string") {
+      return error(httpStatus.UNPROCESSABLE_ENTITY, "Record a voice instruction first");
+    }
+    if (!AUDIO_ALLOWED_MIME_TYPES.includes(baseMimeType(file.type))) {
+      return error(httpStatus.UNPROCESSABLE_ENTITY, "Only audio files are accepted");
+    }
+    if (file.size > AUDIO_MAX_SIZE_BYTES) {
+      return error(httpStatus.UNPROCESSABLE_ENTITY, "The audio file is too large (max 50 MB)");
+    }
+    // Documented mock limitation: the voice instruction is not
+    // transcribed — a deterministic canned instruction stands in for
+    // the STT result of the clip.
+    instruction = CANNED_INSTRUCTION;
+  }
+  if (!instruction) {
     return error(
       httpStatus.UNPROCESSABLE_ENTITY,
       "Check the highlighted fields",
       [{ field: "instruction", message: "Write a correction instruction" }],
     );
   }
-  const reason = /ግስ|ድግግም|ተደጋገመ/i.test(String(instruction))
+  const reason = /ግስ|ድግግም|ተደጋገመ/i.test(instruction)
     ? "removed duplicate verb"
     : "moved case FE paragraph";
-  const changed = [
-    {
-      section: "የተሰሩ ስራዎች",
-      field: "content",
-      content: `${OFFICIAL_TOKEN_PREFIX} ${String(instruction).split("\n")[0].slice(0, 60)}`,
-      reason,
-    },
-  ];
+  const content = buildCorrectionCandidate(report, instruction);
+  report.updatedAt = new Date().toISOString();
   return {
     data: successEnvelope(
-      { mode: mode === "voice" ? "voice" : "text", changed },
-      mode === "voice" ? "Voice correction received" : "Correction staged",
+      {
+        content,
+        reason,
+        mode: mode === "voice" ? "voice" : "text",
+        provider,
+        instruction,
+      },
+      "Correction generated",
     ),
   };
 };
 
+// The mock's deterministic STT stand-in — the same canned Amharic
+// instruction the voice mode of the correction endpoint substitutes
+// (documented §66.10 limitation: the mock cannot transcribe clips).
+const CANNED_INSTRUCTION = "የመጀመሪያውን ሐረግ አስተካክል እና ድግግምን አስወግድ።";
+
+/**
+ * The STT-only request of the correction dialog (round-7): the
+ * recorded instruction clip is transcribed and the TEXT is returned
+ * — distinct from `/correct`, which consumes the instruction (typed
+ * or voice) and returns a full correction candidate. The clip
+ * validation mirrors the correction endpoint's voice branch; the
+ * mock substitutes the deterministic canned Amharic instruction for
+ * the real STT result (§66.10 documented limitation). The dialog
+ * fills its field with the returned text and the user may edit it
+ * before Apply.
+ */
+const transcribeInstructionHandler = (user, reportId, body, formData) => {
+  const report = reportOwnerOrNull(user, reportId);
+  if (!report) {
+    return error(httpStatus.NOT_FOUND, REPORT_NOT_FOUND_MESSAGE);
+  }
+  if (report.isArchived) {
+    return error(httpStatus.FORBIDDEN, ARCHIVED_FORBIDDEN_MESSAGE);
+  }
+  const file = formData?.get?.("clip");
+  if (!file || typeof file.name !== "string") {
+    return error(httpStatus.UNPROCESSABLE_ENTITY, "Record a voice instruction first");
+  }
+  if (!AUDIO_ALLOWED_MIME_TYPES.includes(baseMimeType(file.type))) {
+    return error(httpStatus.UNPROCESSABLE_ENTITY, "Only audio files are accepted");
+  }
+  if (file.size > AUDIO_MAX_SIZE_BYTES) {
+    return error(httpStatus.UNPROCESSABLE_ENTITY, "The audio file is too large (max 50 MB)");
+  }
+  return {
+    data: successEnvelope(
+      {
+        text: CANNED_INSTRUCTION,
+      },
+      "Instruction transcribed",
+    ),
+  };
+};
+
+/**
+ * Single-undo restore (BR-11). After generation (`raw` present) the
+ * undo returns `latest` to `raw`. BEFORE generation (round-4
+ * amendment — the transcription step's "Revert to original") the
+ * story is the client-joined take texts, so the undo restores
+ * `latest → null` (the untouched merged transcription is
+ * re-joined by the client). Conflict only when there is nothing to
+ * restore either way.
+ */
 const revertContentHandler = (user, reportId) => {
   const report = reportOwnerOrNull(user, reportId);
   if (!report) {
@@ -979,10 +1126,18 @@ const revertContentHandler = (user, reportId) => {
   if (report.isArchived) {
     return error(httpStatus.FORBIDDEN, ARCHIVED_FORBIDDEN_MESSAGE);
   }
-  if (!report.raw || report.latest === report.raw) {
+  const nothingToRevert =
+    !report.raw && report.latest === null
+      ? true
+      : Boolean(report.raw) && report.latest === report.raw;
+  if (nothingToRevert) {
     return error(httpStatus.CONFLICT, "There is nothing to revert");
   }
-  report.latest = report.raw;
+  if (report.raw) {
+    report.latest = report.raw;
+  } else {
+    report.latest = null;
+  }
   report.branchDigest = report.branchDigest ? CLONE(report.branchDigest) : null;
   report.updatedAt = new Date().toISOString();
   return { data: successEnvelope(toReportDto(report, true), "Content restored") };
@@ -1074,6 +1229,29 @@ const uploadClipHandler = (user, reportId, visitNo, body, formData) => {
   if (report.status === "completed") {
     return error(httpStatus.FORBIDDEN, STATUS_FORBIDDEN_MESSAGE);
   }
+  // The attach act (round-4 amendment, §4.10): the wizard's
+  // step-2 Next binds each staged take by its staged `_id` — the
+  // clip keeps its id, bytes and real duration; `report: null` → the
+  // report's day slot. A fresh file (no `stagedClipId`) still binds
+  // the resumed-report path.
+  const stagedClipId = String(formData?.get("stagedClipId") ?? body?.stagedClipId ?? "").trim();
+  if (stagedClipId) {
+    const staged = clips.find(
+      (entry) => entry._id === stagedClipId && entry.user === user._id && entry.report === null,
+    );
+    if (!staged) {
+      return error(httpStatus.UNPROCESSABLE_ENTITY, "This take is no longer available");
+    }
+    staged.report = reportId;
+    staged.visitNo = Number(visitNo);
+    staged.updatedAt = new Date().toISOString();
+    const firstClipEver = clipsOfReport(reportId).length === 1;
+    if (firstClipEver && report.status === "draft") {
+      report.status = "audio_attached";
+      report.updatedAt = new Date().toISOString();
+    }
+    return { data: successEnvelope(toClipDto(staged), "Take attached") };
+  }
   const file = formData?.get("clip");
   if (!file || typeof file.name !== "string") {
     return error(httpStatus.UNPROCESSABLE_ENTITY, "Choose an audio file to upload");
@@ -1084,6 +1262,11 @@ const uploadClipHandler = (user, reportId, visitNo, body, formData) => {
   if (file.size > AUDIO_MAX_SIZE_BYTES) {
     return error(httpStatus.UNPROCESSABLE_ENTITY, "The audio file is too large (max 50 MB)");
   }
+  const rawDuration = Number.parseInt(formData?.get("durationSec") ?? body?.durationSec, 10);
+  const durationSec =
+    Number.isFinite(rawDuration) && rawDuration > 0
+      ? Math.min(rawDuration, AUDIO_MAX_DURATION_SEC)
+      : 1;
   const clip = {
     _id: `clip-${String(counters.clip++).padStart(4, "0")}`,
     user: user._id,
@@ -1091,7 +1274,7 @@ const uploadClipHandler = (user, reportId, visitNo, body, formData) => {
     visitNo: Number(visitNo),
     mimeType: baseMimeType(file.type),
     sizeBytes: file.size,
-    durationSec: Math.min(90 + (counters.transcription % 10) * 17, AUDIO_MAX_DURATION_SEC),
+    durationSec,
     transcription: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -1195,7 +1378,22 @@ const listTranscriptionsHandler = (user, reportId) => {
   return { data: successEnvelope(transcriptionsOfReport(reportId).map(toTranscriptionDto)) };
 };
 
-const transcribeReportHandler = (user, reportId) => {
+/**
+ * Deterministic plain-Amharic STT pool (round-4 amendment). STT
+ * output is PLAIN TEXT — never `±`-marked (the `±` lead is a
+ * generation-time marker, §35.3; the old fabricated row produced a
+ * `± ±` blemish at generate). Selection is deterministic per clip
+ * position so a re-run of the same day yields the same text.
+ */
+const TRANSCRIBE_POOL = [
+  "በማለዳ ስብሰባ ላይ ተገኝቶ የቀኑን እቅድ አካፍሏል።",
+  "በዋና ቢሮ የሪፖርት ግምገማ ተካሂዷል።",
+  "የቅርንጫፍ አገልግሎት አሰጣጥ ተከታትሏል።",
+  "የሰራተኞች ክትትልና ድጋፍ ተደርጓል።",
+  "ከደንበኞች ጋር የፍላጎት ቅኝት ተካሂዷል።",
+];
+
+const transcribeReportHandler = async (user, reportId) => {
   const report = reportOwnerOrNull(user, reportId);
   if (!report) {
     return error(httpStatus.NOT_FOUND, REPORT_NOT_FOUND_MESSAGE);
@@ -1215,13 +1413,19 @@ const transcribeReportHandler = (user, reportId) => {
     return error(httpStatus.UNPROCESSABLE_ENTITY, ALL_TRANSCRIBED_MESSAGE);
   }
   let added = 0;
+  // Per-clip latency: each take resolves at its own pace (the ledger
+  // walks its pulse). Failures land in the `failed` list instead of
+  // aborting the batch — the UI retries per take.
+  const failed = [];
   for (const clip of pending) {
+    await delay();
+    const position = reportClips.indexOf(clip);
     const row = {
       _id: `tr-${String(counters.transcription++).padStart(4, "0")}`,
       user: user._id,
       audio: clip._id,
-      raw: `± ${OFFICIAL_TOKEN_PREFIX} የቀኑ እንቅስቃሴ ተመልክቷል።`,
-      latest: `± ${OFFICIAL_TOKEN_PREFIX} የቀኑ እንቅስቃሴ ተመልክቷል።`,
+      raw: TRANSCRIBE_POOL[position % TRANSCRIBE_POOL.length],
+      latest: TRANSCRIBE_POOL[position % TRANSCRIBE_POOL.length],
       language: "am",
       stt: { requestId: `req-${String(counters.transcription)}`, model: "addis-stt-1" },
       createdAt: new Date().toISOString(),
@@ -1238,7 +1442,7 @@ const transcribeReportHandler = (user, reportId) => {
   }
   return {
     data: successEnvelope(
-      { completed: added, failed: [] },
+      { completed: added, failed },
       added ? "Transcription ready" : "Nothing to transcribe",
     ),
   };
@@ -1258,7 +1462,7 @@ const reTranscribeHandler = (user, reportId, transcriptionId) => {
   if (index < 0) {
     return error(httpStatus.NOT_FOUND, TRANSCRIPTION_NOT_FOUND_MESSAGE);
   }
-  const replacedText = `± ${OFFICIAL_TOKEN_PREFIX} ዳግም የተገለበጠ የቀኑ ሂደት።`;
+  const replacedText = "በእለቱ የተከናወኑ ተግባራት በዝርዝር ተመዝግበዋል።";
   transcriptions[index] = {
     ...transcriptions[index],
     raw: replacedText,
@@ -1822,6 +2026,7 @@ const paths = [
   { re: /^\/reports\/([^/]+)\/chat$/, method: "GET", fn: getConversationHandler, arity: 2 },
   { re: /^\/reports\/([^/]+)\/content\/revert$/, method: "POST", fn: revertContentHandler, arity: 2 },
   { re: /^\/reports\/([^/]+)\/content$/, method: "PATCH", fn: updateContentHandler, arity: 3 },
+  { re: /^\/reports\/([^/]+)\/correct\/transcribe$/, method: "POST", fn: transcribeInstructionHandler, arity: 4 },
   { re: /^\/reports\/([^/]+)\/correct$/, method: "POST", fn: correctContentHandler, arity: 4 },
   { re: /^\/reports\/([^/]+)\/accept$/, method: "POST", fn: acceptReportHandler, arity: 2 },
   { re: /^\/reports\/([^/]+)\/digest$/, method: "POST", fn: rederiveDigestHandler, arity: 2 },

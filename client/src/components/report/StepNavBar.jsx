@@ -24,6 +24,7 @@ import { WIZARD } from "../../utils/constants";
  * @param {boolean} [props.prevDisabled] - True on the first step.
  * @param {boolean} [props.nextDisabled] - True while the step's must-haves are unmet.
  * @param {boolean} [props.nextLoading] - Submission in flight (the audio step's create).
+ * @param {string} [props.nextLabel] - Next label (defaults to the shared copy).
  */
 export default function StepNavBar({
   onPrev,
@@ -31,6 +32,7 @@ export default function StepNavBar({
   prevDisabled = false,
   nextDisabled = false,
   nextLoading = false,
+  nextLabel = WIZARD.nav.next,
 }) {
   return (
     <Box
@@ -59,7 +61,7 @@ export default function StepNavBar({
         disabled={nextDisabled}
         loading={nextLoading}
       >
-        {WIZARD.nav.next}
+        {nextLabel}
       </MuiButton>
     </Box>
   );
