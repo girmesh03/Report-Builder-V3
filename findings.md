@@ -558,3 +558,22 @@ Per-gate results:
 - **G7 SC-6/SC-7:** no magic literals introduced (all named); no client-side provider keys/URLs.
 
 Net change set: §11.6 wording, §12.2 (ADR-002), §12.5 (INTERNAL_SERVER_ERROR), §13.4 (+7 rows), §13.5 (−1 row), §33.6, §69 record. Register: sweep → completed; pass 1b fully closed; NEXT → step-5 review gate.
+
+## F74 — Pass-1a data-model audit re-pass (closed 2026-08-18)
+
+Owner request: "full plan for stage 2 pass 2, each schema with a correct field/value, hooks, method" — served as a schema-detail re-presentation + audit of the already-closed pass-1a sections (§17–§24A). Register pointer corrected: pass 2 = backend §25–§40, NOT §17–§24A (which were closed in pass 1a). Seven field registries re-read line-by-line (User §19, Branch §20, Report §21, Audio §22, Transcription §23, ChatConversation §24, Item §24A) plus §17.2–§17.7 and §18.1–§18.10.
+
+**Corrections (2):**
+
+1. **§19.3 two-TTL stale parenthetical → one-TTL doctrine.** "the only TTL declarations in the spec are the two of §18.3 (Report §21, Branch §20)" contradicted §18.3 (L4161–4174: exactly one — Report), §20.3, §21.3, §22.3, §23.3, §24.3, §24A.3, §18.10 gate, §20.10 gate, §17.2/§17.4. Reworded to "the only TTL declaration in the spec is the one of §18.3 (Report §21)". All other TTL statements already carried the one-TTL doctrine — the §19.3 phrase was the sole stale survivor of the Branch-TTL removal.
+2. **§17.3 Report—ChatConversation cardinality 1—N → 1—1.** ERD cell contradicted §17.2 ("one per report"), §24.2 (`report` unique + sparse), §24.3 ("the proven §17.2/§17.3 one-conversation-per-report key"), §24.4 ("one row per report"). §24.1's gloss ("1—N exactly, i.e. a single conversation document") was a rationalization of the contradiction — corrected to "Report—ChatConversation 1—1" with the unique-sparse key cell mirroring the Transcription row; §24.1 sentence aligned.
+
+**Verified no-change (3):**
+
+- **A2 §24.3 chronology index** `{report, 'messages.createdAt': 1}` — no conflict with the §18.7 re-sort-on-read convention (the index serves the ordered re-merge; array position is never a key, §24.4).
+- **A3 §24A.3 five indexes** — every index cites its consumer (§31.6/§50, §38/§49/§56, §6.10/§6.3); §18.3 proof rule satisfied; no field-level unique combined with a separate index; the one-comment partial unique is the model's only uniqueness (§24A.8).
+- **A4 §23.2 `stt` subdoc** — §16.4 explicitly authorizes both persists: `requestId` (ADR-019 audit, L3565–3568) and `model` echo with null-if-unknown (L3569–3572); matches §23.2 and §23.10's gate exactly.
+
+**Gate re-run:** §17.7 / §18.10 / §19.8 / §20.10 / §21.13 / §22.10 / §23.10 / §24.10 / §24A.8 grep gates re-read and satisfied post-edit (one-TTL wording, seven-entities-only, no snapshots/tombstones, raw+latest only, message triple, per-type item statuses, no invented fields, standalone sections). No constants, paths, or packages introduced.
+
+Register: pass 1a closed + audit re-pass closed; pass 1b closed (F69–F73); NEXT → pass-1a/1b close-out report + commit request → pass 2 (backend §25–§40).

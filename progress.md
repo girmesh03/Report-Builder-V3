@@ -143,3 +143,12 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
   - **G5:** §33.6 + §69 SDK-gate URL restatements → pointer-only; wire URLs now only §16.4/§16.8.
 - **Pass 1b fully closed:** §16 → §11 → §14 → §15 → §12 → sweep. Working files updated; this log.
 - **NEXT:** step-5 review gate — pass-1b close-out report + checkpoint commit request (explicit owner approval required for the commit).
+
+## Session 2026-08-18 — Pass-1a data-model audit re-pass COMPLETE (F74)
+
+- **Story gate:** 7 schema-detail stories (per-entity field registry truth / correct field-value pairs / hooks & methods truth / keys-indexes-TTL truth / S12-era amendment alignment / ERD cardinality truth / verification-gate truth) — presented with full plan incl. the seven-schema summary table + WH battery; "proceed".
+- **Honest framing delivered:** §17–§24A were already closed in pass 1a; the owner's "pass 2 with schemas" ask served as re-presentation + audit of the closed sections; register pointer corrected (pass 2 = backend §25–§40, not §17–§24A).
+- **Corrections (2, same change set):** §19.3 two-TTL stale parenthetical → one-TTL doctrine (contradicted §18.3 + seven model sections); §17.3 Report—ChatConversation 1—N → 1—1 (contradicted §17.2/§24.2/§24.3/§24.4) with §24.1 gloss aligned.
+- **Verified no-change:** A2 chronology index, A3 item five-index proof rule, A4 stt subdoc vs §16.4 permission; all nine per-section verification gates re-run.
+- **Register:** pass 1a audit re-pass closed; findings F74; this log.
+- **NEXT:** step-5 review gate — pass-1a/pass-1b close-out report + commit request (explicit owner approval required) → pass 2 (backend §25–§40) Supervisor story gate.

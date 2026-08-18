@@ -3935,7 +3935,7 @@ the authoritative edge list):
 | Report — Audio | 1 — N clips | `report` on Audio | BR-01/BR-02, §22 |
 | Report — Transcription | 1 — 1 | `report` on Transcription (unique, sparse) | §23, §33 |
 | Report — Item | 1 — N | `report` on Item | §24A, §34 |
-| Report — ChatConversation | 1 — N | conversation refs | §24, §36 |
+| Report — ChatConversation | 1 — 1 | `report` on ChatConversation (unique, sparse) | §24, §36 |
 
 No collection reads another collection's private cells except through
 the edges above. Reports reference branches by **plain `ObjectId`**
@@ -4392,9 +4392,8 @@ the result, the §28 creation flow executes the extraction:
   indexed without proof (§18.3).
 - **No lifecycle fields.** User declares no `isArchived`,
   `archivedAt`, or `deletedAt` and no TTL index — the only TTL
-  declarations in the spec are the two of §18.3 (Report §21, Branch
-  §20), and the retention rules (BR-15/BR-16, §62) never apply to a
-  user row.
+  declaration in the spec is the one of §18.3 (Report §21), and the
+  retention rules (BR-15/BR-16, §62) never apply to a user row.
 
 ### 19.4 Hooks, methods & session contract
 
@@ -5388,8 +5387,9 @@ conversation_history formation rules (§16.4); rate limiting (§27) or
 validation (§29).
 
 There is exactly **one** conversation per report (§17.2, §17.3 —
-Report—ChatConversation 1—N exactly, i.e. a single conversation
-document owned by each report). Messages are **embedded child
+Report—ChatConversation 1—1): a single conversation document owned
+by each report, whose messages are embedded child documents.
+Messages are **embedded child
 documents** of the conversation — they are not a separate collection
 (§17.2). Rows are user-scoped (BR-13, §3.2.3). Conversation turns are
 saved for display (§12.8) and are also the `conversation_history`

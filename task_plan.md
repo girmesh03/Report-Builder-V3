@@ -180,12 +180,12 @@ User reports after round-8.3: (1) with TEXT in the editor, picking a font size "
 Fix the root cause, then rebuild: re-derive every DERIVED spec section (§11, §12, §14–§60, §67, §68 — 51 sections) through the Supervisor → Architect pipeline, keep the 18 kernel sections untouched, then re-implement backend → endpoint tests → frontend linking from the corrected specification.
 
 ## Next Step
-Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — 14 stories approved (2026-08-18); **all five sections closed + pass consistency sweep COMPLETE (2026-08-18, F73)**; NEXT pointer → **step-5 review gate (pass-1b close-out report + checkpoint commit request)** → Stage 2 pass 2 (backend §17–§24A). Owner-directed amendments applied 2026-08-18: REST route audit of the reports/AI domain (`PUT /reports/:id/transcription` merges transcribe+re-transcribe, `POST .../corrections`, `POST .../corrections/transcripts`, `POST .../generations`, `PUT .../content` revert, `PUT .../visits`; old literals grep-clean) + S12 SDK adoption (`addisai@^0.2.0` for STT+TTT, paid policy, no-correction-schema carve-out, standing reasoning default per conversation) + §11 S1–S4 derivations (home boundary, deep freeze, whitelist, sweep discipline, status registration gate, mirror parity; `ADDIS_AI_BASE_URL` removed — SDK-internal). (Checkpoint commit `chore: phase 4 owner-corrections` executed 2026-08-18.)
+Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — 14 stories approved (2026-08-18); **all five sections closed + pass consistency sweep COMPLETE + checkpoint commit `4ef26c2` executed (2026-08-18, F73)**; **pass-1a data-model audit re-pass COMPLETE (2026-08-18, F74 — §19.3 two-TTL stale parenthetical fixed, §17.3/§24.1 ChatConversation cardinality 1—N→1—1; A2/A3/A4 verified no-change; per-section grep gates re-run)**; NEXT pointer → **pass-1a/pass-1b close-out report + commit request** → **Stage 2 pass 2 (backend §25–§40) Supervisor story gate**. Owner-directed amendments applied 2026-08-18: REST route audit of the reports/AI domain (`PUT /reports/:id/transcription` merges transcribe+re-transcribe, `POST .../corrections`, `POST .../corrections/transcripts`, `POST .../generations`, `PUT .../content` revert, `PUT .../visits`; old literals grep-clean) + S12 SDK adoption (`addisai@^0.2.0` for STT+TTT, paid policy, no-correction-schema carve-out, standing reasoning default per conversation) + §11 S1–S4 derivations (home boundary, deep freeze, whitelist, sweep discipline, status registration gate, mirror parity; `ADDIS_AI_BASE_URL` removed — SDK-internal). (Checkpoint commits `chore: phase 4 owner-corrections` + `chore: spec-correction pass 1b architecture close-out` executed 2026-08-18.)
 
 ## Stages (status)
 - Stage 0 — Boot: branch `spec-correction` created; kernel sections read (§1–§10, §13, §61–§66, §69); working files appended. **complete**
 - Stage 1 — Kernel classification: 18 KERNEL / 51 DERIVED, borderline calls decided by the Architect (F63); owner confirmed. **complete**
-- Stage 2 — Pipeline passes, dependency order: data model (§17–§24A) → architecture & constants (§11/§12/§14/§15/§16) → backend (§25–§40) → frontend (§41–§60) → cross-cutting (§67/§68); step-5 review gate per pass; coverage register (below) is the section inventory. **in progress — pass 1a closed, pass 1b NEXT**
+- Stage 2 — Pipeline passes, dependency order: data model (§17–§24A) → architecture & constants (§11/§12/§14/§15/§16) → backend (§25–§40) → frontend (§41–§60) → cross-cutting (§67/§68); step-5 review gate per pass; coverage register (below) is the section inventory. **in progress — pass 1a closed (+ audit re-pass F74), pass 1b closed (F69–F73), pass 2 NEXT**
 - Stage 3 — §63.9 audit C1–C6 green; §69 closure records; zero `TODO(open)` without an OQ row; coverage register reconciled 51/51 dispositions, zero partials. **pending** (hard gate before any code — freeze: no `backend/*`/`client/*` edits until then)
 - Stage 4 — Backend re-implementation per §15.4 (frontend frozen); Postman-style endpoint tests per endpoint (edge-case matrix, result ledger). **pending**
 - Stage 5 — Frontend linking & correction; mock adapter deleted (§66.10 grep gate). **pending**
@@ -204,7 +204,7 @@ Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — 14 stories appr
 
 ## Coverage register (51 DERIVED sections; per-section status + NEXT pointer)
 
-### Pass 1a — data model [CLOSED]
+### Pass 1a — data model [CLOSED] (audit re-pass 2026-08-18, F74: §19.3 two-TTL stale parenthetical → one-TTL doctrine; §17.3 Report—ChatConversation 1—N → 1—1 with `report` unique-sparse key cell + §24.1 gloss aligned; A2 chronology-index / A3 item-index / A4 stt-subdoc verifications → no-change; §17.7/§18.10/§19.8/§20.10/§21.13/§22.10/§23.10/§24.10/§24A.8 grep gates re-run clean)
 | Section | Status | Disposition | Evidence |
 |---|---|---|---|
 | §17 Data system overview | closed | re-derived | F65/ledger |
@@ -226,7 +226,7 @@ Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — 14 stories appr
 | §15 Project structure | **closed** | re-derived | S11 — closed 2026-08-18 (5 stories + 8-question battery approved "proceed"; 9-point repo-drift table resolved: useMediaRecorder home/name, report/print placement, reusable additions, sanitizeHtml/wizardValidation/auth-validators nodes, §15.3 authoring-workspace, §58.3 path, §15.6 lines; three-class state legend (scaffold/implemented/planned) + markers applied; MuiReasoningSelect = planned §54 round) |
 | §16 AI provider contracts | **closed** | re-derived | S13 (STT contract) — closed 2026-08-18 (§16.4/§33.4/§33.5/§16.8 corrections); S12 (text generation + addisai SDK + standing reasoning) — closed 2026-08-18 after owner "proceed" (C1–C25: SDK adoption, paid policy, no-correction-schema carve-out, conversation reasoning default, §69 records OQ-011/012/013); REST route audit applied to the reports/AI domain (see Next Step) |
 
-### Pass 2 — backend §25–§40 [pending]
+### Pass 2 — backend §25–§40 [NEXT]
 §25 §26 §27 §28 §29 §30 §31 §32 §33 §34 §35 §36 §37 §38 §39 §40
 
 ### Pass 3 — frontend §41–§60 [pending]
