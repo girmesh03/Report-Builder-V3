@@ -40,8 +40,9 @@
   (§6.11); generation writes the transcription `latest` + Item rows in
   one session and moves the report to `generated` (terminal, BR-08);
   corrections save through `PATCH /reports/:reportId/content`
-  (Mode-1) or the Mode-2/3 `/correct` candidate endpoint — no accept
-  step anywhere; clips are report-level (`POST /reports/:reportId/
+  (Mode-1) or the Mode-2/3 `POST /reports/:reportId/corrections`
+  candidate endpoint (ephemeral — no accept
+  step anywhere); clips are report-level (`POST /reports/:reportId/
   clips`, §32), visits are positional (no `visitNo`); the report holds
   one `branch` ref + `visits[]` (no snapshot); transcription is the
   report's 1:1 merged row (§23/§33).

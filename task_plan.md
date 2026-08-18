@@ -180,7 +180,7 @@ User reports after round-8.3: (1) with TEXT in the editor, picking a font size "
 Fix the root cause, then rebuild: re-derive every DERIVED spec section (§11, §12, §14–§60, §67, §68 — 51 sections) through the Supervisor → Architect pipeline, keep the 18 kernel sections untouched, then re-implement backend → endpoint tests → frontend linking from the corrected specification.
 
 ## Next Step
-Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — Supervisor enumeration of the architecture user stories, presented to the owner for per-story add/remove, then WH batteries → derivations → corrections → register closes 5/5. (Checkpoint commit `chore: phase 4 owner-corrections` executed 2026-08-18.)
+Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — 14 stories approved (2026-08-18); **all five sections closed + pass consistency sweep COMPLETE (2026-08-18, F73)**; NEXT pointer → **step-5 review gate (pass-1b close-out report + checkpoint commit request)** → Stage 2 pass 2 (backend §17–§24A). Owner-directed amendments applied 2026-08-18: REST route audit of the reports/AI domain (`PUT /reports/:id/transcription` merges transcribe+re-transcribe, `POST .../corrections`, `POST .../corrections/transcripts`, `POST .../generations`, `PUT .../content` revert, `PUT .../visits`; old literals grep-clean) + S12 SDK adoption (`addisai@^0.2.0` for STT+TTT, paid policy, no-correction-schema carve-out, standing reasoning default per conversation) + §11 S1–S4 derivations (home boundary, deep freeze, whitelist, sweep discipline, status registration gate, mirror parity; `ADDIS_AI_BASE_URL` removed — SDK-internal). (Checkpoint commit `chore: phase 4 owner-corrections` executed 2026-08-18.)
 
 ## Stages (status)
 - Stage 0 — Boot: branch `spec-correction` created; kernel sections read (§1–§10, §13, §61–§66, §69); working files appended. **complete**
@@ -220,11 +220,11 @@ Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — Supervisor enum
 ### Pass 1b — architecture & constants [IN PROGRESS]
 | Section | Status | Disposition | Evidence |
 |---|---|---|---|
-| §11 Constants | NEXT | not-started | — (partial §11.4/§11.5 only) |
-| §12 System architecture | not-started | not-started | — (partial: §12.2/§12.4/§12.11-1 touched) |
-| §14 ADR index | not-started | not-started | — (only §14.3 row fixed) |
-| §15 Project structure | not-started | not-started | — (§15.4/§15.5 audited only) |
-| §16 AI provider contracts | not-started | not-started | — (no re-derivation record — the confirmed skip) |
+| §11 Constants | **closed** | re-derived | S1–S4 — closed 2026-08-18 (15-question battery approved "do them all"; derivations: home boundary env-vs-constants, deep freeze, tolerated-literals whitelist, orphan/phantom sweep discipline, httpStatus completeness + registration gate, mirror-parity gate; `ADDIS_AI_BASE_URL` removed as SDK-internal orphan) |
+| §12 System architecture | **closed** | re-derived | S5–S9 — closed 2026-08-18 (7-question battery approved "proceed"; 3 corrections: diagram editor "planned"→installed, Addis box "fetch"→"SDK", §12.8 generation params provider-scoped + reasoning; §12.11↔§14.3 parity re-check closed — row 5 aligned with amended ADR-001, no new transport row) |
+| §14 ADR index | **closed** | re-derived | S10 — closed 2026-08-18 (6 stories approved; battery answered inline: status-vocabulary normalization of ADR-008, ADR-001 stale "STT only" clause fixed, no new rows for S12-era decisions — owner prose governs, ADR-024 → OQ-004 pointer verified, §12.11 parity deferred to §12 pass) |
+| §15 Project structure | **closed** | re-derived | S11 — closed 2026-08-18 (5 stories + 8-question battery approved "proceed"; 9-point repo-drift table resolved: useMediaRecorder home/name, report/print placement, reusable additions, sanitizeHtml/wizardValidation/auth-validators nodes, §15.3 authoring-workspace, §58.3 path, §15.6 lines; three-class state legend (scaffold/implemented/planned) + markers applied; MuiReasoningSelect = planned §54 round) |
+| §16 AI provider contracts | **closed** | re-derived | S13 (STT contract) — closed 2026-08-18 (§16.4/§33.4/§33.5/§16.8 corrections); S12 (text generation + addisai SDK + standing reasoning) — closed 2026-08-18 after owner "proceed" (C1–C25: SDK adoption, paid policy, no-correction-schema carve-out, conversation reasoning default, §69 records OQ-011/012/013); REST route audit applied to the reports/AI domain (see Next Step) |
 
 ### Pass 2 — backend §25–§40 [pending]
 §25 §26 §27 §28 §29 §30 §31 §32 §33 §34 §35 §36 §37 §38 §39 §40

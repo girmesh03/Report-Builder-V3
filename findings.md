@@ -361,6 +361,31 @@ Architect decisions on the borderline calls (owner delegated: "you are the archi
 - [2026-08-18] Owner (strict requirement): the agent is the Supervisor AND the Architect/Engineer/UI-UX Designer and makes the decisions; the owner is the interaction partner — reviews, adds/removes, asks iterative questions, digs, points out blind spots — never a Supervisor/Architect, never a decision-maker → recorded as the role model in AGENTS.md/prompt.md/findings.md/progress.md/task_plan.md (the "Correct-the-Spec-Then-Rebuild protocol").
 - [2026-08-18] Owner decisions on the checkpoint: `prompt.md` tracked and committed (option a); single checkpoint commit now; pass story lists enumerated up front for per-story add/remove. → Executed: commit `chore: phase 4 owner-corrections`; pass 1b (architecture §11/§12/§14/§15/§16) opens next.
 - [2026-08-18] Owner: "proceed" → checkpoint commit executed; pass 1b user stories presented.
+- [2026-08-18] Owner: "proceed" (pass-1b plan) → 14 stories approved; pass order re-decided §16-first (S13) — the confirmed skip delivers leaf inputs (registry values, base-URL home, transport rules) to §11/§14; register NEXT pointer moved to §16.
+- [2026-08-18] S13 (§16 STT contract): 33-question WH battery presented (no removals; owner: "proceed") → derived from the §2.3 kernel + corrected model, corrections applied (see F66).
+
+## F66 — S13: §16 STT contract re-derived (2026-08-18)
+
+Battery answers (kernel-sourced; no codebase/spec-text citation):
+- **Boundary (§16 vs §33):** §16 owns the provider-facing transport contract (endpoint, multipart shape, auth, response schema, error mapping, retry/backoff policy, logging labels); §33 owns domain orchestration (WAV conversion, chunking, per-chunk sequencing, merge, persistence, status advance). They touch at exactly one point — §33.4 invokes the §16.4 contract. Confirmed as written.
+- **Request:** `POST {ADDIS_AI_BASE_URL}/api/stt`, multipart with exactly two parts — `audio` (the §33 chunk, mono 16-bit 16 kHz PCM wav — never the uploaded webm, §33.3/§22) and `request_data` (stringified JSON with exactly `language_code`, sourced from the clip's stored `language`, `am` today; om/ti reserved §7.7). No model field, no `target_language` — neither is documented on the STT endpoint (§16.8 no-invention gate); `target_language` belongs to the text-generation `chat_generate` contract only.
+- **Response:** `{ status: 'success', data: { transcription, usage_metadata: { totalBilledDuration, requestId } }, confidence }`. Persisted: `requestId` (permission, ADR-019) + a conditional `modelVersion` echo → `stt.model` (null-if-unknown §23.2). `confidence`/`totalBilledDuration` = call metadata, never persisted (§23.7).
+- **Errors/retry:** transport/5xx → retry (`AI_PROVIDER_RETRIES` 3, backoff 1 s/2 s/4 s, `AI_TIMEOUT_MS` 30000) → chunk failed → 502; semantic 4xx → 502 without retry (outcome can't change); 429 → honor `Retry-After` capped by the app tier (§27); key missing → boot fail-fast (§10.3). No STT fallback ever (ADR-001, §12.11-5 — a chain would silently degrade the accuracy-critical path, SC-1/G6).
+- **Chunk failure:** per-chunk — failed chunk marked, pipeline continues; a partial merge is never persisted; report moves to `transcribed` only when every chunk succeeded (§33.7); retry endpoint re-runs failed/pending audios only.
+- **Persistence:** one atomic session at completion — row created (`raw`=merged STT, `latest`=raw, `language`, `stt.{requestId, model}`), `report.transcription` ref set, status → `transcribed` (§33.5/§23.4); re-transcription rewrites the same row at every status except `generated`.
+- **Stored:** `stt.requestId`, `stt.model` (echo, else null), `language`; nothing else. §11.3 already holds `ADDIS_AI_STT_MAX_DURATION_SEC` 60/`ADDIS_AI_BASE_URL`/`AI_TIMEOUT_MS` — values confirmed, no new constants.
+- **OQ candidates:** Addis response-field volatility (confidence/modelVersion) → contract is conditional (never hard-required); per-chunk latency SLA → policy-only, calibrated at implementation; STT language detection → request always sends `language_code`; error codes beyond generic HTTP → mapping anticipates 429/5xx/4xx only. None blocks.
+
+Corrections applied (§16.4 STT block, §33.4, §33.5, §16.8 STT gate, §11.3 Used-by row):
+1. §16.4 STT — request contract tightened: exactly two multipart parts; chunk MIME is the pipeline's own (wav/PCM), `AUDIO_ALLOWED_MIME_TYPES` governs uploads only (was misleadingly tied to the chunk); `request_data` carries exactly `language_code`; no invented fields.
+2. §16.4 STT — response contract: `modelVersion` echo conditional → `stt.model` null-if-unknown; `confidence`/`totalBilledDuration` explicitly never persisted; persistence permission re-pointed to §23 (was §22–§23).
+3. §16.4 STT — error bullet: "a partial merge is never persisted — the report moves to `transcribed` only when every chunk succeeded (§33.7)" (removed the ambiguous "fuses the succeeded chunks").
+4. §33.4 — removed the garbled "data object: audio blobs `request_data`" phrasing and the stale `target_language` field (a text-generation `chat_generate` parameter that had leaked into the STT request contract); request = `audio` + `request_data.language_code` from the clip's stored language.
+5. §33.5 — `stt.model` written only from the provider's model echo when the response carries one, else `null` (was "the providers' model string" — unfillable from the documented response shape).
+6. §16.8 — new STT contract gate (two parts only, no `target_language`, Addis-only grep, `stt.model` never synthesized).
+7. §11.3 — `ADDIS_AI_STT_MAX_DURATION_SEC` Used-by += §16.
+
+§16 register row: S13 closed (re-derived); NEXT → S12 (text-generation contracts).
 
 ## Effort finding — Role model & coverage register (2026-08-18, owner strict requirement)
 
@@ -409,3 +434,127 @@ Owner-approved correction set applied to the spec + mirrors; the plan for this p
 
 ### Commit status
 Single commit `chore: phase 4 owner-corrections` (spec + constants + MuiStatusBadge + phase-6 plan file) **held** for explicit user approval (§66.2 step 6). After approval: pass 2 (backend §25–§40).
+
+## F67 — S12 research (addisai SDK) + owner-directed REST route audit (2026-08-18)
+
+### Addis AI research — complete, SDK source-verified (decisions D1–D9)
+- **FAQ (12/12)** extracted from the saved RSC payload: Amharic + Afan Oromo production-grade; English translation pairs; experimental Tigrinya/Somali beta; commercial use permitted; trained from scratch on native datasets; 500 ETB starter credits; pay-as-you-go, no subscription.
+- **npm + GitHub source (v0.2.0, MIT, zero runtime deps, Node 18+):** the SDK intentionally does NOT forward a `model` field to `POST /api/v1/chat_generate` ("could leak the underlying model") — validates the app's model-honesty design. Chat maps `messages` → `prompt` (last) + `conversation_history` (prior, role/content), plus `system`, `persona`, `tools`, `generation_config {temperature, maxOutputTokens, stream}`. `finish_reason` normalized: STOP→stop, MAX_TOKENS→length, SAFETY/RECITATION→content_filter, TOOL_CALLS→tool_calls. STT = `POST /api/v2/stt`, multipart exactly 2 parts (`audio` + `request_data` = `{"language_code"}`), response `{transcription, confidence, usage_metadata}`. SDK `SttLanguage` = am|om|en|ha|sw vs docs am/om — conflict moot (app is am-only). SDK maxRetries code default 3 vs README 2 — pin explicitly (`AI_PROVIDER_RETRIES`). `chat_audio_input` + `transcription.clean` = future Mode-3 single-call option (OQ). `ADDIS_CHAT_MODEL = "addis-1-alef"` is a public display id only.
+- **Owner decisions:** adopt `addisai@^0.2.0` for STT + TTT (STT/TTT only — TTS stays D1-deferred, owner clarified after two misreads); raw `fetch` retired for provider `addis`; Gemini/NVIDIA stay axios; `persona` never sent; topP/topK dropped for Addis (SDK chat surface lacks them — §11.3 Used-by narrows to gemini/nvidia); retries SDK-managed (`maxRetries: AI_PROVIDER_RETRIES` = 3, `timeout: AI_TIMEOUT_MS`); SDK typed errors give `.retryAfter` (429) and `.availableBalance` (402 → top-up message via 502 envelope); SDK constructed once in `config/env.js` (§10.3 sole `process.env` reader).
+- **Paid reality (§16.2):** pay-as-you-go ETB credits; STT 3.5 ETB/1k chars, 0.3/0.8 ETB per 1k tokens text gen; free tier 60 RPM / 1000 RPD / 3 concurrent.
+- **Flagged OQ (awaiting owner add/remove):** transcription-stage TTT correction schema shape — pre-generation `latest` is plain Amharic prose vs the §35.2 partial schema `{changed:[{section,field,content,reason}]}`. Architect decision: target is always current `latest`; structured partial schema post-generation, full corrected prose + surgical diff pre-generation.
+- **S12 battery (20 questions) + full §16 correction plan presented; verdict + approval still pending.** Four end-to-end flows (correction of transcription STT/TTT, correction of report STT/TTT) with wire payloads shown to the owner.
+
+### Owner-directed REST route audit (applied, spec-only)
+Owner: "the route structure is not correct and doesn't follow the REST" → redesigned the reports/AI domain:
+- `POST /reports/:id/transcribe` + `/re-transcribe` → **`PUT /reports/:id/transcription`** (idempotent create-or-replace; skips already-contributed audios; 403 at `generated`).
+- `POST /reports/:id/correct` → **`POST /reports/:id/corrections`** (ephemeral candidate, ADR-033).
+- `POST /reports/:id/correct/transcribe` → **`POST /reports/:id/corrections/transcripts`** (ephemeral instruction text).
+- `POST /reports/:id/generate` → **`POST /reports/:id/generations`**.
+- `POST /reports/:id/content/revert` → **`PUT /reports/:id/content`** (idempotent replace with `raw`; pre-`generated` only).
+- `PATCH /reports/:id/visits` → **`PUT /reports/:id/visits`** (full replace).
+- KEPT as documented REST extensions: `POST /reports/:id/archive` + `/restore` (lifecycle), `GET /audios/:audioId/play` (streaming), `GET|POST /reports/:id/chat[/messages]` (noun + collection).
+- Applied: §31.2-2, §31.6, §31.8, §33.2, §33.6, §33.8, §34.2, §34.7, §35.2, §35.5, §35.6, §52.7, §54.2, §54.5, §54.6, §66.10 mock gate refs, §15.4 tree comment, phase-6 plan L42-44. Grep-verified: zero old route literals (remaining hits are historical prose in §33.2/§33.6 and behavioral language).
+
+## F68 — S12: text generation + addisai SDK + standing reasoning (closed 2026-08-18)
+
+Owner approved the S12 plan ("proceed") after the battery verdict; corrections C1–C25 applied in one change set.
+
+### Kernel-sourced answers (no codebase/spec-text citation)
+- **SDK wire mapping (source-verified from addisai-js v0.2.0):** `chat.completions.create` → `POST /api/v1/chat_generate` with `target_language`, `prompt` (last message), `conversation_history` (prior role/content), `system`, `persona`, `tools`, `generation_config {temperature, maxOutputTokens, stream}`. The SDK deliberately does NOT forward `model` ("could leak the underlying model") → registry id for addis is display-only. finish_reason normalized STOP→stop, MAX_TOKENS→length, SAFETY/RECITATION→content_filter, TOOL_CALLS→tool_calls. `speech.transcribe` → `POST /api/v2/stt` (2-part multipart; response `{transcription, confidence, usage_metadata}`); SDK `SttLanguage` am|om|en|ha|sw vs docs am|om (OQ-012, moot). SDK maxRetries code default 3 vs README 2 → pinned to `AI_PROVIDER_RETRIES` explicitly. Typed errors `.retryAfter` (429) / `.availableBalance` (402).
+- **Paid policy:** the former free-only policy is wrong for Addis — pay-as-you-go ETB credits, 500 ETB starter, STT 3.5 ETB/1k chars, 0.3/0.8 ETB per 1k tokens; 402 → top-up message via the 502 envelope → fallback; free tier 60 RPM/1000 RPD/3 concurrent (OQ-011). Gemini/NVIDIA stay free-tier-only.
+- **"No correction schema" (owner decision):** transcription-stage TTT corrections = full corrected plain prose; structured-output mandate/gates carry the carve-out; §35.2 target-split; §35.3 diff-verify binds report-shaped `latest` only; the §35.4 partial schema stays for `generated`-report corrections.
+- **Standing reasoning (owner requirement):** user selects reasoning for reasoning-capable providers (gemini/nvidia); the selection is the conversation default (`ChatConversation.reasoning`, default `AI_REASONING_DEFAULT` `'off'`) applied to every TTT request (generation, regeneration, Mode-2/3, chat turns); per-message triple stays as audit; `MuiReasoningSelect` (§46.17) on the §52.8 desk + §54.2 dialog, enabled only when the selected provider's model has reasoning capability; addis never receives it (§16.8 reasoning gate). Scope: per-conversation (recorded in §69).
+
+### Corrections applied (C1–C25)
+§16.2 (addis row transport/model display-only, paid policy), §16.3 (SDK instance once in `config/env.js`), §16.4 (Addis text-gen + STT block rewrites, structured-output carve-out, Gemini default → conversation default), §16.5 (SDK-managed retries, `.retryAfter`, 402 → 502 top-up → fallback, finish-reason failures, structured-output scope note), §16.6 (reasoning ride-along), §16.7 (SDK construction), §16.8 (SDK-only gate, reasoning gate, paid-policy gate, finish-reason gate, structured-output carve-out), §11.3 (`AI_TOP_P`/`AI_TOP_K` gemini/nvidia-only, `AI_PROVIDER_RETRIES` SDK maxRetries), §11.4 (`AI_REASONING_DEFAULT`), §11.5 (`AI_REASONING_LABELS`), §13.3 (SDK note), §13.5 (addisai row), §14.3 (ADR-008 amended), §24.2 (`reasoning` field), §33.4 (SDK STT call), §34.4 (topP/topK out of the Addis line), §34.5 (language via SDK, reasoning default), §35.2 (target-split Mode-2), §35.3 (surgical scope), §35.4 (SDK params + carve-out + reasoning), §36.3 (matrix `reasoning?`), §36.4 (optional reasoning → conversation default), §36.5 (SDK messages projection), §46.17 (`MuiReasoningSelect`), §52.8 (desk selectors), §54.2 (reasoning selector row), §54.7 (reasoning state), §69 (OQ-011/012/013 + three closure records).
+
+### Verification (this pass)
+- Grep gates: `chat_generate`/`api/stt` (old path)/`ADDIS_AI_BASE_URL`/`x-api-key` in spec appear only as SDK-internal/historical mentions in §16/§33; `topP|topK` only in gemini/nvidia blocks; `reasoning` never sent to addis (all addis bullets carry the ignore-rule).
+- Cross-section sweep per §16.8: §12.2/§12.8/§12.11-5, §13.3/§13.5, §14.3, §7.7, §24, §33, §34, §35, §36 consistent.
+- Working files: task_plan register §16 → closed, NEXT → §11; findings F68; progress entry appended.
+
+## F69 — S1–S4: §11 Constants & httpStatus re-derived (closed 2026-08-18)
+
+Owner approved all 15 WH questions ("do them all"). Kernel-sourced derivations:
+
+- **Q1 home boundary:** operator-tunable per deployment (keys, URLs, timeouts) → §10 env, read only by `config/env.js`; frozen product truth (limits, counts, allowlists, registry members, TTLs) → §11 constants; one home per value, no aliases — a constant never reads `process.env`.
+- **Q2 magic-literal line:** whitelist of tolerated inline literals = 0/1 arithmetic, `""`, `null`, booleans, structural markup; everything else carrying product meaning resolves to a §11/§10 name.
+- **Q3 freeze depth:** deep freeze on export for nested groups (`AI_MODELS`, `ITEM_STATUSES_BY_TYPE`, `WIZARD.*`, `TOAST_CATALOGUE`, labels maps).
+- **Q4 naming:** UPPER_SNAKE_CASE keys; lowercase enum values; namespace pattern for chrome groups.
+- **Q5 enforcement:** §9.7 sweep checks inline literals against the whitelist; reviewer's trace = constant name at the call site.
+- **Q6 audit method:** inventory sweep at pass end (never mid-pass) — corrected sections' references cross-checked against Used-by columns.
+- **Q7 orphan/phantom lifecycle:** orphan (declared, zero consumers) is either referenced by a corrected section or removed from table + constants file in the same change; phantom (consumed, undeclared) is added; no entry leaves before the sweep confirms zero references. → **`ADDIS_AI_BASE_URL` removed from §11.3** (SDK-internal endpoint; the §16.8 SDK gate bans the literal in source — it was a dead entry); §16.4/§16.7/§16.8 reworded (wire URLs stated as SDK-internal facts).
+- **Q8 no-alias rule:** env value never duplicated in constants; `AI_TIMEOUT_MS` (env) vs `AI_PROVIDER_RETRIES` (constant) exemplify the split.
+- **Q9 provenance:** provider-published values recorded with provenance (docs/date) and enter constants only as product policy; prices/limits stay §16.2 documentation + OQ rows (§14.5 amendment discipline on change).
+- **Q10 completeness:** httpStatus set derived from corrected endpoint matrices; every documented wire code has a semantic name; provider codes absorbed internally (addis 402 → 502 envelope) never appear as wire codes.
+- **Q11 client mirror:** same semantic names both sides; numeric ban symmetric.
+- **Q12 registration gate:** a section amendment introducing a new code registers it in §11.6 + `httpStatus.js` in the same change; grep gate: no numeric status literal.
+- **Q13 mirror scope:** mirrored iff the client renders/validates/transmits the set; `LANGUAGE_CODES`/`MESSAGE_ROLES` correctly unmirrored (server-only, verified §29/§23/§33). Current §11.5 scope confirmed complete.
+- **Q14 label chrome:** §7.6 owns display text; §11.5 rows map wire value → display name; wire values never change for chrome reasons.
+- **Q15 parity verification:** §11.7 gate — every §11.4 shared-business row has a §11.5 mirror and vice versa; the §16.8 registry/mirror rule generalized.
+
+### Corrections applied
+§11.2 (home boundary, deep freeze, tolerated-literals whitelist, namespace pattern), §11.3 (`ADDIS_AI_BASE_URL` row removed), §11.6 (completeness rule + registration gate), §11.7 (whitelist check, inventory-sweep discipline, mirror-parity gate), §16.4 ×2 (wire targets SDK-internal), §16.7 (constants list), §16.8 (SDK gate wording). No §11.5 rows changed — mirror scope confirmed. Register: §11 → closed; NEXT → §14 (S10).
+
+## F70 — S10: §14 ADR index re-derived (closed 2026-08-18)
+
+Six stories presented one-by-one, all kept ("proceed"). Architect battery (4 questions, answered inline):
+
+- **Q1 status vocabulary:** §14.2 rule 3 enumerates exactly Approved / Approved (temp; §14.4) / Retired (+date). ADR-008's cell "Approved (amended 2026-08-18)" was the only deviation — a variant string outside the vocabulary; the amendment was already recorded in the Decision text → **cell normalized to "Approved"** (record kept in the decision text).
+- **Q2 new rows for S12-era decisions (paid policy, no-correction-schema, standing reasoning):** no — §14.2 rule 4 (section prose governs); they are owned by §16.2/§35.2/§24.2 prose and indexed via the ADR-008 amendment. ADR-001's text still said "Addis AI for STT only" — internally contradictory (same row lists Addis among user-selectable text-generation providers) and stale vs ADR-008/§12.11-5 → **rewritten**: Addis AI (SDK) is the exclusive STT provider and a user-selectable text-generation provider; Gemini/NVIDIA text-generation only; amendment dated.
+- **Q3 ADR-024 pointer:** verified — OQ-004 (§69, OPEN, Google OAuth real vs stub) exists; no dangling pointer.
+- **Q4 §12.11 parity:** §14's side clean — the seven §12.11 locked decisions cite ADR rows where applicable (row 5 → ADR-001); the full parity re-check is a §12-pass (S5–S9) deliverable, not a §14 change.
+
+### Verification (S10-6)
+Grep sweep: all ADR citations resolve within ADR-001…038 — zero dangling (only forward-looking "ADR-039 onward" rule text); ADR-005 retirement is dated per §14.2 rule 3; D4/D5 reversal precedent intact (§4.2).
+
+### Corrections applied
+§14.3 row ADR-001 (decision text) and ADR-008 (status cell). No other §14 changes — the section is otherwise audited-no-change. Register: §14 → closed (re-derived); NEXT → §15 (S11).
+
+## F71 — S11: §15 Project structure re-derived (closed 2026-08-18)
+
+Five stories kept; 8-question WH battery approved ("proceed"). Nine-point repo-drift table resolved (spec-side staleness corrected into the tree; zero client edits — freeze held):
+
+1. **Recorder hook:** tree had `hooks/useAudioRecorder.js` (phantom); repo has `utils/useMediaRecorder.js` (only implementation, no other section names it) → tree + §15.6 corrected (name AND home = repo fact; §53 Mode-3 reuse anchor kept).
+2. **Print surface:** §15.5 + §58.3 both said `components/print/`; repo has `components/report/print/ReportPrint.jsx` (more consistent with the §15.2.7 domain-folder rule) → both amended in the same pass.
+3. **Reusable list:** added `MuiProviderSelect` (implemented) and `MuiReasoningSelect` (§46.17, **planned** — verified zero client/src references; created by the §54 correction round). S12-era §15.7.1 mirror miss corrected.
+4. **utils:** added `sanitizeHtml.js` (§61.3 double gate), `wizardValidation.js` (§52), `useMediaRecorder.js`.
+5. **auth/:** BrandPanel, GoogleOAuthButton, LoginForm, RegisterForm, validators.js (§48).
+6. **landing/:** Hero, BranchStrip, CtaBand, HowItWorks, RuledPaper (§43).
+7. **§15.3 root:** authoring-workspace node (AGENTS.md, prompt.md, `.opencode/`, task_plan.md, findings.md, progress.md, phase-6-backend-apis.md) — never imported/built/deployed; §66.3 paths now resolve (§15.8).
+8. **§15.2.3 legend:** three-class state markers — `(scaffold)` / `(implemented)` / unmarked=planned, plus `(all implemented)` group form; applied across both trees (theme/assets reclassified to implemented — P3-created, not scaffold; backend env.js/constants.js/httpStatus.js implemented; logger/wavSplitter remain planned).
+9. **§15.6:** hooks line (recorder hook lives in utils/) + client utils list extended.
+
+### Verification
+Grep: zero `useAudioRecorder` / `components/print/`; §58.3 path resolves; reusable-list diff vs repo = 30/30 implemented + 1 planned (MuiReasoningSelect); pages 11/11; §15.4 vs repo full match. No constants/packages introduced (§15.7.5). Register: §15 → closed (re-derived); NEXT → §12 (S5–S9).
+
+## F72 — S5–S9: §12 System architecture re-derived (closed 2026-08-18)
+
+Five stories kept; 7-question battery approved ("proceed"). Corrections (3):
+
+1. **§12.3 client box** — "rich-text editor (planned @tiptap/react, §13.5)" → "(@tiptap/react + dompurify, §13.5 — installed)". Verified installed during the §15 pass (client/package.json).
+2. **§12.3 Addis AI box** — "(Amharic STT + generation, fetch)" → "(… generation, SDK)" — stale S12-era string vs ADR-008/§16.8.
+3. **§12.8 generation line** — overbroad "temperature, top-p, top-k, and max-output-token constants from §11" → provider-scoped: temperature across providers; top-p/top-k Gemini/NVIDIA-only (§16.4); reasoning effort rides the standing conversation default for reasoning-capable providers (§24.2, §16.6); max-output-token from §11.
+
+### §12.11↔§14.3 parity re-check (deferred from §14, closed here)
+Row 5 ("Amharic STT provided by Addis AI exclusively; Gemini and NVIDIA are text-generation providers only") is aligned with the amended ADR-001. Rows 1–4, 6, 7 are §12-owned locked decisions with no ADR rows — by design (§12.11 is the companion register). No new transport row: §12.8 prose + ADR-008 + §16.8 gate cover it.
+
+### Verified current (no change)
+SDK transport line §12.8, fallback chain, middleware chain, 30-day retention, 900 s/50 MB constants, dual-token JWT, mock/session rules, `/api/v1` health, no-correction-schema + reasoning-default correctly NOT duplicated in §12 (§12.1 never-duplicates rule). Post-edit grep on the §12 range: zero "fetch"-as-transport, zero "planned", zero overbroad "top-p, top-k".
+
+Register: §12 → closed (re-derived) — **pass 1b complete**; NEXT → pass consistency sweep.
+
+## F73 — Pass-1b consistency sweep (COMPLETE 2026-08-18)
+
+Per-gate results:
+
+- **G1 §11.7 inventory:** zero phantoms — `TRANSCRIPTION_STATUSES` (3× "no TRANSCRIPTION_STATUSES" — intentional negative), `NVIDIA_API_URL` (env §10.4, Required-no-default → correct home per the §11.2 rule; GEMINI_BASE_URL constant is the deliberate contrast), `DELETE`/`NOT_EXTENDED`/`SIGINT`/`SIGTERM`/`YYYY` (prose/platform, fine), env keys (ADDIS_API_KEY etc. — §10.4 homes), `ADDIS_AI_BASE_URL` (removal record only). Orphans: `NO_CONTENT`/`INTERNAL_SERVER_ERROR` (httpStatus) and six §11.5 mirror rows (ETHIOPIAN_MONTH_LABELS, FONT_SIZES, PICKER_DATE_FORMAT/TIME_FORMAT, REPORT_STATUS_LABELS, TOAST_AUTO_DISMISS_MS) have zero consumers document-wide BUT exist in the frozen P1 files (backend/utils/httpStatus.js, client/src/utils/constants.js) — the tables are transcripts. Resolution: (a) §11.6 completeness rule amended with a **transcript carve-out** (row present in the file stays until its consumer section is corrected; removal only with the file entry); (b) `INTERNAL_SERVER_ERROR` given a real pass-1b consumer (§12.5 global-handler line); (c) §11.5 rows stay — mirror-first (frontend pass adds the consuming references).
+- **G2 §14.6 ADR citations:** `ADR-039` = forward-looking rule text (§14.2), not a citation. `ADR-002`/`021`/`022` zero citations — Owner-column anchored (021/022's owners §9.2/§9.4 are KERNEL-frozen); **ADR-002 citation added to §12.2 principle 4** ("(proxy rule, §16, ADR-002)").
+- **G3 §15.8 paths:** all corrected-section paths resolve — `app/store.js` hits are `redux/`-context-relative (§15.2.7/§15.6); block-relative convention (`config/env.js`, `features/apiSlice.js`) accepted. Clean.
+- **G4 §13 manifest mirrors:** **2 defects fixed**: (a) §13.4 client table lacked ALL 7 installed editor packages → 7 rows added verbatim (`@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/extension-text-style`, `@tiptap/extension-underline`, `@tiptap/extension-text-align`, `@tiptap/extension-placeholder` — all ^3.30.1 — and `dompurify` ^3.4.13); (b) §13.5 "not yet installed" table still listed dompurify → row removed (addisai + NVIDIA-helper stay — verified not in backend manifest).
+- **G5 §16.8 SDK gate:** 2 violations fixed — §33.6 wire-target restatement → "wire target per §16.4 (the SDK contract)"; §69 S12 closure record URL restatement → method-surface pointer-only. Re-verified: `chat_generate`/`/api/v2/stt`/`/api/stt`/`api.addisassistant.com` now appear ONLY in §16.4 (contract) + §16.8 (gate text).
+- **G6 §-references:** 11/11 new cross-references resolve (§16.4/16.6/16.8, §24.2, §35.2, §46.17, §53, §54, §58.3, §61.3, §66.3).
+- **G7 SC-6/SC-7:** no magic literals introduced (all named); no client-side provider keys/URLs.
+
+Net change set: §11.6 wording, §12.2 (ADR-002), §12.5 (INTERNAL_SERVER_ERROR), §13.4 (+7 rows), §13.5 (−1 row), §33.6, §69 record. Register: sweep → completed; pass 1b fully closed; NEXT → step-5 review gate.

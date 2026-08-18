@@ -83,3 +83,63 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - **Branch lifecycle confirmed:** `spec-correction` holds all corrections; on full correction → new branch for re-implementation → delete `spec-correction`. **Freeze:** no `backend/*`/`client/*` edits until the spec is fully corrected (Stage 3 hard gate).
 - **Checkpoint commit executed** on explicit owner approval: `chore: phase 4 owner-corrections` — spec pass-1 corrections + mirrors (constants, MuiStatusBadge, phase-6 plan file) + the 5 controlled files (AGENTS.md, prompt.md now tracked, findings.md, this log, task_plan.md with the register). No push.
 - **NEXT:** pass 1b — Supervisor enumerates the architecture user stories (§11/§12/§14/§15/§16) for per-story owner review; then WH batteries → derivations → corrections → register closes 5/5 → step-5 gate.
+
+## Session 2026-08-18 — Pass 1b opened: S13 (STT contract) closed
+
+- Owner approved the 14-story pass-1b plan; order re-decided §16-first (skip-first — §16's outputs feed §11/§14); register NEXT pointer moved §11 → §16.
+- **S13 (§16 STT contract) — battery approved, derived, corrections applied (F66):** 33-question WH battery presented (no removals) → derivations from the §2.3 kernel + corrected model. Corrections: §16.4 STT block (exactly two multipart parts; chunk MIME = the pipeline's own wav/PCM — `AUDIO_ALLOWED_MIME_TYPES` governs uploads only; `request_data` carries exactly `language_code`; conditional `modelVersion` echo → `stt.model` null-if-unknown; `confidence`/`totalBilledDuration` never persisted; partial merge never persisted — §33.7), §33.4 (stale `target_language` removed — a `chat_generate` parameter that had leaked into the STT request contract; garbled "data object: audio blobs" phrasing fixed), §33.5 (`stt.model` written only from the provider echo, else null), §16.8 (new STT contract gate), §11.3 (`ADDIS_AI_STT_MAX_DURATION_SEC` Used-by += §16). No new constants, no new paths, no invention (§16.8 gate). Register: §16 → S13 closed (re-derived), NEXT → S12 (text-generation contracts).
+- **NEXT:** S12 — §16.2 roster/registry + §16.4 text-generation contracts + §16.6 chain: WH battery → derivations → corrections → register §16 closed → §11 (S1–S4).
+## Session 2026-08-18 — S12 research + SDK decision + REST route audit
+
+- **S12 research complete:** Addis AI FAQ (12/12 answers), npm registry, GitHub SDK source (v0.2.0), announcements, pricing/limits, LinkedIn. SDK source-verified wire facts (chat `chat_generate` mapping incl. prompt/conversation_history/generation_config, STT `/api/v2/stt` 2-part multipart, finish_reason normalization, model intentionally not forwarded, SDK maxRetries 3 vs README 2). Owner decisions D1–D9: adopt `addisai@^0.2.0` for **STT + TTT only** (TTS stays D1-deferred — owner clarified after two misreads); Gemini/NVIDIA stay axios; persona never sent; topP/topK dropped for Addis; retries SDK-managed; SDK built once in `config/env.js`; 402 → top-up message.
+- **S12 battery (20 questions) + full correction plan presented to the owner** (§16.2 paid policy, §16.3-16.5 SDK contract rewrites, §13.5 addisai row, §14.3 ADR-008, §11.3 Used-by, §16.8 gates, §33/§34/§35 wording, verification). Verdict + plan approval pending. Four end-to-end AI flows with wire payloads presented (correction of transcription / of report, STT/TTT each). Flagged OQ: transcription-stage TTT correction schema shape.
+- **Owner: "the route structure is not correct and doesn't follow the REST"** → REST route audit of the reports/AI domain applied to the spec (spec-only, freeze intact): `PUT /reports/:id/transcription` (merges transcribe + re-transcribe, idempotent create-or-replace), `POST /reports/:id/corrections`, `POST /reports/:id/corrections/transcripts`, `POST /reports/:id/generations`, `PUT /reports/:id/content` (revert), `PUT /reports/:id/visits`; archive/restore/play/chat kept as documented REST extensions. Sections touched: §31.2-2/§31.6/§31.8/§33.2/§33.6/§33.8/§34.2/§34.7/§35.2/§35.5/§35.6/§52.7/§54.2/§54.5/§54.6/§66.10/§15.4 + phase-6 plan + F67 ledger. Grep-verified: zero old route literals.
+- **NEXT:** present the completed route audit + re-request the S12 battery verdict + plan approval → §16 corrections (SDK contract rewrite) → register §16 closed → §11 (S1–S4) → §14 (S10) → §15 (S11) → §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — S12 closed: addisai SDK + paid policy + no-correction-schema + standing reasoning
+
+- **Owner verdict + approval:** "show me the full plan for 1 and 2. no correction schema" → full S12 plan (21-question battery, C1–C25 correction set, OQ resolution) presented → owner: "proceed".
+- **Decisions locked:** addisai ^0.2.0 SDK for ALL Addis traffic (STT `speech.transcribe` → `/api/v2/stt`, TTT `chat.completions.create` → `/api/v1/chat_generate`; no raw HTTP, SDK instance once in `config/env.js`); no `model` (display-only), no `persona`, no `topP`/`topK` for addis; SDK-managed retries pinned to `AI_PROVIDER_RETRIES`/`AI_TIMEOUT_MS`; typed `.retryAfter`/`.availableBalance`; finish_reason `length`/`content_filter` = provider failure; paid policy replaces free-only for Addis (402 → top-up message → fallback); **transcription-stage corrections = full plain prose** (no schema — owner); **standing reasoning**: user selects reasoning for reasoning-capable providers, applied to every TTT request as the conversation default (`ChatConversation.reasoning`, `AI_REASONING_DEFAULT` `'off'`, `MuiReasoningSelect` on the generation desk + CorrectionDialog, addis never receives it).
+- **Applied C1–C25** to §16.2–§16.8, §11.3/§11.4/§11.5, §13.3/§13.5, §14.3 ADR-008, §24.2, §33.4, §34.4/§34.5, §35.2/§35.3/§35.4, §36.3/§36.4/§36.5, §46.17, §52.8, §54.2/§54.7, §69 (OQ-011/012/013 + closure records). §16 register → **closed (re-derived)**.
+- **NEXT:** §11 (S1–S4) → §14 (S10) → §15 (S11) → §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — §11 closed (S1–S4)
+
+- **Story gate:** 4 §11 user stories presented (one canonical constants home / trustworthy inventory / complete semantic httpStatus / client mirror parity) — no removals.
+- **Battery gate:** 15 WH questions presented ("present" → "do them all").
+- **Derivations (F69):** home boundary env-vs-constants; deep freeze; tolerated-literals whitelist; orphan/phantom sweep discipline at pass end; httpStatus completeness + registration gate; mirror-scope rule + parity gate. **`ADDIS_AI_BASE_URL` removed from §11.3** (dead entry after the SDK adoption — endpoint SDK-internal; §16.4/§16.7/§16.8 reworded). §11.5 mirror scope verified complete (`LANGUAGE_CODES`/`MESSAGE_ROLES` correctly server-only).
+- **Applied:** §11.2/§11.3/§11.6/§11.7 + §16.4/§16.7/§16.8 wording; register §11 → **closed (re-derived)**; findings F69; this log.
+- **NEXT:** §14 (S10) → §15 (S11) → §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — §14 closed (S10)
+
+- **Story gate:** 6 §14 user stories (inventory completeness / one status vocabulary / protocol-only change / reversal integrity / cross-register parity / verification truth) — all kept.
+- **Battery:** 4 questions answered inline (F70): status-vocabulary normalization; no new ADR rows for S12-era decisions (owner prose governs); ADR-024→OQ-004 pointer verified; §12.11 parity deferred to the §12 pass.
+- **Applied:** ADR-001 decision text rewritten (stale "STT only" clause, internally contradictory; aligned with ADR-008/§12.11-5, amendment dated); ADR-008 status cell normalized to "Approved" (§14.2 vocabulary). Dangling-citation sweep clean.
+- **Register:** §14 → **closed (re-derived)**; findings F70; this log.
+- **NEXT:** §15 (S11) → §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — §15 closed (S11)
+
+- **Story gate:** 5 §15 stories (canonical tree truth / real-state markers / placement discipline / mirror completeness / verification truth) — kept. **Battery:** 8 WH questions; owner: "show me the full plan again" → consolidated plan; "proceed".
+- **Derivations (F71):** nine-point repo-drift table corrected into the tree (useMediaRecorder home/name; report/print placement + §58.3 same-pass; reusable +MuiProviderSelect implemented / +MuiReasoningSelect planned; utils +sanitizeHtml/+wizardValidation; auth/landing real lists; §15.3 authoring-workspace; three-class state legend with markers across both trees; §15.6 lines). One self-caught error mid-application: MuiReasoningSelect is NOT in the repo (planned §54 round) — marker corrected.
+- **Verified:** zero old refs; reusable diff 30/30+1 planned; pages 11/11; §15.4 repo-true.
+- **Register:** §15 → **closed (re-derived)**; findings F71; this log.
+- **NEXT:** §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — §12 closed (S5–S9); pass 1b COMPLETE
+
+- **Story gate:** 5 §12 stories (canonical HLD / principles under amendment / HLD mirrors corrected sections / locked-decision register integrity / verification truth) — kept. **Battery:** 7 WH questions; full plan presented; "proceed".
+- **Applied (F72):** §12.3 editor box "planned"→installed; §12.3 Addis box "fetch"→"SDK"; §12.8 generation parameters provider-scoped + reasoning default. §12.11↔§14.3 parity re-check closed (row 5 aligned with amended ADR-001; no new transport row). Post-edit greps clean.
+- **Pass 1b complete — all five architecture sections closed:** §16 (S12/S13), §11 (S1–S4), §14 (S10), §15 (S11), §12 (S5–S9). Working files updated; findings F72; this log.
+- **NEXT:** pass consistency sweep (§11.7 inventory, §14.6 ADR citations, §15.8 path resolution, §13 manifest mirrors, §16 SDK gate) → step-5 review gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — Pass-1b consistency sweep COMPLETE (F73)
+
+- All 7 gates run; 4 defect classes resolved in the same change set:
+  - **G1:** transcript carve-out added to §11.6 (frozen-file reality: httpStatus/constants tables mirror P1 files — NO_CONTENT etc. stay); INTERNAL_SERVER_ERROR consumer added in §12.5.
+  - **G2:** ADR-002 cited in §12.2 (021/022 Owner-anchored, owners kernel-frozen).
+  - **G4:** §13.4 +7 installed editor rows; §13.5 dompurify row removed.
+  - **G5:** §33.6 + §69 SDK-gate URL restatements → pointer-only; wire URLs now only §16.4/§16.8.
+- **Pass 1b fully closed:** §16 → §11 → §14 → §15 → §12 → sweep. Working files updated; this log.
+- **NEXT:** step-5 review gate — pass-1b close-out report + checkpoint commit request (explicit owner approval required for the commit).

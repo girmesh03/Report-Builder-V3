@@ -2050,10 +2050,28 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 
 ### 11.2 Constraint rules
 
-- Every constants group is `Object.freeze()`d on export; mutation of
-  imported constants is forbidden.
+- **Home boundary (S12/S1 derivation).** A value's home is decided
+  by *who can change it*: operator-tunable per deployment (keys,
+  URLs, timeouts) → §10 env, read only by `config/env.js`; frozen
+  product truth (limits, counts, allowlists, registry members,
+  TTLs) → §11 constants. One home per value — no aliases: an env
+  value is never duplicated in constants and a constant never reads
+  `process.env`.
+- Every constants group is `Object.freeze()`d **deep** on export
+  (nested groups and arrays too — `AI_MODELS`,
+  `ITEM_STATUSES_BY_TYPE`, `WIZARD.*`, `TOAST_CATALOGUE`, labels
+  maps); mutation of imported constants is forbidden.
+- **Tolerated literals (whitelist).** Only these are permitted
+  inline: arithmetic identities (0, 1), the empty string, `null`/
+  `undefined`, booleans, and structural markup (JSX/CSS). Every
+  other literal that carries product meaning — a limit, duration,
+  MIME entry, enum member, identifier, or label string — resolves
+  to a §11 (or §10) name.
 - Groups are named with UPPER_SNAKE_CASE keys consistent with the
-  group organisation below.
+  group organisation below; **values** are lowercase enums
+  (statuses, providers, efforts, roles, languages — §9 naming);
+  chrome groups follow the namespace pattern (`WIZARD.transcription.*`,
+  `TOAST_CATALOGUE.*`).
 - Numeric HTTP codes never appear in code: key-value pairs map the
   semantic name (§11.6).
 - Provider ids, report statuses, and language codes are domain
@@ -2070,7 +2088,7 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `PAGINATION_DEFAULT_PAGE`         | 1                                            | §30                         |
 | `PAGINATION_DEFAULT_LIMIT`        | 10                                           | §30                         |
 | `PAGINATION_MAX_LIMIT`            | 100                                          | §30                         |
-| `ADDIS_AI_STT_MAX_DURATION_SEC`   | 60                                           | §33                         |
+| `ADDIS_AI_STT_MAX_DURATION_SEC`   | 60                                           | §16, §33                    |
 | `BCRYPT_SALT_ROUNDS`              | 12                                           | §28                         |
 | `AVATAR_MAX_SIZE_BYTES`           | 5242880 (5 MB)                               | §28, §29                    |
 | `AVATAR_ALLOWED_MIME_TYPES`       | `['image/jpeg', 'image/png', 'image/webp']`  | §28, §29                    |
@@ -2078,16 +2096,15 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `REFRESH_TOKEN_TTL_DAYS`          | 7                                            | §28                         |
 | `AI_TEMPERATURE`                  | 0.2                                          | §34                         |
 | `AI_MAX_OUTPUT_TOKENS`            | 2048                                         | §34                         |
-| `AI_TOP_P`                        | 0.9                                          | §34                         |
-| `AI_TOP_K`                        | 40                                           | §34                         |
+| `AI_TOP_P`                        | 0.9                                          | §16 (gemini/nvidia only — the addisai SDK exposes no topP) |
+| `AI_TOP_K`                        | 40                                           | §16 (gemini/nvidia only — the addisai SDK exposes no topK) |
 | `AI_CORRECTION_MAX_OUTPUT_TOKENS` | 2048                                         | §35                         |
 | `AI_CORRECTION_TEMPERATURE`       | 0.15                                         | §35                         |
 | `AI_CONVERSATION_HISTORY_MAX_ENTRIES` | 20                                        | §34, §36                   |
 | `CHAT_MESSAGE_MAX_LENGTH`         | 4000                                         | §36                         |
 | `EXPORT_DOCS_ENABLED`             | `false`                                      | §37                         |
-| `AI_PROVIDER_RETRIES`             | 3                                            | §16                         |
+| `AI_PROVIDER_RETRIES`             | 3                                            | §16 (the SDK `maxRetries` for addis; the axios retry count for gemini/nvidia) |
 | `AI_PROVIDER_BACKOFF_BASE_MS`     | 1000                                         | §16                         |
-| `ADDIS_AI_BASE_URL`               | `https://api.addisassistant.com`             | §16                         |
 | `GEMINI_BASE_URL`                 | `https://generativelanguage.googleapis.com/v1beta` | §16                |
 | `RATE_LIMIT_GLOBAL_WINDOW_MIN`    | 15                                           | §27                         |
 | `RATE_LIMIT_GLOBAL_MAX`           | 100                                          | §27                         |
@@ -2112,6 +2129,7 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `LANGUAGE_CODES`  | `{ am: 'am', en: 'en' }` with `om`/`ti` reserved, not activated | §7.7, §16, §33, §34 |
 | `AI_MODELS`       | per-provider model registry, see §16.2: every model entry carries an id, a `default` flag, and a `reasoning` capability flag. Initial registry: addis `[Addis-፩-አሌፍ]` (default, reasoning off); gemini `[gemini-3.1-flash-lite]` (default, reasoning on); nvidia `[deepseek flash 4]` (default, reasoning on) | §16, §34, §35, §36, §54 |
 | `AI_REASONING_EFFORTS` | `['off', 'low', 'medium', 'high']`   | §16, §34, §35, §36, §54 |
+| `AI_REASONING_DEFAULT` | `'off'` — the conversation-level standing reasoning effort applied to every TTT request (§16.2, §24.2) | §16, §24, §34, §35, §36 |
 | `MESSAGE_ROLES` | `['system', 'user', 'assistant']` | §24, §36 |
 
 ### 11.5 Client constants inventory
@@ -2129,6 +2147,7 @@ by the UI:
 | `AI_PROVIDERS`        | §11.4                | §54     |
 | `AI_MODELS`           | §11.4                | §54     |
 | `AI_REASONING_EFFORTS`| §11.4                | §54     |
+| `AI_REASONING_LABELS` | §11.4 (display names, English chrome §7.6: `off: 'Off'`, `low: 'Low'`, `medium: 'Medium'`, `high: 'High'`) | §54, §46.17 |
 | `AI_PROVIDER_LABELS`  | §11.4 (display names, English chrome §7.6; round-7: the `nvidia` row displays "Deepseek" — the wire id stays `nvidia`) | §54 |
 | `WIZARD.modes.*` correction chrome (`revision`, `instructionPlaceholder`, `recordInstruction`, `transcribingInstruction`, `save`, `revertToOriginal`, `apply`, `cancel`, `aiProvider`, `savedAt`, `unsaved`, `saving`, `savedJustNow`, `noChanges`) | §11.4 (English chrome §7.6) | §53.5, §54 |
 | `WIZARD.transcription.*` step chrome (`ledgerTitle`, `ledgerSubtitle`, `transcribe`, `transcribing`, `storyDivider`, `storySubtitle`, `addCorrection`, `failedLine`, `retry`, `reTranscribe`, `storyChangeNotice`, `emptyTitle`, `emptyDescription`) | §11.4 (English chrome §7.6) | §52.7 |
@@ -2171,10 +2190,46 @@ Any additional code used later must be added to `httpStatus.js` with
 a named key before it is referenced (e.g. `NOT_EXTENDED` if not
 already present — add it there, never a numeric literal).
 
+- **Completeness rule (S1–S4 derivation, 2026-08-18).** The set is
+  derived from the corrected sections' endpoint matrices and
+  handlers: every documented response code must have a semantic name
+  here, and every row must be emitted by at least one corrected
+  section (orphan/phantom discipline applies to the table like any
+  constant group, §11.7). **Transcript carve-out (sweep, 2026-08-18):**
+  the table is a transcript of `utils/httpStatus.js` (P1, frozen
+  during the correction effort) — a row present in the file stays
+  even before its consumer section is corrected (e.g. `NO_CONTENT`),
+  and a row is removed only together with its file entry.
+  Provider-side codes the app absorbs internally (e.g. the addis
+  402 → 502 top-up envelope, §16.5) never appear as wire codes.
+- **Registration gate.** A section amendment introducing a code not
+  in this table registers it here + in `httpStatus.js` in the same
+  change (§66.6); grep gate: no numeric status literal in source.
+
 ### 11.7 Verification usage
 
 - §2.4 SC-6 (no magic values / frozen constants) and its DoD gate
   are enforced here and by §9.7.
+- **Tolerated-literals whitelist (§11.2).** The §9.7 sweep checks
+  inline literals against the whitelist (0/1, `""`, `null`,
+  booleans, markup); anything else must resolve by name to a §11/
+  §10 entry — the reviewer's trace is the constant's name at the
+  call site.
+- **Inventory sweep (S1–S4, 2026-08-18).** Run at the pass end, not
+  per-section: every corrected section's references are
+  cross-checked against §11.3/§11.4 Used-by columns — an entry
+  declared but never consumed (orphan) is either referenced by a
+  corrected section or removed from the table + constants file in
+  the same change; a consumed value with no entry (phantom) is
+  added. No entry leaves the table before the sweep confirms zero
+  references.
+- **Mirror-parity gate (S4).** Every §11.4 shared-business row
+  (client renders, validates, or transmits it) has a §11.5 mirror
+  row and vice versa — a mirror without a source is an error; a
+  registry change without its mirror is a review error (§16.8
+  rule, generalized). Server-only sets (`LANGUAGE_CODES`,
+  `MESSAGE_ROLES`, retries, TTLs, rate tiers) are deliberately
+  unmirrored.
 - Every later section (esp. §31–§35, §53, §62) must consume the §11
   constants; where a section in this hierarchy first uses a new
   literal, it lists the name it introduces.
@@ -2238,7 +2293,8 @@ There is no streaming transcription, no server-pushed state, and
 4. **AI is backend-orchestrated.** Every AI call (speech-to-text and
    text generation) originates on the backend; provider keys live
    only in `backend/.env` (§10.2, SC-7) and never reach the browser.
-   The browser never talks to a provider directly (proxy rule, §16).
+   The browser never talks to a provider directly (proxy rule, §16,
+   ADR-002).
 5. **JS-only, minimal surface.** No TypeScript, no Next.js/Remix, no
    Tailwind; the stack is owned by §13 with the package manifests as
    the version source of truth.
@@ -2278,7 +2334,7 @@ topology is:
 ```
 +----------------------------------------- Browser (client SPA) -------------------------------------------+
 |  Vite build · React · MUI (community) · RTK Query (fetchBaseQuery + baseQueryWithReauth)                  |
-|  react-hook-form · MUI X (DataGrid, Chat, DatePicker) · rich-text editor (planned @tiptap/react, §13.5) · ethiopianDate                      |
+|  react-hook-form · MUI X (DataGrid, Chat, DatePicker) · rich-text editor (@tiptap/react + dompurify, §13.5 — installed) · ethiopianDate                      |
 |  PublicLayout / AppShell · pages §48–§59 · toasts & state protocol (§60)                                   |
 +------------------------------------------------------------------------------------------------------------+
                |                                     HTTP/1.1 JSON under /api/v1
@@ -2298,7 +2354,7 @@ topology is:
 +-----------+  +-------------+  +------------------+  +--------------------+  +-------------+  +----------------------+
 | MongoDB    |  | local FS       |  | Google Docs API    |  | Addis AI            |  | Gemini      |  | Nvidia AI            |
 | (Mongoose) |  | uploads/audio/ |  | (export, user-     |  | (Amharic STT +      |  | (text       |  | (text generation)    |
-| TTL        |  | gitignored     |  | owned Drive file)  |  | generation, fetch)  |  | generation; |  | axios)               |
+| TTL        |  | gitignored     |  | owned Drive file)  |  |  generation, SDK)  |  | generation; |  | axios)               |
 | indexes;   |  | §22, §32       |  | §37                |  | §16, §33            |  | axios)    |  | §16                  |
 | §19–§24    |  |                |  |                    |  |                     |  |            |                      |
 +-----------+  +-------------+  +------------------+  +--------------------+  +-------------+  +----------------------+
@@ -2374,8 +2430,9 @@ methods), `mongoose-paginate-v2` on list endpoints (page 1, limit
   `{ docs, page, limit, totalDocs, totalPages }`); error responses
   reuse the same envelope with `data: null` (§5, §27).
 - **Errors:** `CustomError`; the global error handler logs via
-  Winston; development returns the stack trace, production a generic
-  message (§27).
+  Winston (mapping unexpected failures to
+  `httpStatus.INTERNAL_SERVER_ERROR`); development returns the stack
+  trace, production a generic message (§27).
 - **Single error path (normative):** every request/response error —
   422 validation failures, controller and service throws, provider
   failures, unmatched 404s — converges on the one global error handler
@@ -2440,8 +2497,8 @@ methods), `mongoose-paginate-v2` on list endpoints (page 1, limit
 
 - **All calls from backend** (proxy rule): the browser never
   contains provider keys or issues provider calls (§10.2 SC-7).
-- **Transport:** Addis AI calls use native `fetch` on the backend;
-  Gemini/Nvidia use axios (details in §16).
+- **Transport:** Addis AI calls use the addisai SDK on the backend
+  (ADR-008, §16.3); Gemini/Nvidia use axios (details in §16).
 - **Providers:** Addis AI — Amharic-first, default provider, used for
   STT and also for text generation; Gemini and NVIDIA — supported
   providers for text generation with a fallback chain (§16, §34).
@@ -2451,8 +2508,11 @@ methods), `mongoose-paginate-v2` on list endpoints (page 1, limit
 - **STT specifics:** chunked transcription — when audio is longer
   than the 60 s chunk, the backend splits it and transcribes chunks
   sequentially (chunk size from §11; pipeline §33).
-- **Generation & correction:** generation uses the temperature,
-  top-p, top-k, and max-output-token constants from §11; typed and
+- **Generation & correction:** generation uses the provider-appropriate
+  parameter constants from §11 — temperature across providers; top-p/
+  top-k are Gemini/NVIDIA-only (§16.4, S12); reasoning effort rides the
+  standing conversation default for reasoning-capable providers (§24.2,
+  §16.6); max-output-token from §11. Typed and
   voice instructions pass through the §34/§35 services (surgical
   partial-edit approach).
 - **Chat:** conversation turns saved for display via §36 (AI Chat &
@@ -2601,8 +2661,9 @@ devDependencies, caret ranges preserved verbatim):
 
 Notes:
 
-- Addis AI calls use the platform's native `fetch`; Gemini and NVIDIA
-  calls use axios. Neither uses an AI SDK (§16, §12.8).
+- Addis AI calls use the official `addisai` SDK (^0.2.0, §13.5);
+  Gemini and NVIDIA calls use axios. The addisai SDK is the only AI
+  SDK — no other provider SDK is installed (§16, §12.8, ADR-008).
 - The backend has no test framework and no TypeScript compiler
   (§13.6).
 - `dotenv` feeds `config/env.js` at boot; `process.env` remains
@@ -2632,6 +2693,13 @@ caret ranges preserved verbatim):
 | @mui/x-date-pickers         | ^9.11.0           | Date & time pickers (with ethiopianDate)     | §52        |
 | @mui/x-charts               | ^9.11.1           | Analytics charts                               | §49        |
 | @mui/x-chat                 | ^9.0.0-alpha.16   | AI chat panel (alpha; §55 usage)              | §55        |
+| @tiptap/react               | ^3.30.1           | Rich-text editor core (ADR-038)              | §46.16, §53 |
+| @tiptap/starter-kit         | ^3.30.1           | Editor bundle (ADR-038)                      | §46.16     |
+| @tiptap/extension-text-style | ^3.30.1          | Font-size bucket select (round-7, §46.16)     | §46.16     |
+| @tiptap/extension-underline | ^3.30.1           | Underline action (round-6, §46.16)           | §46.16     |
+| @tiptap/extension-text-align | ^3.30.1          | Alignment actions (round-6, §46.16)          | §46.16     |
+| @tiptap/extension-placeholder | ^3.30.1         | Editor placeholder                           | §53        |
+| dompurify                   | ^3.4.13           | Sanitizes rich-text HTML on save and on render | §61      |
 | @fontsource/inter           | ^5.3.0            | Inter font (typography)                       | §43        |
 | @fontsource/noto-serif-ethiopic | ^5.3.0        | Ethiopic content face (Amharic body, §43.5)    | §43        |
 | jspdf                       | ^4.2.1            | PDF export (client-side)                       | §58        |
@@ -2672,7 +2740,7 @@ become manifest truth:
 
 | Package       | Purpose                                          | Manifest target | Entrance gate              |
 | ------------- | ------------------------------------------------ | --------------- | -------------------------- |
-| dompurify     | Sanitizes rich-text HTML on save and on render  | client dependencies | editor phase in §66; §61 |
+| addisai       | The official Addis AI JS SDK (^0.2.0, MIT, zero runtime deps) — STT (`addis.speech.transcribe`) and text generation (`addis.chat.completions.create`) for provider `addis`; the SDK replaces any raw HTTP to Addis (ADR-008); the instance is built once in `config/env.js` (§16.7) | backend dependencies | P6 transport phase in §66; the §16.4 contracts stay in force |
 | NVIDIA multipart transport helper (named at install) | Conditional (§16.4): only if the installed runtime lacks reliable multipart forwarding to NVIDIA | backend dependencies | transport phase in §66; §16.4 rules stay in force |
 
 Installed at the §66 P4 editor phase (2026-08-15, wizard steps 1–3
@@ -2806,14 +2874,14 @@ recorded (ADR-039 onward).
 
 | ADR | Decision | Status | Owner |
 | --- | -------- | ------ | ----- |
-| 001 | Amharic-first stack: Addis AI for STT only; text generation user-selectable across Addis AI, Gemini, NVIDIA | Approved | §6, §12.8, §16, §33 |
+| 001 | Amharic-first stack: Addis AI (addisai SDK, ADR-008) is the exclusive STT provider (§12.11-5) and a user-selectable text-generation provider; Gemini and NVIDIA are text-generation providers only — amended 2026-08-18 (was: "Addis AI for STT only") | Approved | §6, §12.8, §16, §33 |
 | 002 | Backend-only proxy: the browser never calls a provider directly | Approved | §16 (proxy rule §12.2) |
 | 003 | Status machine: defined states, forward and explicit backward transitions only | Approved | §5.3, §31 |
 | 004 | Dual-token JWT (httpOnly): access 15 min + refresh 7 days, rotated | Approved | §28 |
 | 005 | Unified ReportVersion — one content record with version history, replacing separate GeneratedReport and ReportVersion | **Retired (2026-08-09)** — version history removed by decision; report content lives on the report's 1:1 Transcription row as `raw`/`latest` (BR-11); no version chain | §5.4, §21, §23 |
 | 006 | Client-side export only for PDF/TXT/CSV/XLSX; Google Docs export is backend-only | Approved | §37, §58 |
 | 007 | ffmpeg + wavSplitter chunking pipeline (accuracy-critical) | Approved | §33 |
-| 008 | Hybrid HTTP clients: platform-native `fetch` for Addis AI; axios for Gemini and NVIDIA | Approved | §13.3, §16 |
+| 008 | Hybrid HTTP clients: the addisai SDK for Addis AI (STT + text generation); axios for Gemini and NVIDIA — **amended 2026-08-18** (was: native `fetch` for Addis) | Approved | §13.3, §16 |
 | 009 | Self-service registration (single user type; no admin-created accounts) | Approved | §3.2.2, §28 |
 | 010 | Multi-branch report support (Type-1/Type-2, one day, several branches) | Approved | §6.4, §21, §31 |
 | 011 | Ethiopian calendar display: numeric notation with English labels | Approved | §6.3, §43 |
@@ -2948,11 +3016,16 @@ Nothing in this section adds a package (the packages are owned by
    (component, route array, schema, service, or utility). Barrel files
    are not used; imports stay descriptive and tree-shaken (§9.3,
    §9.6).
-3. **Layer shading.** Files that exist in the current repository
-   scaffold are marked `(scaffold)`; files and folders created during
-   implementation carry the owner section that specifies them and are
-   assumed to be created in the phase plan (§66) of that owner.
-   Runtime artifacts that are never committed are marked `(runtime)`.
+3. **Layer shading & state markers (S11, 2026-08-18).** Every tree
+   node carries exactly one state marker: `(scaffold)` — tracked
+   today from the Vite/Express scaffold; `(implemented)` — exists
+   today, created by its owning phase; unmarked — planned target,
+   created by its owning phase in the future (§66). A group marker
+   `(all implemented)` is allowed where every member shares the
+   state. Files and folders created during implementation carry the
+   owner section that specifies them and are assumed to be created
+   in the phase plan (§66) of that owner. Runtime artifacts that are
+   never committed are marked `(runtime)`.
 4. **Import boundaries.** Backend modules import only within
    `backend/`; `config/env.js` is the only file that reads
    `process.env` (§10.3); physical audio files are touched only
@@ -2981,6 +3054,10 @@ Nothing in this section adds a package (the packages are owned by
 <repo root>/
 |-- .gitignore                      # .env / uploads/ / logs / node_modules / dist / *.local (§10.2)
 |-- README                        # root documentation; not imported by the runtime
+|-- AGENTS.md / prompt.md / .opencode/ / task_plan.md /
+|   findings.md / progress.md / phase-6-backend-apis.md
+|                                 # authoring workspace (§66.3): tracked planning
+|                                 # artifacts — never imported, built, or deployed
 |-- backend/                      # §15.4
 `-- client/                       # §15.5
 ```
@@ -3000,11 +3077,11 @@ backend/
 |-- package-lock.json               (scaffold)
 |-- .env                            (runtime, never committed — §10.2)
 |-- config/
-|   `-- env.js                      # the only reader of process.env.; frozen config object (§10.3)
+|   `-- env.js                      (implemented)  # the only reader of process.env.; frozen config object (§10.3)
 |-- utils/
 |   |-- logger.js                   # Winston logging, no console.log (§9.5)
-|   |-- constants.js                # backend constants inventory (§11.3)
-|   |-- httpStatus.js               # semantic HTTP status names (§11.6)
+|   |-- constants.js                (implemented)  # backend constants inventory (§11.3)
+|   |-- httpStatus.js               (implemented)  # semantic HTTP status names (§11.6)
 |   `-- wavSplitter.js              # PCM-level WAV chunking for STT (§33)
 |-- middleware/                     # fixed chain extras + auth + tiers (contents named by §26–§28)
 |-- routes/
@@ -3051,44 +3128,45 @@ client/
     |-- main.jsx                    (scaffold)  # flat route map; HydrateFallback spinner; RouterProvider;
     |                                           # Provider; LocalizationProvider + AdapterDayjs (§41)
     |-- App.jsx                     (scaffold)  # application shell & guards (§41)
-    |-- assets/                     (scaffold)  # hero.png, starter art, notFound_404.svg; documented use in §43/§59
-    |-- theme/
-    |   |-- AppTheme.jsx            (scaffold)  # theme definition (§43)
-    |   |-- themePrimitives.js      (scaffold)
-    |   `-- customizations/         (scaffold)  # inputs, dataGrid, datePickers, charts,
-    |                                           # navigation, surfaces, feedback, dataDisplay, index — §44
+    |-- assets/                     (implemented)  # hero.png, notFound_404.svg; documented use in §43/§59
+    |-- theme/                      (all implemented)  # AppTheme.jsx theme definition (§43),
+    |   |                                    #   themePrimitives.js, customizations/ (inputs, dataGrid,
+    |   |                                    #   datePickers, charts, navigation, surfaces, feedback,
+    |   |                                    #   dataDisplay, index — §44)
     |-- utils/
-    |   |-- constants.js                       # client constants inventory (§11.5)
-    |   |-- httpStatus.js                      # client mirror of the status semantics (§11.6)
-    |   |-- ethiopianDate.js                   # Ethiopian calendar conversions (§13.4, §46, §52)
-    |   |-- ethiopianDateAdapter.js            # field display → Ethiopian DD-MM-YY (§46.6)
-    |   `-- toast.jsx                          # showToast/dismissToast — the §60.3 trigger API (§60)
+    |   |-- constants.js               (implemented)  # client constants inventory (§11.5)
+    |   |-- httpStatus.js              (implemented)  # client mirror of the status semantics (§11.6)
+    |   |-- ethiopianDate.js           (implemented)  # Ethiopian calendar conversions (§13.4, §46, §52)
+    |   |-- ethiopianDateAdapter.js    (implemented)  # field display → Ethiopian DD-MM-YY (§46.6)
+    |   |-- toast.jsx                  (implemented)  # showToast/dismissToast — the §60.3 trigger API (§60)
+    |   |-- sanitizeHtml.js            (implemented)  # DOMPurify wrapper — the §61.3 double gate (§61)
+    |   |-- wizardValidation.js        (implemented)  # wizard rule helpers (§52)
+    |   `-- useMediaRecorder.js        (implemented)  # recording hook; reused by Mode 3 (§53)
     |-- hooks/
-    |   |-- useAudioRecorder.js                # recording hook; reused by Mode 3 (§53)
-    |   `-- useLogout.js                       # the single logout flow (§47.6)
-    |-- mock/                                  # dev-only §66.10 adapter; deleted at P7
+    |   `-- useLogout.js               (implemented)  # the single logout flow (§47.6)
+    |-- mock/                        (all implemented)  # dev-only §66.10 adapter; deleted at P7
     |   |-- fixtures.js                        # §40 fixture data — seed of the adapter
     |   `-- transport.js                       # §42-shaped mock transport over the fixtures
     |-- redux/
     |   |-- app/
-    |   |   `-- store.js                       # store creation; Provider wiring (§41–§42)
-    |   `-- features/
-    |       |-- apiSlice.js                  # RTK Query createApi; fetchBaseQuery +
+    |   |   `-- store.js                   (implemented)  # store creation; Provider wiring (§41–§42)
+    |   `-- features/                    (all implemented)  # apiSlice.js: RTK Query createApi; fetchBaseQuery +
     |       |                                #   baseQueryWithReauth; network & error layer (§41–§42)
     |       |-- authSlice.js                  # session/identity UI state (§41.5, §42)
     |       |-- authEndpoints.js              # getCurrentUser/login/logout/refresh (§28, §42)
     |       |-- reportsEndpoints.js           # report CRUD + visits + content + lifecycle (§30, §31, §34, §35)
     |       |-- branchesEndpoints.js          # branch CRUD + lifecycle (§30, §56)
     |       |-- audioEndpoints.js             # clips CRUD, audio stream URL (§32)
-    |       |-- transcriptionEndpoints.js     # get single, transcribe, re-transcribe (§33, §54)
+    |       |-- transcriptionEndpoints.js     # get, create-or-replace (PUT /transcription), correction transcripts (§33, §54)
     |       |-- conversationEndpoints.js      # chat get/send (§35, §55)
     |       |-- analyticsEndpoints.js         # dashboard + items analytics (§38, §49, §56)
     |       |-- searchEndpoints.js            # global search (§39, §59)
     |       |-- profileEndpoints.js           # profile + sessions (§28, §57)
     |       `-- <domain>Slice.js             # one slice per domain (e.g. reports, branches) (§41)
+    |                                       #   — placeholder: unmarked (planned)
     |-- components/
-    |   |-- AppErrorPage.jsx                   # §60 render-error fallback (ADR-025, §41.4)
-    |   |-- layout/                          # PublicLayout, AppShell, AppSidebar, PublicRoute,
+    |   |-- AppErrorPage.jsx                   (implemented)  # §60 render-error fallback (ADR-025, §41.4)
+    |   |-- layout/                          (all implemented)  # PublicLayout, AppShell, AppSidebar, PublicRoute,
     |   |                                    #   ProtectedRoute, Logo, ThemeToggle, AvatarMenu (§47)
     |   |-- reusable/                        # Mui* belt (§46), one file per component: MuiButton,
     |   |                                    #   MuiTextField, MuiSelect, MuiDatePicker, MuiTimePicker,
@@ -3098,16 +3176,24 @@ client/
     |   |                                    #   MuiRecorder, MuiFileInput, MuiStatCard, MuiStepper,
     |   |                                    #   MuiRegistrationValue, MuiToast, AppToastContainer,
     |   |                                    #   GlobalSearchDialog, LoadingSpinner, TableSkeleton,
-    |   |                                    #   ListSkeleton, FormSkeleton, MessageSkeleton
+    |   |                                    #   ListSkeleton, FormSkeleton, MessageSkeleton,
+    |   |                                    #   MuiProviderSelect (§46.17) — all implemented except;
+    |   |                                    #   MuiReasoningSelect (§46.17 — the AI_REASONING_EFFORTS
+    |   |                                    #   select, disabled for addis, §16.8) — planned,
+    |   |                                    #   created by the §54 correction round
     |   |                                    #   MuiEditor (TipTap + dompurify, §46.16 — installed
     |   |                                    #   at the §66 P4 editor phase, 2026-08-15;
     |   |                                    #   round-7: the font-size bucket select + the
     |   |                                    #   `borderless` prop — §46.16/§13.5)
     |   |-- columns/                         # domain column-set files for MuiDataGrid (§50, §56, ADR-034):
-    |   |                                    #   reports.jsx (§50), visits.jsx (§52)
-    |   |-- landing/                          # e.g. Hero.jsx — example of a domain folder
-    |   |-- auth/                             # e.g. LoginForm.jsx — example of a domain folder
-    |   |-- report/                           # ReportCard.jsx — the §50 list/grid card (§15.6);
+    |   |                                    #   reports.jsx (implemented, §50), visits.jsx (§52)
+    |   |-- landing/                          # (all implemented) Hero, BranchStrip, CtaBand,
+    |   |                                    #   HowItWorks, RuledPaper (§43) — example of a
+    |   |                                    #   domain folder; future files keep example semantics
+    |   |-- auth/                             # (all implemented) BrandPanel, GoogleOAuthButton,
+    |   |                                    #   LoginForm, RegisterForm, validators.js (§48) —
+    |   |                                    #   example of a domain folder
+    |   |-- report/                           (all implemented)  # ReportCard.jsx — the §50 list/grid card (§15.6);
     |   |                                    #   wizard steps — StepBasicInfo, StepAudio, StepTranscription,
     |   |                                    #   TranscriptionTakeRow, AudioCard, TranscriptionCard,
     |   |                                    #   CorrectionDialog, StepNavBar, RecordOrb,
@@ -3125,6 +3211,8 @@ client/
     |   |                                    #   (the §54.3 candidate rule) — the transcription
     |   |                                    #   card is REFACTORED onto the same host/candidate
     |   |                                    #   rules (ADR-033; one correction implementation);
+    |   |                                    #   print/ReportPrint.jsx (implemented, §58.3) —
+    |   |                                    #   the §58.3 print surface
     |   |-- reports/                          # DELETED at round 7 (§54, §15.6): the correction
     |   |                                    #   surface folders correct-instruction/,
     |   |                                    #   correct-voice/, unassigned-panel/ dissolved — the
@@ -3134,29 +3222,31 @@ client/
     |   |                                    #   host-composed (§53.5/§54.2)
     |   |-- branches/                         # branch domain components — Create/Edit dialog,
     |   |                                    #   Branch Details composition (§56, §56.5)
-    |   |-- print/                            # ReportPrint.jsx — the §58.3 print surface
     |   `-- <domain>/                        # every other component lives at
     |-- pages/                                # one <Name>.jsx per routed view; the page set is
-    |                                         # decided by the page sections (§48–§59); pages so far:
-    |                                         # Landing, Login, Register, NotFound, Dashboard, Reports,
-    |                                         # ReportNew, ReportDetails, Branches, BranchDetails,
-    |                                         # Profile — each implementing phase adds its page
-    |                                         # files here in the same change (§15.7)
+    |                                         # decided by the page sections (§48–§59); pages so far
+    |                                         # (all implemented): Landing, Login, Register, NotFound,
+    |                                         # Dashboard, Reports, ReportNew, ReportDetails, Branches,
+    |                                         # BranchDetails, Profile — each implementing phase adds
+    |                                         # its page files here in the same change (§15.7)
 ```
 
 The design system and the data-access layer are the two structural
-parts with fixed homes: the theme files exist in the scaffold, and the
-store/API layer has the fixed layout `redux/app/store.js` +
-`redux/features/` (§41–§42). Every page — and every component — imports
-only from `components/`, `redux/`, `hooks/`, and `utils/`, so page
-files own no leaf UI outside page-level composition (§12.6, §15.6).
+parts with fixed homes: the theme files carry the `(implemented)`
+markers (P3-created, §43/§44), and the store/API layer has the fixed
+layout `redux/app/store.js` + `redux/features/` (§41–§42). Every page
+— and every component — imports only from `components/`, `redux/`,
+`hooks/`, and `utils/`, so page files own no leaf UI outside
+page-level composition (§12.6, §15.6).
 
 ### 15.6 Folder responsibilities
 
 - `config/` — configuration, frozen at boot (§10.3). One file: `env.js`.
 - `utils/` — pure helpers and constants; no database access, no HTTP,
   no request state. Backend: logger/constants/httpStatus/wavSplitter;
-  client: constants/httpStatus/ethiopianDate.
+  client: constants/httpStatus/ethiopianDate, the toast API (§60),
+  sanitizeHtml (§61), wizardValidation (§52), and the recording hook
+  useMediaRecorder (§15.5, §53).
 - `routes/` — only route definitions and validator references; the
   registry `index.js` is the single mount point (§12.2).
 - `controllers/` — request lifecycle only: validate (throws 422),
@@ -3170,8 +3260,8 @@ files own no leaf UI outside page-level composition (§12.6, §15.6).
   and methods (§18–§24).
 - `services/` — provider & pipeline work (STT, generation,
   correction, chat, exports, analytics, search; §33–§37); the only
-  layer that talks remotely (fetch for Addis AI, axios for the other
-  providers, §16).
+  layer that talks remotely (the addisai SDK for Addis AI, axios for
+  the other providers, §16).
 - `jobs/` — the sweeper; one timer, every `SWEEPER_INTERVAL_MS` (62).
 - `mock/` — seed + wipe; session-safe (§40).
 - `components/layout/` — layout shells only; `components/reusable/` —
@@ -3183,8 +3273,9 @@ files own no leaf UI outside page-level composition (§12.6, §15.6).
   shape are decided by the page sections (§48–§59) when they are
   authored, never pre-committed here; each implementing phase adds its
   page files in the same change (§15.7, §66).
-- `hooks/` — shared logic that touches UI state (recording hook and
-  its siblings; §53).
+- `hooks/` — shared logic that touches UI state (`useLogout`, §47.6);
+  the recording hook lives in `utils/` (`useMediaRecorder`, §15.5,
+  §53).
 - `redux/` — `app/store.js` (store creation) and `features/` slices;
   `features/apiSlice.js` is the single RTK Query API descriptor
   (createApi, fetchBaseQuery, `baseQueryWithReauth`, error
@@ -3281,7 +3372,7 @@ domain-constant rule of §11.4.
 
 | Provider | Role | Transport (ADR-008) | Authentication | Models (registry §11.4) | Reasoning | Notes |
 | -------- | ---- | ------------------- | -------------- | ----------------------- | --------- | ----- |
-| `addis`  | STT — exclusive (ADR-001, §12.11-5); text generation — default | native `fetch` + Node `FormData`/`Blob` | `x-api-key` header; key starts with `sk_` | `Addis-፩-አሌፍ` (default) | none — no reasoning parameter exists; `reasoning` is never sent | Amharic-first; only provider used for STT; default text provider §34 |
+| `addis`  | STT — exclusive (ADR-001, §12.11-5); text generation — default | addisai SDK v0.2.0 (ADR-008) — `addis.speech.transcribe` / `addis.chat.completions.create`; no raw HTTP to Addis anywhere in source (§16.8 SDK gate) | the SDK instance's `apiKey` — built once in `config/env.js` from `ADDIS_API_KEY` (§10.3, §16.7); key starts with `sk_` | `Addis-፩-አሌፍ` (default) — **display id only, never transmitted** (the SDK sends no model; §16.4) | none — no reasoning parameter exists; `reasoning` is never sent | Amharic-first; only provider used for STT; default text provider §34; pay-as-you-go ETB credits (the free-only policy does not apply — §16.2 paid policy) |
 | `gemini` | text generation only | axios (ADR-008) | query parameter `key=${GEMINI_API_KEY}` | `gemini-3.1-flash-lite` (default) | yes — `thinkingConfig.thinkingLevel` (`minimal`/`low`/`medium`/`high`); thinking cannot be fully disabled on this family, `off` maps to `minimal` | base `GEMINI_BASE_URL` (§11.3) |
 | `nvidia` | text generation only | axios (ADR-008) | `Authorization: Bearer ${NVIDIA_API_KEY}` | `deepseek flash 4` (default) | yes — OpenAI-compatible `reasoning_effort` via `chat_template_kwargs` (`off` → thinking off; `low`/`high`; `medium` maps to `high` per DeepSeek docs) | NVIDIA NIM OpenAI-compatible chat completions; base URL from env `NVIDIA_API_URL` (§10.4), official canonical value `https://integrate.api.nvidia.com/v1` |
 
@@ -3293,7 +3384,11 @@ truth for selectable models:
   one `(provider, model, reasoning)` triple; both names and the
   reasoning value must be members of the registered sets
   (`AI_PROVIDERS`, `AI_MODELS`, `AI_REASONING_EFFORTS` — §11.4) or
-  the request is rejected at validation (422, §11.6).
+  the request is rejected at validation (422, §11.6). For `addis`
+  the registry model id is **display-only**: the SDK never transmits
+  a model field ("could leak the underlying model" — SDK source), so
+  the model shown by the §54 picker is registry metadata, never a
+  wire value.
 - `reasoning` is transmitted only when the selected model's
   `reasoning` flag is on; for models without reasoning (Addis) the
   parameter is simply absent — never an error, never a fallback
@@ -3308,11 +3403,22 @@ truth for selectable models:
 provider id, model id, and reasoning effort are stored per
 conversation message (§36, ADR-014) so an initial generation and its
 corrections may differ (§34, §35).
-- **Free-only policy.** Each provider account in use must be free — no
-  credit card, no subscription, no paid tier. The app does not call a
-  provider under an account that requires payment. A provider or
-  model that becomes paid is removed from `AI_PROVIDERS` via the
-  §14.5 amendment protocol before any code change.
+- **Paid policy (S12 re-derivation, 2026-08-18 — replaces the
+  former free-only policy).** Gemini and NVIDIA accounts used by the
+  app must be free tiers (NVIDIA ≈40 RPM free; Gemini free tier) —
+  no credit card, no subscription for those two. **Addis AI is
+  pay-as-you-go** (ETB credits): an account starts with 500 ETB of
+  starter credits; STT is billed 3.5 ETB per 1k chars and text
+  generation 0.3 ETB (input) / 0.8 ETB (output) per 1k tokens —
+  the exact rates are the provider's published figures at
+  implementation time (§16.8 no-invented-claims gate). The free
+  tier caps at 60 RPM / 1000 RPD / 3 concurrent requests (OQ-011).
+  The app makes **no payment promise** — a 402 (insufficient
+  credits, SDK `.availableBalance`) surfaces as a user-facing
+  top-up message through the 502 envelope (§16.5) and the call
+  participates in the fallback chain (§16.6). A provider or model
+  that changes its terms is re-evaluated via the §14.5 amendment
+  protocol before any code change.
 - **Model catalog check.** Model strings live in the `AI_MODELS`
   registry (§11.4). The NVIDIA model string shown (`deepseek flash 4`)
   is validated against the NVIDIA catalog at implementation time
@@ -3332,14 +3438,19 @@ corrections may differ (§34, §35).
   only in `backend/.env` — required (§10.4), boot fail-fast per the
   §10.3 lookup chain. No key is placed in Vite env vars, `import.meta.env`,
   Redux state, localStorage, or middleware logs (§9.5, ADR-019).
-- **HTTP client choice** (ADR-008; §13.3). Addis endpoint: backend
-  native `fetch` with the global `fetch`, `FormData`, and `Blob`
-  available on the installed LTS runtime (§13.2); Gemini/NVIDIA:
-  axios. No official AI SDK is installed anywhere (ADR-008). If the
-  running runtime lacks reliable multipart forwarding, a small
-  documented helper package is approved — as a conditional planned
-  dependency under §13.5 with the transport rules of this section
-  remaining in force (§16.4).
+- **HTTP client choice** (ADR-008; §13.3). Addis endpoint: the
+  official **addisai SDK** (^0.2.0, §13.5) — `addis.chat.completions`
+  for text generation and `addis.speech` for STT; the SDK instance is
+  constructed **once** in `config/env.js` (the only `process.env`
+  reader, §10.3) with the explicit `apiKey` from `ADDIS_API_KEY` and
+  the §11.3 operational values (`maxRetries: AI_PROVIDER_RETRIES`,
+  `timeout: AI_TIMEOUT_MS`), then injected into the AI adapters —
+  no other module touches the SDK constructor. Gemini/NVIDIA: axios.
+  No other AI SDK is installed anywhere (ADR-008). If the
+  running runtime lacks reliable multipart forwarding for NVIDIA, a
+  small documented helper package is approved — as a conditional
+  planned dependency under §13.5 with the transport rules of this
+  section remaining in force (§16.4).
 - **Secrets are never logged** (ADR-019; §9.2). Keys, tokens, request
   bodies, and response bodies are excluded from logging. Only provider,
   model, status code, latency, and request/response ids are logged
@@ -3353,9 +3464,9 @@ stated; response text is returned in the language of the prompt
 No SSE/streaming anywhere (D2, §12.2-3).
 
 **Structured-output contract (mandatory for text generation).** For
-maximum accuracy, every generation and correction call — whichever
-provider or model is used — must return structured JSON matching the
-§34/§35 schema:
+maximum accuracy, every generation and report-correction call —
+whichever provider or model is used — must return structured JSON
+matching the §34/§35 schema:
 
 - Each provider is asked for JSON through its strongest documented
   mechanism (Gemini `responseMimeType`/`responseSchema`; NVIDIA
@@ -3370,43 +3481,46 @@ provider or model is used — must return structured JSON matching the
   contract across all three providers.
 - The raw schema text never appears in §16 — it is authored where it
   is consumed (§34 generation, §35 correction).
+- **Plain-prose carve-out (S12, 2026-08-18 — "no correction
+  schema").** Transcription-stage corrections (Mode-2/3 against the
+  plain Amharic `latest` of a `transcribed` report, §35.2) are
+  **full corrected prose — no JSON, no schema, no diff
+  structure**. The structured-output contract above binds only
+  generation (§34.4 schema) and report corrections of a
+  `generated` report (§35.4 partial schema); the parse-failure
+  policy of §16.5 applies only where JSON was requested.
 
-**Addis AI — text generation** (base `ADDIS_AI_BASE_URL`, §11.3):
+**Addis AI — text generation** (the addisai SDK; wire target
+`POST https://api.addisassistant.com/api/v1/chat_generate` — the
+SDK pins its official endpoint internally; the URL is SDK-internal
+knowledge, never a source literal, §16.8 SDK gate):
 
-- `POST {ADDIS_AI_BASE_URL}/api/v1/chat_generate`
-- headers: `x-api-key: <ADDIS_API_KEY>`, `Content-Type: application/json`
-- body:
-
-```json
-{
-  "model": "<default model id of AI_MODELS.addis>",
-  "prompt": "<§34 composed prompt — includes the structured-output instruction>",
-  "target_language": "am",
-  "conversation_history": [
-    { "role": "user", "content": "…" },
-    { "role": "assistant", "content": "…" }
-  ],
-  "generation_config": {
-    "temperature": "AI_TEMPERATURE",
-    "maxOutputTokens": "AI_MAX_OUTPUT_TOKENS",
-    "topP": "AI_TOP_P",
-    "topK": "AI_TOP_K"
-  }
-}
-```
-
-- `target_language` is always `am` for report generation and
-  corrections (report language is Amharic, §6/§12.2-12; `en` is
-  reserved for future English output, §7.7). `conversation_history`
-  is formed from the §36 conversation when a report is regenerated
-  after the initial generation and its entries are limited to
-  `role`/`content` fields. Generation payload values: `AI_*` §11.3
-  constants.
-- **Model + reasoning.** The `model` id comes from the `AI_MODELS`
-  registry entry for `addis` (§11.4). Addis exposes no reasoning
-  parameter — no `reasoning` is ever sent to this provider,
-  and a stored reasoning value on the message is ignored rather
-  than an error (§16.2).
+- Call shape: `addis.chat.completions.create({ apiKey,
+  language: 'am', system, messages, temperature, max_tokens })` —
+  the SDK instance from `config/env.js` supplies `apiKey`
+  (§16.3/§16.7). The SDK maps the call to `chat_generate` internally
+  with `target_language`, `prompt` (= the last `messages` entry),
+  `conversation_history` (= the prior `role`/`content` entries), and
+  `generation_config { temperature, maxOutputTokens, stream: false }`.
+- **No `model`, no `persona`, no `topP`/`topK`.** The SDK does not
+  forward a `model` field ("could leak the underlying model" — SDK
+  source), so the §11.4 registry id for addis is display metadata
+  only, never a wire value (§16.2). `persona` (a branded-identity
+  surface) is never passed. The SDK chat surface exposes no
+  `topP`/`topK` knobs — those constants are gemini/nvidia-only
+  (§11.3).
+- `system` carries the §8.2 generation rules composed by §34.3;
+  `language` is always `am` (report language is Amharic,
+  §6/§12.2-12; `en` reserved for future English output, §7.7);
+  `messages` = the §36 conversation projection (role/content only,
+  §36.5) with the current prompt last. Generation payload values:
+  `AI_*` §11.3 constants (`temperature` = `AI_TEMPERATURE` or
+  `AI_CORRECTION_TEMPERATURE` per the call's role, §34/§35;
+  `max_tokens` = `AI_MAX_OUTPUT_TOKENS` /
+  `AI_CORRECTION_MAX_OUTPUT_TOKENS`).
+- **Reasoning.** Addis exposes no reasoning parameter — no
+  `reasoning` is ever sent to this provider, and the conversation's
+  reasoning default is ignored rather than an error (§16.2).
 - **Structured output at Addis.** Addis documents no
   `response_format` knob; its JSON mode therefore arrives through the
   prompt: §34/§35 compose the strict instruction ("respond with a
@@ -3414,42 +3528,54 @@ provider or model is used — must return structured JSON matching the
   code fences") and the adapter's JSON extraction of the response
   text is the contract step before the §16.5 parse-failure policy
   applies. The prompt text itself is domain-owned (§34/§35).
-- Response — 200:
+  Transcription-stage corrections bypass this entirely — plain
+  prose, no JSON requested (the §16.4 carve-out).
+- Response — 200 (SDK-normalized): `{ text, model?, finish_reason,
+  usage? }`. The SDK maps the wire `response_text` → `text`,
+  `modelVersion` → `model` (absent when the provider omits it —
+  null-if-unknown, §23.2), and `usage_metadata` → `usage`
+  (optionally carried to §36).
+- `finish_reason` is normalized by the SDK (`STOP → stop`,
+  `MAX_TOKENS → length`, `SAFETY/RECITATION → content_filter`,
+  `TOOL_CALLS → tool_calls`). Normalized result surfaced to
+  §34/§35: `{ text, model, finish_reason, usage }`. `stop` is
+  success; **`length` and `content_filter` are provider failures**
+  for retry/fallback (§16.5/§16.6) — never silently accepted
+  (accuracy gate, §2.3 G6).
 
-```json
-{
-  "response_text": "…",
-  "finish_reason": "stop",
-  "usage_metadata": {
-    "prompt_token_count": 0,
-    "candidates_token_count": 0,
-    "total_token_count": 0
-  },
-  "modelVersion": "<model id from AI_MODELS.addis>"
-}
-```
+**Addis AI — STT** (the addisai SDK; wire target
+`POST https://api.addisassistant.com/api/v2/stt` — SDK-verified
+2026-08-18; SDK-internal, never a source literal, §16.8 SDK gate):
 
-- Normalized result surfaced to §34/§35: `{ text: response_text,
-  model: modelVersion }`, with `usage_metadata` optionally carried to
-  §36. `finish_reason` is validated (`stop`); any other value —
-  including blocked/dry-run responses — is treated as a provider
-  failure for fallback (§16.6).
-
-**Addis AI — STT — `POST {ADDIS_AI_BASE_URL}/api/stt`:**
-
-- Encoding: `multipart/form-data` with `audio` (file) and
-  `request_data` (stringified JSON carrying `language_code: 'am'`).
-- This section and §33 honor the constants `AUDIO_ALLOWED_MIME_TYPES`
-  (wav/mp3/m4a/webm) and `ADDIS_AI_STT_MAX_DURATION_SEC` (60 s per
-  chunk; §11.3).
-- Response (200): `{ status: 'success', data: { transcription,
-  usage_metadata: { totalBilledDuration, requestId } }, confidence }`.
-  The `requestId` is logged (ADR-019) and the caller (the §33
-  pipeline) may persist it per the Audio/Transcription docs §22–§23.
+- Call shape: `addis.speech.transcribe({ audio, language: 'am' })`
+  — the SDK instance from `config/env.js` (§16.3/§16.7). The SDK
+  sends `multipart/form-data` with exactly two parts — `audio`
+  (the file — the §33 pipeline's own chunk MIME, mono 16-bit 16 kHz
+  PCM wav, never the uploaded `audio/webm`, §33.3/§22) and
+  `request_data` (stringified JSON carrying exactly one field,
+  `language_code` — the clip's stored `language`, `am` today; §7.7
+  reserves `om`/`ti`; the request carries no other parameter —
+  §16.8 no-invention gate).
+- §33 chunks the converted audio per `ADDIS_AI_STT_MAX_DURATION_SEC`
+  (60 s, §11.3) and sends the chunks in order; the upload allowlist
+  `AUDIO_ALLOWED_MIME_TYPES` governs recordings at §32/§22 — never
+  the chunk payload.
+- Response (200, SDK-normalized): `{ transcription, confidence,
+  usage }` from the wire `{ status: 'success', data: {
+  transcription, usage_metadata: { totalBilledDuration, requestId }
+  }, confidence }`. The `requestId` is logged (ADR-019) and the
+  caller (the §33 pipeline) may persist it per the Transcription
+  docs §23. `confidence` and `totalBilledDuration` are call metadata
+  — never persisted (§23.7). When the provider echoes the voice
+  model (`modelVersion`, the same convention as its text-generation
+  response), the pipeline stores it as `stt.model`; absent the echo
+  the field stays `null` (§23.2 null-if-unknown).
 - Error semantics: provider 4xx/5xx per §16.5; a chunk that fails is
   marked failed and the pipeline continues with the remaining chunks
-  (§16.5, §33). A failed chunk is never part of the text-generation
-  fallback chain (§16.6).
+  (§16.5, §33); a partial merge is never persisted — the report
+  moves to `transcribed` only when every chunk succeeded (§33.7).
+  A failed chunk is never part of the text-generation fallback chain
+  (§16.6).
 
 **Google Gemini — `POST {GEMINI_BASE_URL}/models/{model from AI_MODELS.gemini}:generateContent?key=${GEMINI_API_KEY}`:**
 
@@ -3486,8 +3612,9 @@ provider or model is used — must return structured JSON matching the
   app-level effort to the provider level: `high → high`, `medium →
   medium`, `low → low`, `off → minimal` — the Gemini 3 flash family
   cannot fully disable thinking, `minimal` is its documented
-  floor. Default when the user does not choose: the effort stored on
-  the conversation message (§36), else `off`/`minimal`.
+  floor. Default when the user does not choose: the conversation's
+  standing reasoning default (§24.2 — `AI_REASONING_DEFAULT`
+  `'off'`), else `off`/`minimal`.
 - Note: Gemini 3-family models take `thinkingLevel`; the older
   2.5-family `thinkingBudget` is not used by any registered model
   and no legacy branch exists.
@@ -3552,12 +3679,18 @@ provider or model is used — must return structured JSON matching the
 
 - **Timeout.** Every provider call is constrained by `AI_TIMEOUT_MS`
   (§10.4; default 30000 ms, env-overridable). A timeout is classified
-  as a network failure and the retry policy below applies.
+  as a network failure and the retry policy below applies. For addis
+  the value is passed to the SDK as its `timeout` option (§16.3).
 - **Retry policy** (per single provider):
   - Retries = `AI_PROVIDER_RETRIES` (3, §11.3): one initial call plus
     up to **3** retries, spaced by the exponential schedule 1 s →
     2 s → 4 s derived from `AI_PROVIDER_BACKOFF_BASE_MS` = 1000
     (1000 ms, 2000 ms, 4000 ms) (§11.3).
+  - **Addis retries are SDK-managed** (S12): the SDK's `maxRetries`
+    is pinned to `AI_PROVIDER_RETRIES` (3) at construction (§16.7)
+    — the SDK's own code default (3) agrees, but the README documents
+    2, so the pin is explicit — and its `timeout` to `AI_TIMEOUT_MS`;
+    the app never hand-rolls backoff for addis.
   - **Network failure** (DNS, refused/aborted connection, timeout, TLS
     reset, or provider 5xx): retry with the schedule above; the
     request is only given up after the last retry.
@@ -3566,18 +3699,33 @@ provider or model is used — must return structured JSON matching the
   - When a provider 429 response carries a `Retry-After` header
     (addis/nvidia), the next attempt waits that long — capped so the
     total wait stays bounded per the app AI rate tier (§27); a
-    persistent 429 is a provider failure (§16.6).
+    persistent 429 is a provider failure (§16.6). For addis the SDK
+    surfaces 429 as a typed error carrying `.retryAfter` — the
+    adapter honors it under the same cap.
 - **Semantic errors — 4xx (config/auth faults).** 400/401/403/404 are
   not retried (retrying cannot change the outcome) and do not trigger
   fallback (they would recur identically on every provider instance);
   they surface as a 502 for the caller — with the key value never
   logged (§16.3, ADR-019).
+- **402 — insufficient credits (addis).** Addis is pay-as-you-go
+  (§16.2). A 402 surfaces through the SDK's typed `.availableBalance`
+  and is **not** retried (the outcome cannot change without payment);
+  it maps to a 502 envelope carrying a user-facing top-up message
+  ("insufficient AI credits — top up the Addis account") and
+  participates in the fallback chain (§16.6) — the caller may retry
+  the request against the next provider.
 - **5xx** — provider outage: retry schedule, then fallback (§16.6).
 - **Structured-output failures.** A provider response that cannot be
   parsed as JSON, or that parses but fails the §34/§35 schema, is a
   provider failure: retried under the same policy, then participates
   in fallback (§16.6). A schema failure is never silently accepted —
-  "best effort" text is not stored (accuracy gate, §2.3 G6).
+  "best effort" text is not stored (accuracy gate, §2.3 G6). This
+  applies only where JSON was requested — transcription-stage
+  corrections (plain prose, §16.4 carve-out) carry no parse step.
+- **Finish-reason failures (addis).** A normalized `finish_reason` of
+  `length` (output truncated) or `content_filter` (blocked) is a
+  provider failure: retried under the same policy, then fallback —
+  never treated as a completed generation (G6).
 - **STT chunk semantics:** a network failure or provider error on one
   chunk is handled per chunk: after retries the chunk is marked
   **failed** and the pipeline continues processing the remaining
@@ -3586,7 +3734,8 @@ provider or model is used — must return structured JSON matching the
 - **App rate limits vs provider limits.** The app enforces its own AI
   tiers (RATE_LIMIT_AI_WINDOW_MIN=1, RATE_LIMIT_AI_MAX=10,
   §27/§11.3) as **the** primary guard. Provider-issued 429s (usage
-  quotas: Addis daily/monthly token quotas; NVIDIA free tier ≈40 RPM)
+  quotas: Addis daily/monthly token quotas + the free tier's 60 RPM /
+  1000 RPD / 3 concurrent, OQ-011; NVIDIA free tier ≈40 RPM)
   are second-layer: honored with Retry-After; a 429 that persists
   beyond the bounded schedule is a provider failure — for generation
   and correction it triggers fallback (§16.6); for STT the chunk is
@@ -3609,6 +3758,9 @@ provider or model is used — must return structured JSON matching the
   registry entry. The reasoning applies only where the target model
   has `reasoning: true`; otherwise the reasoning value is silently
   omitted — never an error, never a second fallback (§16.2).
+  The reasoning used is the conversation's standing default or its
+  per-turn override (§24.2/§36.4) — the same value rides every TTT
+  call of the conversation, including fallback targets.
 - **No fallbacks for STT.** STT happens at provider addis (ADR-001);
   if the chunk fails after retries, it is marked failed as above.
 - **Per-message selection** (§36). A conversation/result may carry a
@@ -3629,10 +3781,20 @@ provider or model is used — must return structured JSON matching the
   rows: `NVIDIA_API_URL` (Required — no default; operator sets the
   base URL; the canonical official value is recorded in §16.4) and
   `AI_TIMEOUT_MS` (No, default 30000).
+- **SDK construction (S12).** The addisai SDK instance is built
+  **exactly once** in `config/env.js`: `new AddisAI({ apiKey:
+  ADDIS_API_KEY, maxRetries: AI_PROVIDER_RETRIES, timeout:
+  AI_TIMEOUT_MS })` — the only module allowed to construct it
+  (§16.3); the instance is exported for injection into the §33/§34/
+  §35 adapters. No other module reads `ADDIS_API_KEY` or touches
+  the SDK constructor (grep gate §16.8).
 - **Constants (§11.4/§11.3, amended in the same pass).** Base URLs
   and operational values are §11.3 constants (never inline):
-  `ADDIS_AI_BASE_URL`, `GEMINI_BASE_URL`, `AI_PROVIDER_RETRIES`,
-  `AI_PROVIDER_BACKOFF_BASE_MS`. The model registry `AI_MODELS` and
+  `GEMINI_BASE_URL`, `AI_PROVIDER_RETRIES`,
+  `AI_PROVIDER_BACKOFF_BASE_MS` — the Addis endpoint is SDK-internal
+  (no `ADDIS_AI_BASE_URL` constant; §11.3 removed it 2026-08-18 —
+  the SDK pins its official endpoint and the SDK-only gate bans the
+  literal in source). The model registry `AI_MODELS` and
   the effort enum `AI_REASONING_EFFORTS` live in §11.4 (domain
   constants) together with `AI_PROVIDERS` and `LANGUAGE_CODES`; the
   generation knobs `AI_TEMPERATURE`, `AI_MAX_OUTPUT_TOKENS`,
@@ -3659,6 +3821,39 @@ provider or model is used — must return structured JSON matching the
   request JSON (Gemini `responseMimeType`/`responseSchema`, NVIDIA
   `response_format`, Addis prompt-instruction); a call missing its
   JSON mechanism fails review (SC-8 / §2.3 G6 accuracy).
+- **STT contract gate.** The STT request carries exactly the two
+  documented parts — `audio` (the §33 chunk MIME) and
+  `request_data.language_code`; no invented multipart fields and no
+  `target_language` on the STT endpoint (that parameter belongs to
+  the text-generation `chat_generate` contract only); no
+  Gemini/NVIDIA involvement in STT (ADR-001, §33.9 grep); `stt.model`
+  is written only from a provider model echo, never synthesized
+  (§23.2).
+- **SDK-only gate (S12).** All addis traffic goes through the addisai
+  SDK — grep gate: no `chat_generate`, no `/api/v2/stt` (nor
+  `/api/stt`), no `api.addisassistant.com` URL literal, and no
+  `fetch`/axios call targeting an Addis host anywhere in source;
+  the wire URLs appear only in this section. Only `config/env.js`
+  constructs the SDK (§16.7); no other module imports the
+  constructor or reads `ADDIS_API_KEY`.
+- **Reasoning gate (S12).** No TTT call ever sends a reasoning
+  parameter to `addis`; every gemini/nvidia TTT call carries the
+  conversation's standing reasoning default or its per-turn override
+  (§24.2/§36.4 — `AI_REASONING_DEFAULT` `'off'` when absent);
+  `reasoning_content` is never surfaced to the client and never
+  stored (§16.4/§36).
+- **Paid-policy gate (S12).** No payment/latency promises beyond the
+  provider-published figures of §16.2; a 402 is mapped to the
+  top-up message envelope, never retried, never a silent failure.
+- **Finish-reason gate (S12).** An addis generation whose normalized
+  `finish_reason` is `length` or `content_filter` is never accepted
+  as success (§16.5).
+- **Structured-output gate.** Generation and report-correction calls
+  always request JSON (Gemini `responseMimeType`/`responseSchema`,
+  NVIDIA `response_format`, Addis prompt-instruction); a call missing
+  its JSON mechanism fails review (SC-8 / §2.3 G6 accuracy).
+  Transcription-stage corrections are the documented exception —
+  plain prose, no JSON (§16.4 carve-out).
 - **No invented claims (SC-8).** All provider URLs, models, reasoning
   knobs, and JSON mechanisms are those published by the providers
   (Addis AI docs, Gemini docs, NVIDIA NIM/DeepSeek docs, §16.4); no
@@ -5209,6 +5404,7 @@ never invoked by any chat path (§7.7).
 | `_id` | ObjectId | auto | the only key; never `id` (§12.11-3) |
 | `user` | ObjectId | yes | owner-scoping (BR-13, §3.2.3, §18.7) |
 | `report` | ObjectId | yes | the owning report — plain-model-name reference field (§9.3); **unique + sparse: one conversation per report** (§17.2) |
+| `reasoning` | String | yes (default `'off'`) | the **standing reasoning effort for every TTT request of this conversation** (S12, 2026-08-18): member of `AI_REASONING_EFFORTS` — the default value is `AI_REASONING_DEFAULT` `'off'` (§11.4); set through the §54/§46.17 reasoning select; consumed by every §34/§35 call (§16.2/§16.6); the per-message `messages[].reasoning` records the effort actually used per turn (§36.4) |
 | `messages` | Array | yes (default `[]`) | the embedded message-document list — each entry is `{ role, content, provider, model, reasoning, createdAt }` (§18.7); empty until the first saved turn (§36) |
 | `messages[].role` | String | yes | member of `MESSAGE_ROLES` (`system` \| `user` \| `assistant`, §11.4) — schema enum constrained to the constant (§18.2); the §16.4 `conversation_history` projection passes only `user`/`assistant` entries (§16.4) |
 | `messages[].content` | String | yes | the message text — Amharic, English, or mixed (content surface, §7.6); never logged verbatim (§9.5) |
@@ -6314,7 +6510,7 @@ Validation: `branchId` resolves to an **active** branch of this
 user (404/422 otherwise); `clockIn`/`clockOut` `HH:mm` (§29);
 times are display-only — no `out > in` enforcement (§6.1).
 
-**§31.2-2** `PATCH /reports/:reportId/visits` (access): replaces
+**§31.2-2** `PUT /reports/:reportId/visits` (access): replaces
 the `visits[]` block (validates each entry:
 `branchId` → resolves to an **active** branch of this user;
 `clockIn` and `clockOut` are both
@@ -6410,34 +6606,37 @@ content-changing actions; read-only views still open).
     every status including `generated` (BR-10); never touches
     `raw` (BR-11); no
     model call (§35.8).
-  - `POST /reports/:reportId/correct` — Mode-2/3: typed
+  - `POST /reports/:reportId/corrections` — Mode-2/3: typed
     instruction OR voice-correction clip (multipart) → the §35
     service rewrites only the relevant part (BR-09) and RETURNS
     the corrected content snapshot (the candidate — round-6
     amendment: nothing is staged, there is no accept step; the
     client fills the live editor with the candidate and the user
-    saves it through the content PATCH above). Provider id rides
+    saves it through the content PATCH above). The correction
+    request resource is ephemeral — the candidate is returned,
+    never stored (ADR-033). Provider id rides
     the request (unknown provider → 422).
-  - `POST /reports/:reportId/correct/transcribe` — the
+  - `POST /reports/:reportId/corrections/transcripts` — the
     round-7 **STT-only** endpoint of the correction dialog: a
     multipart `clip` (+ `durationSec`) is transcribed (§33
     pipeline) and the endpoint returns the transcribed instruction
     TEXT (`200 { text }`) — it never runs the correction engine,
     never mutates the report, and stores nothing (the dialog fills
     its field with the text; **Apply** then sends it as the typed
-    instruction through the `/correct` endpoint above). Guards:
+    instruction through the `/corrections` endpoint above). Guards:
     404 on an unknown/foreign report, 403 on an archived report,
     422 on a missing clip ("Record a voice instruction first"),
     on a disallowed MIME type ("Only audio files are accepted"),
     and on the §32 size cap.
-  - `POST /reports/:reportId/content/revert` — single undo:
-    copies the transcription's `raw` → `latest` while they differ
-    (BR-11); **available pre-generation only** (transcription-
-    stage undo; after generation, corrections are the editing
-    path, §23.5); before
+  - `PUT /reports/:reportId/content` — single undo (REST form of
+    revert): replaces the transcription's `latest` with `raw` while
+    they differ (BR-11); **available pre-generation only**
+    (transcription-stage undo; after generation, corrections are
+    the editing path, §23.5); before
     generation (no `raw`) restores `latest → null` so the
     client-joined transcription returns; 200 con
-    `data: { content: latest }`.
+    `data: { content: latest }`. Idempotent — a second call with
+    `latest` already equal to `raw` is a no-op 200.
 - **Item endpoints** (Item rows, §24A; status/rating changes are
   single-row atomic writes — never an AI call, never a
   re-derivation):
@@ -6450,7 +6649,7 @@ content-changing actions; read-only views still open).
     member of the type's set, any direction; `rating` only for
     `comment`, integer 0–5 or `null`); 200 ItemDto; 404 unknown/
     foreign item; 422 on a set violation.
-- **Generation:** `POST /reports/:reportId/generate` (ai tier
+- **Generation:** `POST /reports/:reportId/generations` (ai tier
   §27.3) — from `transcribed` only (regen gate: regeneration is
   allowed only from `transcribed` — content regenerates against
   the reviewed story; §34.3); §34 writes the transcription's
@@ -6502,15 +6701,15 @@ content-changing actions; read-only views still open).
 | `GET /reports` | access | query filters + pagination | 200 list | 401, 422 |
 | `GET /reports/:reportId` | access | `?withContent` | 200 ReportDto | 401, 404 |
 | `PATCH /reports/:reportId` | access | `{ date?, clockIn?, clockOut?, branchId? }` | 200 | 404, 422, 403 (generated) |
-| `PATCH /reports/:reportId/visits` | access | visits block (day clock pairs, OQ-002 §6.3) | 200 | 404, 422, 403 (generated) |
+| `PUT /reports/:reportId/visits` | access | visits block (day clock pairs, OQ-002 §6.3) | 200 | 404, 422, 403 (generated) |
 | `PUT /reports/:reportId/visits/:visitIndex` | access | visit fields | 200 | 404, 422, 403 (archived/generated) |
 | `DELETE /reports/:reportId/visits/:visitIndex` | access | — | 200 | 404, 403 (generated) |
 | `GET /reports/:reportId/items` | access | — | 200 item list | 401, 404 |
 | `PATCH /reports/:reportId/items/:itemId` | access | `{ status?, rating? }` | 200 ItemDto | 404, 422 |
-| `POST /reports/:reportId/generate` | access (ai tier §27.3) | — | 200 generated content | 404, 403 (regen gate), 502 (providers) |
+| `POST /reports/:reportId/generations` | access (ai tier §27.3) | — | 200 generated content | 404, 403 (regen gate), 502 (providers) |
 | `PATCH /reports/:reportId/content` | access | content replaced | 200 `{ content }` | 404, 422 |
-| `POST /reports/:reportId/correct` | access | instruction or multipart clip (optional provider, §35.2) | 200 corrected snapshot | 404, 502 (providers) |
-| `POST /reports/:reportId/content/revert` | access | — | 200 `{ content }` | 404 |
+| `PUT /reports/:reportId/content` | access | — (revert: replace `latest` with `raw`) | 200 `{ content }` | 404 |
+| `POST /reports/:reportId/corrections` | access | instruction or multipart clip (optional provider, §35.2) | 200 corrected snapshot (ephemeral candidate) | 404, 502 (providers) |
 | `POST /reports/:reportId/archive` / `restore` | access | — | 200 | 404, 409 |
 | `DELETE /reports/:reportId` | access | — | 200 (archived→retention) | 404, 409 |
 
@@ -6705,13 +6904,16 @@ re-transcription
 
 ### 33.2 Pipeline contract
 
-`POST /reports/:reportId/transcribe` (access, **ai tier**
-§27.3) triggers transcription for one report: the service
+`PUT /reports/:reportId/transcription` (access, **ai tier**
+§27.3) creates-or-replaces the report's 1:1 Transcription row —
+the idempotent REST form that supersedes the former
+`transcribe`/`re-transcribe` actions (ADR-030): the service
 (`services/stt.service.js`, the only layer calling `addis`) walks
 the report's audios in `createdAt` order (§32.3),
 transcribes each (or skips audios that already contributed to the
 report's transcription), **merges the results into the report's
-single Transcription row**, and returns progress. Chunks within one
+single Transcription row**, and returns the TranscriptionDto.
+Chunks within one
 audio are transcribed and concatenated (§33.3/§33.4). The
 pipeline is **synchronous request/response** (no streaming, no
 queue — §4.1 D2); long clips take the request time, bounded by
@@ -6733,13 +6935,14 @@ the 900 s audio cap and the 60 s chunk threshold.
 
 ### 33.4 The Addis STT call
 
-Provider client: native `fetch` + multipart (ADR-008),
-`x-api-key: ADDIS_API_KEY`; endpoint per §16.4
-(`data` object: audio blobs `request_data`, `language_code`
-from the clip's stored `language` default `am`,
-`target_language` `am` always); timeout `AI_TIMEOUT_MS`;
-retry per §16.5 only on transport/5xx (per-provider counts);
-429 → honor `Retry-After`. **No fallback chain for STT**
+Provider client: the addisai SDK — `addis.speech.transcribe({ audio,
+language: 'am' })` on the `config/env.js` instance (ADR-008,
+§16.3/§16.7); wire target per §16.4 (the SDK contract) —
+`audio` (the wav/PCM chunk) + `request_data`
+(stringified JSON carrying exactly `language_code` — the clip's
+stored `language`, default `am`); SDK timeout `AI_TIMEOUT_MS`;
+retry per §16.5 only on transport/5xx (SDK-managed, per-provider
+counts); 429 → honor the SDK `.retryAfter`. **No fallback chain for STT**
 (ADR-001) — a failed chunk is marked failed, never sent to
 Gemini/NVIDIA; per-chunk failures do not abort the whole clip;
 transcription completes with the chunks that succeeded and the
@@ -6752,9 +6955,10 @@ the §27.7 session: `{ user, report, raw, latest, language, stt:
 { requestId, model } }` — `raw` = the **merged** STT result of
 all the report's clips (single-space-joined per-audio texts),
 `latest` initialized equal (BR-11), the
-`stt` subdoc from `usage_metadata.requestId` + the providers'
-model string (ADR-019-permitted audit fields only; confidence
-not persisted, §16.4/§23). The report's `transcription` ref is
+`stt` subdoc from `usage_metadata.requestId` + the provider's
+model echo when the response carries one (`stt.model`, else
+`null` — §16.4/§23.2); ADR-019-permitted audit fields only;
+confidence not persisted (§16.4/§23.7). The report's `transcription` ref is
 set in the same session (§21.8/§23 — the circular pair is
 created atomically); the report moves
 `audio_attached → transcribed` (§31.4). There is no per-clip
@@ -6762,16 +6966,19 @@ stage strip and no per-clip accept gesture.
 
 ### 33.6 Re-transcription (ADR-030)
 
-`POST /reports/:reportId/re-transcribe` (access, ai tier):
-**rewrites the report's Transcription row in place** — `raw` =
-`latest` = the new merged STT result, `stt` metadata refreshed —
-atomically in one session (§23.4); the `report` ref never moves.
+**Re-transcription is the same resource write** (ADR-030). A
+repeated `PUT /reports/:reportId/transcription` is idempotent:
+already-contributed audios are skipped, only failed/pending
+audios re-run, and a new take attached at `transcribed` is
+transcribed and merged — the step becomes not-ready until heard
+(§52.7, BR-10). When the merged result changes, the service
+**rewrites the row in place** — `raw` = `latest` = the merged STT
+result, `stt` metadata refreshed — atomically in one session
+(§23.4); the `report` ref never moves.
 Availability per §31.4: at every status **except**
 `generated` (BR-12 window — re-transcription is frozen at
-`generated`; corrections are the editing path, §35); a new take
-attached at `transcribed` is transcribed and merged — the step
-becomes not-ready until heard (§52.7, BR-10). Response: fresh
-TranscriptionDto.
+`generated`; corrections are the editing path, §35). Response:
+fresh TranscriptionDto.
 
 ### 33.7 Failure handling & retries
 
@@ -6793,10 +7000,9 @@ TranscriptionDto.
 
 | Method+Path | Auth | Tier | Request | Success | Errors |
 |---|---|---|---|---|---|
-| `POST /reports/:reportId/transcribe` | access | ai | `{}` | 200 `{ data: { completed, failed } }` — status advanced per §31.4 | 401, 404, 403 (archived/`generated`), 422 (no audios or all already transcribed), 502, 429 |
-| `POST /reports/:reportId/re-transcribe` | access | ai | — | 200 TranscriptionDto | 401, 404, 403 (`generated`), 422, 502, 429 |
+| `PUT /reports/:reportId/transcription` | access | ai | — (create-or-replace; idempotent) | 200 TranscriptionDto — on partial chunk failure the response carries `completed`/`failed` progress and the status advances per §31.4 only when all chunks succeeded | 401, 404, 403 (archived/`generated`), 422 (no audios or all already transcribed), 502, 429 |
 | `GET /reports/:reportId/transcription` | access | global | — | 200 TranscriptionDto (`report` ref, `language`, `raw`, `latest`, `stt.*`) | 401, 404 |
-| `POST /reports/:reportId/correct/transcribe` | access | ai | multipart `clip` + `durationSec` (the round-7 correction-dialog STT, §31.6) | 200 `{ text }` — the transcribed instruction text; the clip is ephemeral, nothing persisted | 401, 404, 403 (archived), 422 (missing clip / MIME / size cap), 502, 429 |
+| `POST /reports/:reportId/corrections/transcripts` | access | ai | multipart `clip` + `durationSec` (the round-7 correction-dialog STT, §31.6) | 200 `{ text }` — the transcribed instruction text; the clip is ephemeral, nothing persisted | 401, 404, 403 (archived), 422 (missing clip / MIME / size cap), 502, 429 |
 
 ### 33.9 Verification usage
 
@@ -6844,7 +7050,7 @@ nvidia`), and the write of the transcription content plus the
 
 ### 34.2 Trigger & preconditions
 
-`POST /reports/:reportId/generate` (access, **ai tier** §27.3).
+`POST /reports/:reportId/generations` (access, **ai tier** §27.3).
 Preconditions enforced server-side (403/422 semantics):
 
 - status must be `transcribed` (a `generated` report does not
@@ -6906,7 +7112,9 @@ schema-invalid/parse-failed → provider failure per §16.5
 (retry, then fallback — never silent acceptance, SC-1 gate).
 `finish_reason` must be `stop`; anything else is treated as
 failure (§16.4). Temperature `AI_TEMPERATURE`, max output
-`AI_MAX_OUTPUT_TOKENS`, `AI_TOP_P`, `AI_TOP_K` — all from §11.3.
+`AI_MAX_OUTPUT_TOKENS` — all from §11.3; `AI_TOP_P`/`AI_TOP_K`
+apply to the gemini/nvidia contracts only (the addisai SDK exposes
+no such knobs, §16.4).
 
 ### 34.5 Provider call & fallback (ADR-014)
 
@@ -6917,8 +7125,10 @@ backoff `AI_PROVIDER_BACKOFF_BASE_MS`, timeout `AI_TIMEOUT_MS`),
 on exhaustion fall to the next; all exhausted → 502 via the §27
 handler ("Report generation failed — please try again"). The
 reasoning parameter is sent only when the chosen model's
-`reasoning` capability flag is on (§16.4); Addis calls carry
-`language_code`/`target_language` = `am`. The selected
+`reasoning` capability flag is on (§16.4); the reasoning value is
+the conversation's standing default or its override (§24.2/§36.4);
+addis calls send `language: 'am'` through the SDK and never carry a
+reasoning parameter (§16.4). The selected
 `(provider, model, reasoning)` triple is recorded on the §36
 conversation message for this generation turn (ADR-014); the
 conversation row is created lazily at its first saved turn so
@@ -6942,7 +7152,7 @@ stored (§21.2).
 
 ### 34.7 Regeneration rules
 
-Regeneration (`POST /reports/:reportId/generate` again) is
+Regeneration (`POST /reports/:reportId/generations` again) is
 allowed only from `transcribed`; from `generated` it is
 refused 403 — `generated` is terminal (BR-06/BR-08): generation
 never runs again, corrections are the §35 path (BR-10 keeps the
@@ -7018,8 +7228,8 @@ behind the §54 components and the §51.5 actions.
 | Mode | Endpoint (§31.6) | Input | Engine behavior |
 |---|---|---|---|
 | Mode-1 | `PATCH /reports/:reportId/content` | edited full content | no AI — the client's corrected text replaces the transcription's `latest` directly (sanitized §61), allowed at every status incl. `generated` (BR-10) |
-| Mode-2 | `POST /reports/:reportId/correct` | typed instruction (registry-guided; may name the exact §6.3 field/§6.7 content class) + **optional `provider`** (one of `AI_PROVIDERS`, §11.4 — the chosen §16 provider drives the call; defaults to `addis`) | prompts for a **partial edit**: returns only the changed `branchSections[]` slots with the reason (server vocabulary), merged into the candidate the client fills as an editable draft |
-| Mode-3 | the correction dialog records the instruction (round-7: the dialog owns the recorder; the clip rides the STT-only endpoint `POST /reports/:reportId/correct/transcribe` (§31.6), the transcribed TEXT fills the dialog's instruction field for review, then Apply sends it as a typed instruction — `POST /reports/:reportId/correct` may still carry a `mode` field for the direct-voice path) | voice-correction clip → §33 STT → instruction text; the multipart may carry the same optional `provider` field | same engine as Mode-2 fed from the transcription; the STT step is shared code with §33 (no second pipeline) |
+| Mode-2 | `POST /reports/:reportId/corrections` | typed instruction (registry-guided; may name the exact §6.3 field/§6.7 content class) + **optional `provider`** (one of `AI_PROVIDERS`, §11.4 — the chosen §16 provider drives the call; defaults to `addis`) | **target-split contract (S12, 2026-08-18 — "no correction schema"):** against a `transcribed` report (`latest` is plain Amharic prose) the engine returns the **full corrected prose** — no schema, no diff structure (§16.4 carve-out); against a `generated` report it prompts for a **partial edit**: returns only the changed `branchSections[]` slots with the reason (server vocabulary), merged into the candidate the client fills as an editable draft |
+| Mode-3 | the correction dialog records the instruction (round-7: the dialog owns the recorder; the clip rides the STT-only endpoint `POST /reports/:reportId/corrections/transcripts` (§31.6), the transcribed TEXT fills the dialog's instruction field for review, then Apply sends it as a typed instruction — `POST /reports/:reportId/corrections` may still carry a `mode` field for the direct-voice path) | voice-correction clip → §33 STT → instruction text; the multipart may carry the same optional `provider` field | same engine as Mode-2 fed from the transcription; the STT step is shared code with §33 (no second pipeline) |
 
 ### 35.3 Partial-edit rule (BR-09) & `±`-token protocol
 
@@ -7028,7 +7238,13 @@ behind the §54 components and the §51.5 actions.
   other §34.4 key is returned **byte-identical** to `latest`
   (the service diff-verifies: parts not in scope must be
   unchanged or the correction is rejected as provider failure
-  and retried — SC-3 gate).
+  and retried — SC-3 gate). **Scope (S12):** the surgical
+  contract binds **report corrections of a `generated` report**
+  (the `latest` is the §34.4 report shape); a **transcription-stage
+  correction** of a `transcribed` report targets plain Amharic
+  prose — the engine returns the full corrected prose, and the
+  byte-identical diff-verify does not apply (§35.2, §16.4
+  carve-out).
 - **`±`-token protocol (normative):** official/entitled text the
   user must not freely alias is marked with the `±` prefix (the
   ±-token vocabulary of the official format, §64). The
@@ -7046,13 +7262,17 @@ behind the §54 components and the §51.5 actions.
 Mode-2/3 run the §34.5 provider chain mechanics (ADR-014
 fallback, ai tier, §16.5 retries) with the **correction
 parameters**: `AI_CORRECTION_TEMPERATURE` (0.15) and
-`AI_CORRECTION_MAX_OUTPUT_TOKENS` (2048) (§11.3), and the
+`AI_CORRECTION_MAX_OUTPUT_TOKENS` (2048) (§11.3) — for addis they
+ride the SDK call (`temperature`/`max_tokens`, §16.4) — and the
 correction-specific structured schema = a partial of the §34.4
-schema: `{ changed: [{ section, field, content, reason }] }`.
+schema: `{ changed: [{ section, field, content, reason }] }`
+(binds report corrections of a `generated` report only — the
+transcription-stage path is plain prose, §35.2/§16.4 carve-out).
 Reason vocab: the server-returned `reason` sentences of the
 §35.4 schema ("removed duplicate verb", "moved case FE
 paragraph") — never invented client-side (§54.3). `reasoning`
-params follow the model's capability flag (§16.4).
+params follow the model's capability flag (§16.4); the value is
+the conversation's standing default (§24.2), never sent to addis.
 
 ### 35.5 Candidate → save flow (BR-11)
 
@@ -7063,8 +7283,8 @@ client fills the live transcription editor with the candidate as
 an editable draft) — and `latest` is persisted **only when the
 user Saves** — the Save action of §31.6 writes the content
 (`PATCH /reports/:reportId/content`) and completes the
-correction turn. **Revert** (`POST /reports/:reportId/content/
-revert`) restores `raw` → `latest` (single undo, BR-11, allowed
+correction turn. **Revert** (`PUT /reports/:reportId/content`)
+restores `raw` → `latest` (single undo, BR-11, allowed
 pre-`generated` only — §21.7/§23.5) or
 discards the unpersisted draft/candidate. `raw` is never
 rewritten via correction. `generated` reports accept corrections
@@ -7079,11 +7299,12 @@ item `status`/`rating` updates are the single-row PATCH of
 ### 35.6 Voice-correction instructions (Mode 3)
 
 The mode-3 voice clip is transcribed through the STT-only endpoint
-`POST /reports/:reportId/correct/transcribe` (§31.6, round-7
+`POST /reports/:reportId/corrections/transcripts` (§31.6, round-7
 amendment — the endpoint returns the instruction text so the
 correction dialog fills its field and the user reviews it before
 Apply; the older direct-voice multipart path — `POST
-/reports/:reportId/correct` with a `clip` part when a `mode` field
+/reports/:reportId/corrections` with a `clip` part when a `mode`
+field
 equals `voice` — remains the §31.6 fallback). The clip is
 transcribed (chunked per §33.3), the instruction text is the
 transcription result, and Mode-2's engine runs against it. The
@@ -7198,6 +7419,23 @@ then §24.2's registry checks at save; `content` length ≤
 `CHAT_MESSAGE_MAX_LENGTH` (§11.3); the validator references the constant — no literal. $push is the only message
 write; no in-place updates, no array reordering (§24.2 caveats).
 
+- **Standing reasoning (S12, 2026-08-18).** `reasoning` on the
+  append is **optional**: absent → the conversation's standing
+  default is used (`conversation.reasoning`, initialized
+  `AI_REASONING_DEFAULT` `'off'` when the row is created, §24.2);
+  present → validated as a member of `AI_REASONING_EFFORTS`, used
+  for this turn **and persisted as the new conversation default**
+  (a selection is a selection — one standing value governing every
+  TTT request of the conversation, §16.2/§16.6). The appended
+  message records the effort actually used (`messages[].reasoning`
+  — the audit record, ADR-014).
+- The AI answer is generated by the §35 correction engine (or
+  the §34 generation note) with the same standing reasoning; a
+  second message is appended by the service, never by this
+  endpoint (the endpoint never calls a provider itself — SC-7 is
+  about the browser; the server always calls providers only in
+  §33–§35 services).
+
 ### 36.5 History projection
 
 The `conversation_history` consumed by §34.3/§35.2 is a
@@ -7205,7 +7443,9 @@ projection of this collection: entries with `role` `user`/
 `assistant` only (`system` notes are excluded from prompts),
 content + createdAt, bounded to the recent
 `AI_CONVERSATION_HISTORY_MAX_ENTRIES` entries (§11.3; §12.8
-window). The projection is computed server-side in
+window) — for the addisai SDK the projection feeds its `messages`
+argument (role/content only; the SDK maps the last entry to
+`prompt` and the rest to `conversation_history`, §16.4). The projection is computed server-side in
 the generation/correction service; the chat DTO is never sent
 to the client in prompt form.
 
@@ -7226,7 +7466,7 @@ to the client in prompt form.
 | Method+Path | Auth | Tier | Request | Success | Errors |
 |---|---|---|---|---|---|
 | `GET /reports/:reportId/chat` | access | global | — | 200 `{ data: { _id, user, report, messages } }` (empty allowed) | 401, 404 |
-| `POST /reports/:reportId/chat/messages` | access | ai | `{ content, provider, model, reasoning }` | 201 conversation DTO with appended message | 401, 404, 422, 409 (row race) |
+| `POST /reports/:reportId/chat/messages` | access | ai | `{ content, provider, model, reasoning? }` — `reasoning` optional; absent → the conversation default (§24.2/§36.4) | 201 conversation DTO with appended message | 401, 404, 422, 409 (row race) |
 
 ### 36.8 Verification usage
 
@@ -9211,6 +9451,19 @@ Justified by their sections; the same contract discipline applies:
   `value`, `onChange`, `disabled`. Width is the host's call —
   inline beside the correction controls at lg/md, below them at sm,
   full width at xs; it never disappears at any breakpoint.
+- **MuiReasoningSelect** (`components/reusable/MuiReasoningSelect.jsx`,
+  S12, 2026-08-18) — the reasoning-effort selector for TTT surfaces
+  (the §52.8 generation desk and the CorrectionDialog, §54.2): a
+  label-less `Select` fed from the single-source registry
+  (`AI_REASONING_EFFORTS` + `AI_REASONING_LABELS`, §11.4/§11.5 —
+  Off/Low/Medium/High, English chrome §7.6) with `aria-label` from
+  `WIZARD.modes.reasoning`. Props: `value`, `onChange`, `disabled`.
+  **Capability rule:** the control renders enabled only when the
+  provider selected on the same surface has a model with
+  `reasoning: true` (§11.4/§16.2 — gemini/nvidia); with `addis` it
+  is disabled/hidden — the provider has no reasoning parameter and
+  the value is never sent (§16.4/§16.8 reasoning gate). Picking a
+  value writes the conversation's standing default (§24.2/§36.4).
 - **MuiFileInput** (`components/reusable/MuiFileInput.jsx`) —
   the multi-file audio upload input: a dashed drop-zone surface
   (`accept` = the §32 `AUDIO_ALLOWED_MIME_TYPES` mirror, never
@@ -10263,8 +10516,8 @@ as the single Mode-2/3 entry. The two cards:
   fabricated where nothing is known.
 - **CorrectionDialog** (composed on the story card, §54) — the
   Mode-2/3 surface: instruction field, provider select and the
-  mic (record → stop → `POST .../correct/transcribe` → the
-  transcribed text fills the field; Apply → `POST .../correct` →
+  mic (record → stop → `POST .../corrections/transcripts` → the
+  transcribed text fills the field; Apply → `POST .../corrections` →
   success: fill the live editor with the candidate + close; error:
   toast + stays open).
 
@@ -10303,7 +10556,11 @@ The step hosts the **§54 report-mode** surface (Mode-1 Save =
 §51 on finish) as a **posture machine** (round-report-step, F65):
 `transcribed` → the **generation desk** (`GenerateCard`: the step's
 empty state + the generate act, §34.2 — server-guarded; success →
-`generation.ready` toast + the query refetch seeds the body card);
+`generation.ready` toast + the query refetch seeds the body card;
+S12: the desk carries the provider + reasoning selectors —
+`MuiProviderSelect` + `MuiReasoningSelect` (§46.17) — the latter
+enabled only for reasoning-capable providers, both persisting their
+selection to the conversation (§24.2/§36.4));
 `generated` → the **report body card** (`ReportBodyCard`: the §53.6
 editor host #2 — the borderless MuiEditor `id="report-editor"`,
 the ± official-token guidance strip with its toggle (§54.8,
@@ -10662,8 +10919,9 @@ correction action (§52.7).
 | Component | Purpose | Reused by |
 |---|---|---|
 | **Persistent editor + footer (round-6)** | composed by the host — the §53 MuiEditor as ONE persistent instance across every correction, plus the §53.5 persistent footer (save-state line + Revert/Save). The round-5 `reports/edit-content/` surface dissolved into its hosts (round-6 amendment); round 7 deleted the whole `reports/` folder | §52.7 (transcription step — TranscriptionCard), §51.3 (report body), §52.8 (final-report step) |
-| **CorrectionDialog (round-7, round-8 amendment)** | `components/report/CorrectionDialog.jsx` — the single Mode-2/3 surface: a dialog (fullscreen below sm) holding the instruction field as the EDITOR-LIKE BORDERLESS surface (§46.4; round-8: standard variant with the underline removed, the §43.5 content font stack/size, a paper-tinted rounded input, the placeholder kept), the §46.17 provider select right-aligned below the field (round-8: label-less, width buckets xs 100% / sm+ 180px, min 140px), and the mic act (idle Mic → recording Stop + red pulse → STT spinner; round-8: 36px compact). Stop → `POST .../correct/transcribe` (round-7 §31.6) → the transcribed text fills the field; **Apply** → `POST .../correct` with the provider → success: `onApply` resolves true, the candidate lands in the live editor, the dialog closes; error: toast + the dialog stays open. Apply is disabled while the field is empty or a call is in flight; Cancel closes. Round-8: the dialog is `memo`-ized and its recorder callback stable (parent churn never re-renders it; the recorder `start` identity never changes mid-session); the STT/apply reads target the envelope-unwrapped result (`result.text`, `result.content` — the §42.4 normalization returns the payload directly; the old `.data.` reads silently no-oped the field fill and the candidate). Round-8.1 (the zero-lag field): the instruction input is the `InstructionField` local component — it owns its value INSIDE itself, so typing re-renders only that subtree (the dialog/provider/mic/actions never see a keystroke; the §53.3 doctrine); the dialog learns only emptiness flips (the Apply disabled state) and reads the live text at Apply through the imperative `getValue()`; the STT transcription lands through `seed(text)`; closing the dialog discards the field draft (a FAILED apply keeps the dialog open — the text is never lost mid-attempt). Round-8.2 (the highlighted field): the apply contract RETHROWS on failure — the step toasts, then the dialog cat... (line truncated to 2000 chars) | §52.7, §51.3 |
+| **CorrectionDialog (round-7, round-8 amendment)** | `components/report/CorrectionDialog.jsx` — the single Mode-2/3 surface: a dialog (fullscreen below sm) holding the instruction field as the EDITOR-LIKE BORDERLESS surface (§46.4; round-8: standard variant with the underline removed, the §43.5 content font stack/size, a paper-tinted rounded input, the placeholder kept), the §46.17 provider select right-aligned below the field (round-8: label-less, width buckets xs 100% / sm+ 180px, min 140px), and the mic act (idle Mic → recording Stop + red pulse → STT spinner; round-8: 36px compact). Stop → `POST .../corrections/transcripts` (round-7 §31.6) → the transcribed text fills the field; **Apply** → `POST .../corrections` with the provider → success: `onApply` resolves true, the candidate lands in the live editor, the dialog closes; error: toast + the dialog stays open. Apply is disabled while the field is empty or a call is in flight; Cancel closes. Round-8: the dialog is `memo`-ized and its recorder callback stable (parent churn never re-renders it; the recorder `start` identity never changes mid-session); the STT/apply reads target the envelope-unwrapped result (`result.text`, `result.content` — the §42.4 normalization returns the payload directly; the old `.data.` reads silently no-oped the field fill and the candidate). Round-8.1 (the zero-lag field): the instruction input is the `InstructionField` local component — it owns its value INSIDE itself, so typing re-renders only that subtree (the dialog/provider/mic/actions never see a keystroke; the §53.3 doctrine); the dialog learns only emptiness flips (the Apply disabled state) and reads the live text at Apply through the imperative `getValue()`; the STT transcription lands through `seed(text)`; closing the dialog discards the field draft (a FAILED apply keeps the dialog open — the text is never lost mid-attempt). Round-8.2 (the highlighted field): the apply contract RETHROWS on failure — the step toasts, then the dialog cat... (line truncated to 2000 chars) | §52.7, §51.3 |
 | **Provider selector** | `reusable/MuiProviderSelect` (§46.17) — the `AI_PROVIDERS` select for Modes 2/3; rides inside the CorrectionDialog (round-7) | Modes 2/3 surfaces |
+| **Reasoning selector (S12)** | `reusable/MuiReasoningSelect` (§46.17) — the `AI_REASONING_EFFORTS` select composed beside the provider select on the CorrectionDialog and the §52.8 generation desk; enabled only for reasoning-capable providers (addis → disabled, never sent); writes the conversation's standing TTT default (§24.2/§36.4) | §52.8, Modes 2/3 surfaces |
 | **Item status chips** | the §24A row surfaces — per-item `status` chips (`reported` / `in_progress` / `completed` per type, §6.10) and the comment `rating` 0–5; edits persist through the single-row PATCH of §31.6 | §51.3, §52.8 |
 
 Each is its own component; **no implementation is duplicated in
@@ -10733,7 +10991,7 @@ Round-7 amendment: Mode 2 lives in the **CorrectionDialog**
   exact §6.3 field/§6.7 content class (§35.2). The provider
   selector (§46.17) sits right-aligned BELOW the field (round-7:
   one row with the mic act — width buckets xs 100% / sm+ 200px,
-  min 140px; the row wraps at xs). Apply → `POST /reports/:reportId/correct`
+  min 140px; the row wraps at xs). Apply → `POST /reports/:reportId/corrections`
   (§31.6) with the chosen provider (§35.2).
 - The engine returns the candidate → Apply resolves true, the host
   applies it to the LIVE editor through the imperative
@@ -10761,7 +11019,7 @@ row on the page.
 - The dialog's mic button records the instruction (idle Mic icon
   → recording: red Stop icon with the §46.17 recording pulse →
   stop: the STT spinner on the mic). Stop submits the clip to the
-  **STT-only endpoint** `POST /reports/:reportId/correct/transcribe`
+  **STT-only endpoint** `POST /reports/:reportId/corrections/transcripts`
   (round-7, §31.6 — multipart `clip` + `durationSec`); the
   response's transcribed text fills the instruction field and the
   mic returns to idle. The clip is transcribed through the §33
@@ -10796,11 +11054,16 @@ persistent footer (round-6 — no accept step). The machine is
   discards it or restores `raw` — the server decides content
   (§54.3), the draft is never silently clobbered while typing
   (§53.3 blur deferral).
-- **Provider state (round-5, round-6, round-7):** the chosen
-  provider is the dialog's state (ADR-034 — session memory, never
-  persisted client-side), defaults to `AI_PROVIDERS[0]` (`addis`,
+- **Provider state (round-5, round-6, round-7; S12 amendment):** the
+  chosen provider is the dialog's state (ADR-034 — session memory,
+  never persisted client-side), defaults to `AI_PROVIDERS[0]` (`addis`,
   §16.2), rides every Mode-2/3 request (§35.2) and returns in the
-  candidate response (the request/response trail).
+  candidate response (the request/response trail). **Reasoning state
+  (S12):** the reasoning effort is the conversation's standing
+  default (§24.2) — the dialog's `MuiReasoningSelect` reads it from
+  the conversation DTO (§36.3) and writes it back on change
+  (§36.4); it rides every Mode-2/3 request for reasoning-capable
+  providers and is never sent to `addis` (§16.4/§16.8).
 
 ### 54.8 States & edge cases
 
@@ -11286,7 +11549,7 @@ report in paper/digital form (export is §3.1.2 F7's surface).
 
 ### 58.3 ReportPrint surface & print contract
 
-`components/print/ReportPrint.jsx` renders the **read-only**,
+`components/report/print/ReportPrint.jsx` renders the **read-only**,
 sanitized (§61) `latest` content of the report with print styling:
 
 - **What prints:** the report content exactly as the server
@@ -12679,7 +12942,7 @@ end-to-end through a **client-side development mock adapter**:
   per §40/§25 — the pages and their §60 states are exercised,
   while accuracy claims are explicitly deferred to P7 (SC-1).
   Round-7: the STT-only endpoint (`POST
-  /reports/:reportId/correct/transcribe`, §31.6) resolves with the
+  /reports/:reportId/corrections/transcripts`, §31.6) resolves with the
   deterministic canned Amharic instruction text (the same string
   the direct-voice correction branch transcribes to) — the dialog
   exercises its real fill-the-field/Apply flow; the canned text is
@@ -12703,7 +12966,7 @@ end-to-end through a **client-side development mock adapter**:
   (the older 30s access knob existed to demo the chain; the §63
   walk is still exercisable by temporarily lowering
   `accessTokenTtlMs`). Round-8.3: the **correction candidate**
-  (`POST /reports/:reportId/correct`, §35) resolves with the
+  (`POST /reports/:reportId/corrections`, §35) resolves with the
   DETERMINISTIC full-content snapshot of `buildCorrectionCandidate`
   (§66.10 mirror of §35.2/§35.3/§35.4) — the report's story with
   the addressed partial edit (verb-dedup / case-FE move, reason
@@ -13012,6 +13275,9 @@ content rules: no prose invention outside this registry).
 | OQ-008 | **OPEN** | Landing page: further work wanted by the owner — the round-9 review is not final; polish/concept revision deferred until after all eight phases | §48.2, §66 | Post-P8 owner window (§66.9 P8 / §2.6); non-blocking |
 | OQ-009 | **OPEN** | The Reports filter feature is provisional: the dialog renders a TBD surface — what to filter (status/branch/archived were working guesses), branch single vs multi-select, server pagination of filtered results, and date vs date-range (or both) are unresolved; until closure the page holds no filter state and lists what `GET /reports` returns | §50.3, §66 | The §50 filter dialog (full implementation; the mock list-all convenience persists until then) |
 | OQ-010 | **OPEN** | The font-size selector in the MuiEditor toolbar does not apply a size — reported through rounds 8.2, 8.3, 8.4, and 8.5 (hard-reload confirmed each time). Three mechanisms were found and fixed statically (nested-chain stored-mark wipe §46.16 r8.3, paragraph-selection UX r8.4, churning seed-sync re-seed §53.3 r8.5), yet the user repro still fails; the remaining cause is UNKNOWN and the fix is NOT fixed — deferred to round-8.6 | §46.16, §53.3, §53.5 | The §46.16 toolbar font-size contract (round-8.6 investigation must start from the live flow: a `[MuiEditor] fontSize dispatch`-style diagnostic + the served-module check, not static analysis alone) |
+| OQ-011 | **OPEN** | Addis AI free-tier limits (60 RPM / 1000 RPD / 3 concurrent requests) — provider-published at research time (2026-08-18); policy-only today, calibrated against the live account at implementation | §16.2, §16.5, §27 | None — the app AI tier (RATE_LIMIT_AI_*) is the primary guard; provider 429s are second-layer |
+| OQ-012 | **OPEN** | The addisai SDK's `SttLanguage` enum accepts am \| om \| en \| ha \| sw while the docs list am \| om — provider self-conflict; moot for the app (am-only, §7.7 reserves om/ti); whichever language activates later follows the SDK enum | §16.4, §33 | None |
+| OQ-013 | **OPEN** | The SDK's `chat_audio_input` + `transcription.clean` single-call option — a future Mode-3 one-call alternative to STT-then-TTT; not adopted (the current two-step path is the §35.2 contract) | §16.4, §35 | None — future option only |
 
 Records (closed):
 
@@ -13162,6 +13428,44 @@ Records (open):
   toolbar/select contract of §46.16/§53.3 stands otherwise.
   Closure: root cause recorded here with the §46.16/§53.3
   amendments in the same change (§66.6).
+- **S12 text-generation contracts + addisai SDK — CLOSED
+  2026-08-18 (owner: "proceed" on the S12 plan).** §16 derived
+against the SDK source: addisai ^0.2.0 adopted for all Addis
+   traffic (STT `speech.transcribe` and TTT
+   `chat.completions.create` — the SDK's method surface, wire
+   targets §16.4; no raw HTTP, §16.8 SDK gate); the SDK sends no
+   `model` (display id only),
+  no `persona`, no `topP`/`topK` (gemini/nvidia-only, §11.3);
+  retries SDK-managed (`maxRetries: AI_PROVIDER_RETRIES`,
+  `timeout: AI_TIMEOUT_MS`, §16.7); typed `.retryAfter`/`.availableBalance`;
+  finish_reason `length`/`content_filter` = provider failure;
+  paid policy replaces free-only for Addis (§16.2); ADR-008
+  amended; §13.5 row added. Amended: §16.2–§16.8, §11.3/§11.4/§11.5,
+  §13.3/§13.5, §14.3, §33.4, §34.4/§34.5, §35.4, §36.5.
+- **"No correction schema" — CLOSED 2026-08-18 (owner decision).**
+  Transcription-stage TTT corrections return **full corrected
+  plain prose** — no `{changed:[...]}` schema, no diff structure,
+  no JSON. The structured-output mandate and its gates carry the
+  carve-out (§16.4/§16.8); the §35.2 Mode-2 contract is
+  target-split (plain prose at `transcribed`, the surgical partial
+  edit at `generated`); the §35.3 byte-identical diff-verify binds
+  report-shaped `latest` only. The §35.4 partial schema stays for
+  report corrections of `generated` reports.
+- **Standing reasoning selection — CLOSED 2026-08-18 (owner
+  requirement: "for the AI providers which support reasoning the
+  user able to select reasoning and reasoning to be applied for
+  all ttt request").** The user selects the reasoning effort for
+  reasoning-capable providers (gemini/nvidia; addis never receives
+  it); the selection is the conversation's standing default
+  (`ChatConversation.reasoning`, default `AI_REASONING_DEFAULT`
+  `'off'`, §24.2) applied to **every TTT request** of the
+  conversation (generation, regeneration, Mode-2/3 corrections,
+  chat turns) — §16.2/§16.4/§16.6/§34.5/§35.4/§36.4; the per-message
+  triple stays as the audit record; the UI is `MuiReasoningSelect`
+  (§46.17) on the §52.8 desk and the §54.2 CorrectionDialog;
+  constants `AI_REASONING_DEFAULT` (§11.4) + `AI_REASONING_LABELS`
+  (§11.5). Scope decision recorded: per-conversation, not per-user
+  (matches the provider-picker scope).
 
 ### 69.3 Assumptions register
 
