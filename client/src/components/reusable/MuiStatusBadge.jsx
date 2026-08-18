@@ -17,8 +17,7 @@ const REPORT_COLOR_MAP = Object.freeze({
   draft: "default",
   audio_attached: "warning",
   transcribed: "info",
-  reviewed: "primary",
-  completed: "success",
+  generated: "primary",
 });
 
 /**

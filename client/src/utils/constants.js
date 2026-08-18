@@ -15,8 +15,7 @@ export const REPORT_STATUSES = Object.freeze([
   'draft',
   'audio_attached',
   'transcribed',
-  'reviewed',
-  'completed',
+  'generated',
 ]);
 
 /**
@@ -29,8 +28,30 @@ export const REPORT_STATUS_LABELS = Object.freeze({
   draft: 'Draft',
   audio_attached: 'Audio attached',
   transcribed: 'Transcribed',
-  reviewed: 'Reviewed',
-  completed: 'Completed',
+  generated: 'Generated',
+});
+
+/**
+ * Domain — item row types (mirror of §11.4; §24A).
+ * @type {readonly string[]}
+ */
+export const ITEM_TYPES = Object.freeze(['activity', 'issue', 'comment']);
+
+/**
+ * Domain — item status vocabulary (mirror of §11.4; §24A).
+ * @type {readonly string[]}
+ */
+export const ITEM_STATUSES = Object.freeze(['reported', 'in_progress', 'completed']);
+
+/**
+ * Domain — per-type item status sets (mirror of §11.4; §24A.3):
+ * the members an item of each type may take; `comment` has none.
+ * @type {readonly Object<string, readonly string[]>}
+ */
+export const ITEM_STATUSES_BY_TYPE = Object.freeze({
+  activity: Object.freeze(['completed', 'in_progress']),
+  issue: Object.freeze(['reported', 'in_progress', 'completed']),
+  comment: Object.freeze([]),
 });
 
 /**
@@ -147,7 +168,6 @@ export const FONT_SIZES = Object.freeze([
 export const TOAST_CATALOGUE = Object.freeze({
   report: Object.freeze({
     created: 'Report created',
-    completed: 'Report completed',
     archived: 'Report archived',
     restored: 'Report restored',
     deleted: 'Report deleted',

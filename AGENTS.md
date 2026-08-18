@@ -21,6 +21,19 @@ The implementation runs on the §66 phases: **phases 1 (foundations) and 2 (desi
 - The `mock/` adapter (§66.10) is a dev-only phase artifact wired under `import.meta.env.DEV` in `apiSlice.js`; it never exists in a production build and is deleted at P7 (grep gate §66.10/§66.11) — not a runtime feature.
 - `.opencode/` tracks only `plan/` and `skills/`; its `node_modules`/`package.json`/`bun.lock` are gitignored.
 
+## Correct-the-Spec-Then-Rebuild protocol (standing effort, started 2026-08-18)
+
+The owner's standing instructions for this effort live in `prompt.md` (tracked, controlled document) and override habits and prior session behavior; they never override this file or the skills. The owner's live instructions in conversation override everything.
+
+- **Role model (owner's strict requirement, 2026-08-18):** the agent is the Supervisor AND the Software Architect/Engineer/UI-UX Designer, and makes the decisions. The owner is the interaction partner only — they review, add/remove what is presented, ask iterative questions, dig, and point out blind spots; they are not the Supervisor, not the Architect, and do not make decisions. Nothing waits on an owner decision; preferences/unknowns become §69 OQ rows.
+- **Supervisor user-story gate:** every user story the Supervisor identity enumerates is presented to the owner one by one for add/remove before the Architect answers it.
+- **Architect WH-battery transparency:** every WH question of the Architect's battery is presented to the owner before answers are derived.
+- **Coverage register (task_plan.md):** the 51 DERIVED sections are tracked with a per-section status — not-started / in progress / closed (re-derived | audited-no-change | escalated) — plus an explicit NEXT pointer. A pass closes only when its closed section list is closed, never when the stories run out. Stage 3 requires 51/51 dispositions, zero partials, zero `TODO(open)` without an §69 row.
+- **Freeze rule:** no `backend/*` and no `client/*` edits while `.opencode/plan/project-specification.md` is not fully corrected (prompt.md Stage 3 hard gate). After the spec is fully corrected, re-implementation starts backend-first.
+- **Branch lifecycle:** all spec-correction work happens on `spec-correction`; when the spec is fully corrected, a new branch is created for re-implementation and `spec-correction` is deleted. No commit/push/merge/delete without explicit owner approval (§9.8 step 6).
+- **Correction scope (5-file rule):** spec corrections are applied to `.opencode/plan/project-specification.md`; this file, `prompt.md`, and the §66.3 working files are corrected in the same change set **iff** something in them needs correcting (same-change discipline, §66.6).
+- Current state (2026-08-18): Stage 1 (kernel classification, 18 KERNEL / 51 DERIVED) closed; Stage 2 pass 1a (data model §17–§24A) closed; pass 1b (architecture: §11, §12, §14, §15, §16) is NEXT.
+
 ## Git protocol (§9.8)
 
 - Feature branches named `phase-N-description`; no direct commits to `main`.

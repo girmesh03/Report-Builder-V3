@@ -300,3 +300,112 @@
 - Two new generate assertions failed while the handler logic verified CORRECT in isolation (create → generate in one process returns the right 403). Root cause: `createReportHandler` minted `_id: r-${String(counters.digest).padStart(4, "0")}` **without incrementing** — the walk's main report AND the smoke's second create BOTH became `r-0100` (duplicate rows in the in-memory `reports` array); `reportOwnerOrNull` resolved the generate URL against the FIRST match (the walk's transcribed report) → it generated THAT one (200), leaving the intended target's checks 403.
 - Fix: `_id: r-${String(counters.digest++).padStart(4, "0")}` — create ids strictly unique for the adapter's lifetime (fixture rows r-0001..r-0012 untouched; created rows r-0100+). Smoke 65/65 ALL PASS; debug lines removed.
 - **Lesson:** the shared `counters.digest` is consumed by TWO minting sites (report ids and digest item ids); any future id minting in the mock must consume the counter, never just read it.
+---
+
+# Effort: Correct-the-Spec-Then-Rebuild (started 2026-08-18)
+
+## F62 — Kernel read (Stage 0 digest)
+
+All kernel sections read in full (§1–§10, §13, §61–§66, §69). Facts pinned for derivation work:
+
+- **Scope/ownership (§3):** single user type (Area Supervisor); every record user-scoped incl. branches (§3.2.3); branch snapshot embedded at report creation, never rewritten by later branch edits (BR-14); no RBAC (ADR-036); two-path deletion for branches AND reports (BR-14/BR-16).
+- **Status machine (§5):** draft → audio_attached → transcribed → reviewed → completed; forward-only; the single explicit rewind is last-audio removal (§17.4); the transition-guard table is single-sourced in §31 and reused by UI sections.
+- **Content model (BR-11):** raw written once (STT output / first generation), latest = current content, single undo (raw → latest while they differ), Accept at completion fixes latest; OQ-007: raw = plain text, latest = rich HTML.
+- **Report format (§6):** Type by visit count (1 → Type-1, >=2 → Type-2); per-visit lines `ከ[HH:mm] - [HH:mm] [branch] ብራንች` chronologically ordered; Ethiopian DD-MM-YY dates; fixed Amharic labels (never transliterated); §6.8 four verbatim samples (names appear nowhere else); §6.10 capture & attribution contract — metadata is form-only (fallback form → reviewed transcription → blank), clip bound to visit at upload (visitNo), attribution chain spoken > binding > single-branch-default > user-assigned, no silent fallback, item status vocabulary reported → in_progress → completed, comments carry rating 0–5|null; §6.11 branch digest (schemaVersion 1, stored on the report row, model-free filtering, unassigned-accept gate, manual re-derivation POST /reports/:reportId/digest after completed).
+- **Language/tone (§7–§8):** UI English, content Amharic-first; transliteration rule verbatim (§7.2) + six authoritative pairs; 16 generation rules verbatim; rule-4 reconciliation — form metadata wins, transcription is body content + fallback; BR-19 no invention; tone = professional, supervisor POV, never verbatim narration.
+- **Conventions (§9):** `_id` doctrine (no `id` fields / `.id` access); kebab-case files, PascalCase components, `Mui*` reusable; UPPER_SNAKE constants; Winston only (console.log ban); no magic literals; §9.7 hygiene per change; §9.8 six-step git protocol (step 5 = owner approval, step 6 = commit/push/merge).
+- **Env (§10):** `config/env.js` sole `process.env` reader; keys only in `backend/.env`; VITE_ client vars only.
+- **Stack (§13):** manifests are version truth; §13.5 planned deps (dompurify installed at the P4 editor phase; NVIDIA multipart helper conditional at P7); §13.6 permanent exclusions (no TS, no Next/Remix, no Tailwind, no zod, no test frameworks, no client AI SDKs, no WebSocket, no S3/GridFS); §13.7 dependency protocol.
+- **Security/retention/verification (§61–§63):** XSS double gate (sanitize-on-write server + sanitize-on-render client, §61.3/§61.4); sweeper two-pass with 30-day window (ARCHIVED_TTL_SECONDS 2592000), exactly two TTL indexes (Report, Branch), no `deletedAt` anywhere (§62); manual gates replace test frameworks (§63.3/§63.4/§63.6); §63.9 spec-integrity audit C1–C6.
+- **Performance/± (§64):** bounds not benchmarks (SC-8); ±-token vocabulary (8 tokens mapping §6.3 labels); server resolves ± only in the Google Docs export path; client renders verbatim (§53.3 display rule).
+- **Deployment (§65):** one Express process serves API + static client; SPA fallback never shadows /api/v1; OQ-003 blocks production sign-off; OQ-004 keeps Google Docs in stub mode.
+- **Phases (§66):** eight phases P1–P8 with exit gates; §66.10 dev mock adapter (deleted at P7, grep gate); §66.11 verification usage.
+- **Registry (§69):** OQ-001..OQ-010; OPEN rows: OQ-003 (blocking), OQ-004, OQ-008, OQ-009, OQ-010. D1–D5 all deferred, no re-admission records.
+
+## F63 — Stage 1 kernel classification
+
+Procedure: KERNEL = (a) domain requirement/truth given by the owner, or (b) standing operating rule. Otherwise DERIVED.
+
+- **KERNEL (18):** §1, §2, §3, §4, §5, §6, §7, §8, §9, §10, §13, §61, §62, §63, §64, §65, §66, §69.
+- **DERIVED (51):** §11, §12, §14, §15, §16, §17, §18, §19, §20, §21, §22, §23, §24, §25, §26, §27, §28, §29, §30, §31, §32, §33, §34, §35, §36, §37, §38, §39, §40, §41, §42, §43, §44, §45, §46, §47, §48, §49, §50, §51, §52, §53, §54, §55, §56, §57, §58, §59, §60, §67, §68.
+
+Architect decisions on the borderline calls (owner delegated: "you are the architect/engineer/UI-UX designer — make decision"):
+
+1. **§14 ADR Index — DERIVED.** Entries are derived decisions; each becomes binding only once amended under §14.5.
+2. **§15 Project Structure — DERIVED**, except the §15.4/§15.5 canonical trees are kernel-mandated mirrors whose content re-derives with the layouts they name.
+3. **§67 Risks — DERIVED** analysis; domain risks re-checked with the owner at correction time.
+4. **§68 Glossary — DERIVED** mirror of kernel terms; never mints new terminology.
+5. **§11 Constants — DERIVED** values; the homes + §66.6 mirror discipline are kernel.
+6. **§6.10/§6.11 (inside kernel §6)** — owned by the owner's §2.3 kernel list (capture & attribution contract; branch digest & filtering contract): treated as kernel facts to derive FROM, not to re-derive.
+
+## F64 — Session facts
+
+- Branch `spec-correction` created from phase-4 HEAD `ad8c502`; phase-4 uncommitted rounds 7–8.2 ride along untouched (owner: keep for history; that commit gate still belongs to the phase-4 effort).
+- Session-catchup script not installed (skill scripts absent from both the user and repo locations); working files read manually; no prior unsynced context for this effort.
+- Spec inventory: 13,101 lines; parts 0/A–F; five `TODO(open)` markers currently present (reconciled with §69 rows during Stage 3).
+
+## Q&A ledger (this effort)
+
+- [2026-08-18] Owner: "Provide the sections that can be wrong." → 51 DERIVED sections listed; owner confirmed and proceeded.
+- [2026-08-18] Owner: "Create a new branch spec-correction." → Done (F64).
+- [2026-08-18] Owner: "Keep for history, previous mistakes not to be repeated and append." → Working files append-only; phase-4 content preserved as the record.
+- [2026-08-18] Owner: "You are the software architect/engineer and UI/UX designer — make decision." → Borderline classifications decided by the Architect identity (F63); preference/domain-fact unknowns still escalate per §12.
+- [2026-08-18] Owner approved the Correct-the-Spec-Then-Rebuild plan and the Stage 1 inventory (18 KERNEL / 51 DERIVED, F63) → Stage 2 pipeline passes authorized (task_plan Stage 1 → closed).
+- [2026-08-18] Stage-2 pass 1a (data model §17–§24A) — the Architect decided the correction set per the role model; presented to the owner for review; owner confirmed without changes → executed per F65; the mock-DTO deferral rides with it (recorded §69 OPEN: mock keeps pre-correction shapes, re-aligned at §52–§58, deleted at P7).
+- [2026-08-18] Kernel passes 1–2 — model/schema corrections (outcomes fully recorded in the corrected spec; §17.2/§18.3/§20/§21/§22/§23/§24A): seven collections (User, Branch, Report, Audio, Transcription, Item, ChatConversation) all user-scoped (BR-13); exactly one TTL index in the spec — Report on `archivedAt` (§18.3); Report carries no content fields and no supervisorName/reportDate/branchDigest/visitNo — `raw`/`latest` live on the 1:1 Transcription row (BR-11, ADR-005 retired), supervisor name = live `fullName` join; `visits[]` positional (`_id:false`, Type = 1 + visits.length); single Item collection (§24A) replacing the branch-digest itemization (retired §6.11), branch+date captured at generation, per-type status/rating, one-comment partial unique index; branch removal reference-checked with no tombstone path (BR-14, §20.5); audio deletion at `transcribed` cascades the transcription (ADR-003 rewind); status-presence map per §17.6.
+- [2026-08-18] Pass-1 rewrites touching the models — §33 (1:1 merged Transcription, re-transcribe same-row rewrite, frozen at `generated`), §34 (generation writes `latest` + Item rows in one atomic session, `transcribed → generated` terminal), §35 (corrections never touch Item rows; revert pre-`generated`), §37 (export payload `{content, date, branchName, visits}`), §38 (KPI set incl. Generated; activityByBranch via `$lookup`), §39 (exactly one text index — branches) → all mirrored in §17.6/§21.4 presence, §25/§40 fixtures, §46/§50/§52–§58.
+- [2026-08-18] Owner: "before you commit, I want to know every single detail you will do next." → Full commit plan presented: files staged, staged-diff verification, single commit, no push/merge; `prompt.md` untracked at that point.
+- [2026-08-18] Owner: "do you understand prompt.md" → Read in full; compliance audit against it surfaced the missing-ledger gap (this ledger); `prompt.md` amended and tracked thereafter.
+- [2026-08-18] Owner: "based on task_plan.md what is next" → Next-step order clarified (commit → pass 2 backend). Owner then confirmed the branch lifecycle: spec fully corrected on `spec-correction` → delete it → new branch → re-implementation backend-first.
+- [2026-08-18] Owner raised the coverage concern: the need-driven pipeline and model-driven correction can skip DERIVED sections (evidence: §16 never re-derived; §11/§12/§14/§15 only partial) → the coverage register fix approved (task_plan.md; per-section status + NEXT pointer; pass closes on its section list, never on story exhaustion; Stage 3 requires 51/51 dispositions).
+- [2026-08-18] Owner (strict requirement): the agent is the Supervisor AND the Architect/Engineer/UI-UX Designer and makes the decisions; the owner is the interaction partner — reviews, adds/removes, asks iterative questions, digs, points out blind spots — never a Supervisor/Architect, never a decision-maker → recorded as the role model in AGENTS.md/prompt.md/findings.md/progress.md/task_plan.md (the "Correct-the-Spec-Then-Rebuild protocol").
+- [2026-08-18] Owner decisions on the checkpoint: `prompt.md` tracked and committed (option a); single checkpoint commit now; pass story lists enumerated up front for per-story add/remove. → Executed: commit `chore: phase 4 owner-corrections`; pass 1b (architecture §11/§12/§14/§15/§16) opens next.
+- [2026-08-18] Owner: "proceed" → checkpoint commit executed; pass 1b user stories presented.
+
+## Effort finding — Role model & coverage register (2026-08-18, owner strict requirement)
+
+- The owner is the interaction partner only: they review, add/remove what is presented, ask iterative questions, dig, and point out blind spots. They are not the Supervisor, not the Architect, and do not make decisions. The agent is both identities and decides — including derivation-conflict resolution; preference/domain-fact unknowns become §69 OQ rows and never block on the owner.
+- Coverage guarantee: the 51 DERIVED sections are tracked per-section (not-started / in progress / closed with disposition re-derived | audited-no-change | escalated) in task_plan.md with a NEXT pointer; a pass closes on its section list; Stage 3 requires 51/51 dispositions, zero partials, zero `TODO(open)` without an §69 row. Derivation stays kernel-first — corrected sections are the output of a pass, never the input to the next pass's derivations (the pass-1a skip evidence: §16 unvisited, §11/§12/§14/§15 partial — fixed by pass 1b).
+- Branch lifecycle: `spec-correction` holds all corrections; on full correction a new branch is created and `spec-correction` is deleted. Freeze: no `backend/*` and no `client/*` edits until the spec is fully corrected (Stage 3 hard gate); re-implementation starts backend-first.
+## F65 — Stage 2 pass 1: data-model correction set (2026-08-18)
+
+Owner-approved correction set applied to the spec + mirrors; the plan for this pass was itself owner-approved ("Correct-the-Spec-Then-Rebuild", Stage 2 pass 1, decided 2026-08-18).
+
+### Corrected model (normative)
+- **Status machine:** four states `['draft','audio_attached','transcribed','generated']`; `generated` terminal (BR-08). No `reviewed`/`completed`/`accept` anywhere (client code, constants, mock, spec). Status history: rewinds explicit (BR-01); no `..accept()` method anywhere (outside the live join of §17.4/§20 — negations only; gate §31.10).
+- **Report row:** `{branch (ObjectId ref), date, clockIn, clockOut, visits[] positional subdocs (no visitNo), status, transcription (unique sparse ref), isArchived, archivedAt}`. No `supervisorName`/`reportDate`/`branches[]` snapshot/`branchDigest`. One report = one branch; supervisor name = live `fullName` join (§28.5).
+- **Transcription:** 1:1 merged row per report — `raw` = merged STT, `latest` = single content slot; re-transcribe rewrites the same row; frozen at `generated` (regen rewinds to `transcribed` first); single undo = revert `latest` to `raw` while they differ (pre-`generated`). ADR-005 row fixed to the 1:1 Transcription row (owners §5.4, §21, §23).
+- **Items:** single Item collection (§24A) written at generation in the same atomic session as transcription `latest`; corrections never touch Item rows (item status/rating via single-row PATCH §31.6); `GET /analytics/items` reads Item rows only.
+- **Storage:** exactly ONE TTL index (Report on `archivedAt`); branch removal behind the reference check (reports' `branch`/`visits[].branch` + Item rows' `branch`), no tombstone path; search = exactly one text index (branches; reports via `$in` on resolved ObjectIds); sweeper pass 1 report removal cascades Audio docs, 1:1 Transcription, Item rows, ChatConversation (§62.3); sweeper wins races.
+- **Analytics KPIs:** `{reportsThisMonth, inProgress, generated, activeBranches}` (OQ-005 fixed); four-slice `statusDistribution`.
+- **Export (§37):** `{content: latest, date, branchName, visits}`; `generated` status not required.
+
+### Sweep results (what was left after the rewrites — all clean)
+- `visitNo|supervisorName|reportDate|branches[] snapshot|branchDigest|tombstone|digest|accept ceremony|Accept action|accept step|accept strips|Accept strips|accept/reject|acceptedAt|two TTL|six model|five-step|5-state`: remaining hits are negations ("never", "no `..accept()`"), retirement text (§6.11 pointer), the F65 historical record, or §69 records — none normative.
+- `reviewed|Review|reviewed transcription|status `completed``: only legit reviewed-transcription language (review of the merged STT) remains.
+- `seven collections|seven models`: legit seven-models contract, unchanged.
+
+### Mirrors (same change set)
+- `client/src/utils/constants.js`: `REPORT_STATUSES` 4-member (generated terminal); `REPORT_STATUS_LABELS.generated = 'Generated'`; `ITEM_TYPES`/`ITEM_STATUSES`/`ITEM_STATUSES_BY_TYPE` added; `report.completed` removed from `TOAST_CATALOGUE` (generation toast = `toast.generation.ready`; correction toast = `toast.correction.generated` "Correction generated — review and save", matching `useCorrection.js`).
+- `client/src/components/reusable/MuiStatusBadge.jsx`: `REPORT_COLOR_MAP` 4 states, `generated → "primary"`; `REPORT_STEP_INDEX`/`REPORT_STEP_LABELS` untouched (labels generic).
+- `.opencode/plan/phase-6-backend-apis.md` L38: digest-contract decision point replaced with the corrected-model paragraph (status path, report/branch/visits shape, transcription, items, TTLs, search index).
+- `.opencode/plan/phase-7-backend-integration.md`: "Manual acceptance" row is the §63.6 matrix name — no change.
+
+### §69 records
+- OQ-001 record fixed: content lives on the report's 1:1 Transcription row as `raw`/`latest` (BR-11, §23.2/§23.5); the report row carries content refs only (§21.2).
+- OQ-005 record fixed: four KPI cards (Reports this month, In progress, Generated, Active branches).
+- New record: "Pass-1 data-model corrections — CLOSED 2026-08-18 (owner approved 'Correct-the-Spec-Then-Rebuild', Stage 2 pass 1)".
+- New record: "Mock-DTO alignment — OPEN (carried by §52+ linking rounds)" — the mock still serves pre-correction shapes (5-state status, supervisorName/reportDate, per-visit clips, visitNo) while P3 client code consumes corrected DTOs; mock dies at P7 (§66.10 grep gate); only §25/§40/§66.10 may touch it.
+
+### Deferred (ride the mock-DTO OPEN record)
+- `client/src/mock/transport.js`, `client/src/mock/fixtures.js` — pre-correction DTO shapes, intact.
+- Non-mock consumers of old shapes: `client/src/redux/features/audioEndpoints.js` (visitNo URL params), `client/src/pages/ReportNew.jsx` + `client/src/components/report/StepReport.jsx` (status branches incl. reviewed/completed), `client/src/components/report/ReportPrint.jsx` (reportDate/supervisorName payload), `client/src/utils/wizardValidation.js` (supervisorName), `client/src/redux/features/searchEndpoints.js` (stale comment) — re-aligned in the §52–§58 linking rounds.
+
+### Verification (this pass)
+- Client lint: 0 on the two edited files (`npx eslint client/src/utils/constants.js client/src/components/reusable/MuiStatusBadge.jsx`). Full `npm run lint` exceeds the 180 s tool timeout — targeted eslint is the verified path.
+- `npx vite build`: 0 errors (chunk-size warning only); `dist/` deleted per §9.7.
+- Final grep sweeps: clean per F65 sweep list above.
+- §15.4 tree: generic per-entity placeholders — no change needed. §21.9/§21.10, §23.6, §32.8, §36, §66.10 audited — clean.
+
+### Commit status
+Single commit `chore: phase 4 owner-corrections` (spec + constants + MuiStatusBadge + phase-6 plan file) **held** for explicit user approval (§66.2 step 6). After approval: pass 2 (backend §25–§40).

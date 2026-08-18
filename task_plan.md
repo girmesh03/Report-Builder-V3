@@ -171,3 +171,87 @@ User reports after round-8.3: (1) with TEXT in the editor, picking a font size "
 - **Phases:** A) constants — `WIZARD.report.*`, `TOAST_CATALOGUE.report.saved/reverted`, export chrome; B) extraction — `useEditorHost`, `useCorrection`, `EditorFooter`, `CorrectionOpener` + StepTranscription refactor (smoke 56/56 gate); C) `StepReport` + `GenerateCard` + `ReportBodyCard` (+ ± strip/toggle + stale-latest notice) + ReportNew wiring (nextLabel Create/Finish, finish via ref, busy gate); D) Edit mode — route row, params/load/prefill, status-matched entry (draft/audio_attached→0, transcribed→2, reviewed→1, completed→3), supervisorName field + payload + mock create validation; E) export — `print/ReportPrint.jsx` + menu + TXT; F) strip `BR-`/`CR-` references (18 sites, plain language); G) verify — lint 0 · build 0 + rm dist · smoke 65/65 ALL PASS · console 0 · `CR-|BR-` 0 · mirrors (spec §11.5/§15.5/§31.2-1/§41.3/§52.2/§52.3/§52.8/§58.2/§66.10/§69 C1–C10+F65 + StepNavBar/ReportNew docstrings; §69-recorded) · commit+push gated. **P7 blocker found + fixed:** two new generate assertions failed because `createReportHandler` minted `_id: r-${counters.digest}` WITHOUT incrementing — every create before a digest op reused the same id, duplicating rows and letting later writes resolve against the FIRST (stale) row; fixed with `counters.digest++` (recorded at §66.10).
 - **Definition of done:** Add flow: transcription Next → the generate desk → Generate → the report body appears (editable, corrections open, ± strip, footer) → Create saves-if-dirty and navigates to the report details. Edit flow at completed: the final-report surface with Print/TXT export; XLSX/CSV disabled affordances. Font-size (OQ-010) untouched.
 - **P7 status: COMPLETE** — all phases A–G done and verified (smoke 65/65, lint 0, build 0 + dist deleted, console 0, CR/BR gate 0, mirrors recorded in the spec + §69). P8 (commit + push) still gated on explicit user approval.
+
+---
+
+# Correct-the-Spec-Then-Rebuild (standing effort, started 2026-08-18)
+
+## Goal
+Fix the root cause, then rebuild: re-derive every DERIVED spec section (§11, §12, §14–§60, §67, §68 — 51 sections) through the Supervisor → Architect pipeline, keep the 18 kernel sections untouched, then re-implement backend → endpoint tests → frontend linking from the corrected specification.
+
+## Next Step
+Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — Supervisor enumeration of the architecture user stories, presented to the owner for per-story add/remove, then WH batteries → derivations → corrections → register closes 5/5. (Checkpoint commit `chore: phase 4 owner-corrections` executed 2026-08-18.)
+
+## Stages (status)
+- Stage 0 — Boot: branch `spec-correction` created; kernel sections read (§1–§10, §13, §61–§66, §69); working files appended. **complete**
+- Stage 1 — Kernel classification: 18 KERNEL / 51 DERIVED, borderline calls decided by the Architect (F63); owner confirmed. **complete**
+- Stage 2 — Pipeline passes, dependency order: data model (§17–§24A) → architecture & constants (§11/§12/§14/§15/§16) → backend (§25–§40) → frontend (§41–§60) → cross-cutting (§67/§68); step-5 review gate per pass; coverage register (below) is the section inventory. **in progress — pass 1a closed, pass 1b NEXT**
+- Stage 3 — §63.9 audit C1–C6 green; §69 closure records; zero `TODO(open)` without an OQ row; coverage register reconciled 51/51 dispositions, zero partials. **pending** (hard gate before any code — freeze: no `backend/*`/`client/*` edits until then)
+- Stage 4 — Backend re-implementation per §15.4 (frontend frozen); Postman-style endpoint tests per endpoint (edge-case matrix, result ledger). **pending**
+- Stage 5 — Frontend linking & correction; mock adapter deleted (§66.10 grep gate). **pending**
+- Stage 6 — Close-out: §9.7 sweep, §63 gates, DoD, handoff report. **pending**
+
+## Standing rules for this effort
+- Pipeline chain (§66.5): standing instructions → corrected spec as sole behavioral input → reasoning → implementation.
+- Every derived answer: Supervisor → Architect WH battery → derivation from the §2.3 kernel and first principles — the codebase and the spec's own claims on the topic are never cited as justification.
+- **Role model (owner strict requirement, 2026-08-18):** the agent is the Supervisor AND the Architect/Engineer/UI-UX Designer and makes the decisions; the owner is the interaction partner only — review, add/remove, iterative questions, dig, blind spots; never a decision-maker. Nothing waits on an owner decision; preferences/unknowns become §69 OQ rows.
+- **User-story gate:** every Supervisor user story is presented to the owner one by one for add/remove before the Architect answers it; the full pass story list is enumerated up front.
+- **WH-battery transparency:** every WH question is presented to the owner before answers are derived.
+- Underivable → §69 OQ row with `TODO(open)`; never invented prose.
+- §66.6 same-change discipline on every correction (mirrors: §15 trees, §13 manifests, §14.3 ADR index, §11 constants, §69 records; the 5 controlled files — AGENTS.md, prompt.md, findings.md, progress.md, task_plan.md — corrected in the same change set iff something in them needs correcting).
+- Working files: append-only; phase-4 content kept as the error record.
+- Git: branch `spec-correction` holds all spec corrections; on full correction a new branch is created for re-implementation and `spec-correction` is deleted; no commit/push/merge/delete without explicit owner approval (§9.8 step 5).
+
+## Coverage register (51 DERIVED sections; per-section status + NEXT pointer)
+
+### Pass 1a — data model [CLOSED]
+| Section | Status | Disposition | Evidence |
+|---|---|---|---|
+| §17 Data system overview | closed | re-derived | F65/ledger |
+| §18 Data model conventions | closed | re-derived (one TTL, seven-models contract) | F65/ledger |
+| §19 User model | closed | re-derived | §19 text |
+| §20 Branch model | closed | re-derived (reference contract, no TTL) | §20 text |
+| §21 Report model | closed | re-derived (no content fields, visits[], 1:1 ref) | §21 text |
+| §22 Audio model | closed | re-derived (report binding, no visit key) | §22 text |
+| §23 Transcription model | closed | re-derived (1:1, raw/latest, ADR-030) | §23 text |
+| §24 ChatConversation model | closed | audited-no-change | §24 text |
+| §24A Item model (new) | closed | re-derived (per-type status/rating) | §24A text |
+
+### Pass 1b — architecture & constants [IN PROGRESS]
+| Section | Status | Disposition | Evidence |
+|---|---|---|---|
+| §11 Constants | NEXT | not-started | — (partial §11.4/§11.5 only) |
+| §12 System architecture | not-started | not-started | — (partial: §12.2/§12.4/§12.11-1 touched) |
+| §14 ADR index | not-started | not-started | — (only §14.3 row fixed) |
+| §15 Project structure | not-started | not-started | — (§15.4/§15.5 audited only) |
+| §16 AI provider contracts | not-started | not-started | — (no re-derivation record — the confirmed skip) |
+
+### Pass 2 — backend §25–§40 [pending]
+§25 §26 §27 §28 §29 §30 §31 §32 §33 §34 §35 §36 §37 §38 §39 §40
+
+### Pass 3 — frontend §41–§60 [pending]
+§41 §42 §43 §44 §45 §46 §47 §48 §49 §50 §51 §52 §53 §54 §55 §56 §57 §58 §59 §60
+
+### Pass 4 — cross-cutting §67/§68 [pending]
+§67 §68
+
+---
+
+## Stage 2 pass 1 — data-model correction set (owner-approved plan; **COMPLETE**)
+
+### Goal
+Apply the owner-approved 2026-08-18 correction set to the spec + mirrors: 4-status machine, one-report-one-branch + positional `visits[]`, single Item collection (§24A), 1:1 Transcription, digest/tombstone retirement, seven schemas.
+
+### Next Step
+Checkpoint commit executed on approval (2026-08-18). Next: pass 1b (architecture §11/§12/§14/§15/§16 — coverage register above), then pass 2 (backend §25–§40) after the pass-1b gate.
+
+### Work done
+- **Kernel passes 1–2 (earlier sessions):** §5 BRs, §6.3/§6.4/§6.10 rewrite + §6.11 retired pointer, §11.4/§11.5, §9.3/§12.11-1 routes, §17 (seven entities), §18 (one TTL), §20/§21/§22/§23/§24A/§31/§32.
+- **Pass-1 rewrites:** §33 STT (1:1 merged Transcription, re-transcribe same-row rewrite, frozen at `generated`, no per-clip accept, endpoints matrix), §34 generation (writes `latest` + Item rows in one atomic session; `transcribed → generated` terminal; regen only from `transcribed`; chain addis→gemini→nvidia), §35 corrections (Mode-1 at every status incl. `generated`; candidate = editable draft, no accept; corrections never touch Item rows; revert pre-`generated` only), §37 export (`{content: latest, date, branchName, visits}`; `generated` not required), §38 analytics (`{reportsThisMonth, inProgress, generated, activeBranches}`; four-slice statusDistribution; activityByBranch via `$lookup`; `GET /analytics/items` reads Item rows only), §39 search (exactly ONE text index — branches; reports matched by `$in` on resolved branch ObjectIds).
+- **Touched throughout:** §1.4/§1.5, §2.4 SC-4, §3.1.2 F3/F4, §3.2.3, BR-18, §8.5, §12.4 canonical sequence, §15.4 comment, §18.4/§18.10, §24.4/§24.5/§24.10, §25 mock rules + fixture inventory, §27.5/§27.7, §28.5/§28.6, §29.3 (visitNo out, ITEM_* in), §30.1/§30.4/§30.5/§30.7, §40 fixture keys, §43.2/§44.3, §45.3, §46.12 (MuiFileInput)/§46.13 (4-status badge)/§46.17 (MuiRecorder + MuiRegistrationValue), §49.2/§49.3/§49.4, §50.4/§50.5/§50.6/§50.8, §51.1–§51.7 (full rewrite), §52.3–§52.10, §53.2/§53.5/§53.6, §54.2/§54.3/§54.4/§54.6, §55.4/§55.5, §56.3/§56.5/§56.6, §57.3, §58.1–§58.5, §60.5/§60.6, §61.3, §62.1–§62.9 (sweeper: reference check for branches, ONE TTL), §63.4/§63.6, §67 R-17, §68 glossary table, §69 (OQ-001/005 records fixed + pass-1 record + mock-DTO deferral OPEN), §14.3 ADR-005 row.
+- **Mirrors:** `client/src/utils/constants.js` (REPORT_STATUSES 4-member, labels, ITEM_TYPES/ITEM_STATUSES/ITEM_STATUSES_BY_TYPE added, `report.completed` toast removed), `client/src/components/reusable/MuiStatusBadge.jsx` (color map 4 states, generated → primary), `.opencode/plan/phase-6-backend-apis.md` (L38 digest ref → corrected contract).
+- **Deferred (flagged in §69, mock-DTO alignment OPEN):** `client/src/mock/*` + the non-mock client flows that consume old DTO shapes (audioEndpoints visitNo URLs, ReportNew/StepReport status branches, ReportPrint payload, wizardValidation supervisorName, searchEndpoints comment) — re-aligned with the §52–§58 linking rounds; mock dies at P7.
+- **Verification:** `node --check` n/a (no backend changes); client lint 0 on edited files; `npx vite build` 0 errors + `dist/` deleted; final grep sweeps clean (visitNo/tombstone/digest/accept/TTL-count/status vocabulary — remaining hits are negations, retirement text, or historical records).
+
+### Phase H (commit)
+- [x] Single commit executed on explicit owner approval (2026-08-18) — `chore: phase 4 owner-corrections` (spec + constants + MuiStatusBadge + phase-6 plan file + the 5 controlled files; excludes mock re-alignment; no push).
