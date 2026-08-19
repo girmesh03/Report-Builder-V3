@@ -152,3 +152,20 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - **Verified no-change:** A2 chronology index, A3 item five-index proof rule, A4 stt subdoc vs §16.4 permission; all nine per-section verification gates re-run.
 - **Register:** pass 1a audit re-pass closed; findings F74; this log.
 - **NEXT:** step-5 review gate — pass-1a/pass-1b close-out report + commit request (explicit owner approval required) → pass 2 (backend §25–§40) Supervisor story gate.
+
+## Session 2026-08-19 — Route-contract review COMPLETE (F75)
+
+- **Story gate:** the owner's six route directives (no /auth/me → redux persist; no session endpoints → cookies; no users management — solo user, "a solo user can't call users"; branch-detail aggregate; main-locked visits incl. main at [0] in both create cases; output to a file) presented as the pass plan; refinements inline: `/users` namespace rejected ("there is no Users management"), then users dropped entirely, "group by frontend pages", "no tables just like the above".
+- **Deliverable:** `.opencode/plan/route-contract-review.md` — the complete corrected backend surface, **48 endpoints**, grouped by frontend page (boot/session, auth, profile, dashboard, branches grid, branch details, reports list, report details, wizard, correction dialog, chat, exports, search, dev-only), each endpoint with exact request/response JSON, envelope/DTO/error shapes, literal vs derived tags; appendices: master index, drift register B1–B7, decision list C1–C8 for sign-off. Written on "proceed"; verified (48 endpoints + 7 cross-refs, no tables).
+- **Grounded:** four-status machine (`REPORT_STATUSES`, §11.4 BR-06) — statusDistribution one `$group` per member, 0-filled, order preserved (§38.2); clips list `docs: []` empty-no-404 (§32.3); search zero-match `docs: []` + `matchedFields: []` (§39); user's visits payload contract per the owner's model.
+- **Register:** route-contract review recorded (F75); NEXT → pass-1a/pass-1b close-out report + commit request → pass 2 (backend §25–§40) Supervisor story gate, route contract as the pass input.
+
+## Session 2026-08-19 — Route-contract fold COMPLETE (F75/F76)
+
+- **Owner:** "plan to include route-contract-review.md in spec and next gate. remember, the route-contract-review.md will be deleted" → fold plan presented (C1 kernel amendment ask included); "proceed".
+- **Fold executed (one change set, `spec-correction`):**
+  - §26.6 health JSON; §28 removals (`/auth/me`, sessions rows, `optionalAuth`) + PATCH profile / GET avatar rows + §28.7 collision-heuristic fix + no-users-management note + register/login/refresh/logout/profile/avatar contract JSON; §30 + new §30.2.1 detail aggregate (branch + paginated reports + 4-member 0-filled analytics + items) with JSON; §31 rewrite (§31.2-1 create payload with visits ≥ 1 main-locked at [0], §31.2-2 visits PUT, §31.3 branch filter, §31.5 index-0 lock + branch-swap re-validation, §31.6 items `{items}`, generations single round-trip, §31.9 matrix + JSON); §32/§33/§36/§37/§38/§39/§40 contract JSON; §24A.3 items-path fix; §21.7/§6.10 kernel-mirror wording; kernel C1 applied (§6.4 Type = visits.length + main at [0], BR-03, §6.8, §21.2, §21.1 supervisorName 422); §57.4 retired; §42.3/§57.6 boot-probe notes; §56.5 rewritten to the aggregate; §69.3.1 fold record (C1–C8 all RESOLVED + fold-time correction: branch duplicate-name 409 folded away per §30.3/§30.7).
+- **Review file DELETED** per the owner directive after the fold.
+- **Verification:** legacy route literals in the spec are removal-context only (greps); every contract endpoint has a §28/§30/§31/§32/§33/§36/§37/§38/§39/§40 matrix row + JSON; route-param `:branchId` forms kept (§9.3).
+- **Working files:** task_plan NEXT pointer → close-out sweep + commit request → pass 2 story gate; findings F76; this log.
+- **NEXT:** close-out sweep (git status/diff review) + commit request — explicit owner approval required → then pass 2 (backend §25–§40) Supervisor story gate with the folded contract as the pass input.

@@ -802,9 +802,12 @@ live in their owning sections: §6–§8 (format, language, AI rules), §21/§31
   Type-2).** A report always covers exactly one branch — the report's
   branch (§21.2) — regardless of the day's visits. The day's visits to
   other branches (or return visits to the report's own branch) are
-  captured in `visits[]`. The format type is derived from the visit
-  count: **Type = 1 + visits.length** — Type-1 when `visits` is empty
-  (the day pair alone), Type-2 when one or more visits exist, with a
+  captured in `visits[]`, whose first entry is always the report's own
+  branch (`visits[0].branch === branch` — the main visit is always
+  present; owner's visits model, 2026-08-19). The format type is
+  derived from the visit
+  count: **Type = visits.length** — Type-1 when `visits` holds only
+  the main entry, Type-2 when additional visits exist, with a
   per-visit time-range line and `/`-joined branch names on the branch
   line (§1.6, §2.2 G5, §2.4 SC-4).
 - **BR-04 — Report content contract.** A completed report explains: the
@@ -1007,17 +1010,21 @@ from the requirements:
 ከ07:55 - 12:20 ኤርፖርት ብራንች
 ```
 
-**Type-1 — single branch (no visits):**
+**Type-1 — single branch (main visit only):**
 
-- The day covers the report's branch only — `visits[]` is empty.
+- The day covers the report's branch only — `visits[]` holds
+  exactly the main entry (`visits.length === 1`; the main branch
+  is always the first visit, `visits[0].branch === branch` —
+  owner's visits model, §31.2-1, 2026-08-19).
 - `ብራንች:` line contains the report's branch name.
 - `ስራ የገባሁበት ሰዓት:` line contains a single work-start time —
   the day pair's `clockIn` (`HH:mm`).
 
-**Type-2 — one or more visits:**
+**Type-2 — multiple branches (main visit plus one or more
+additional visits):**
 
-- The day covers the report's branch plus one or more visits
-  (`visits[]` non-empty).
+- The day covers the report's branch plus one or more additional
+  visits (`visits.length ≥ 2`).
 - `ብራንች:` line lists all visited branches joined with ` / ` (e.g.
   `መድኃኒዓለም / ኤርፖርት`); a branch visited more than once is listed
   once in this header line.
@@ -1031,11 +1038,14 @@ from the requirements:
   (see Sample 4).
 
 The type is derived deterministically from the **visit count**:
-`visits[]` empty → Type-1; one or more visits → Type-2 — the count of
-visits governs, not the count of distinct branches, so a day visiting
-one branch twice is a Type-2 day (§21.2). **Type = 1 + visits.length**
-(the main visit counts). The day sequence is the main visit plus
-`visits[]`, sorted by `clockIn`; the `ብራንች:` line and the time-range
+`visits.length === 1` → Type-1; `visits.length ≥ 2` → Type-2 —
+the count of visits governs, not the count of distinct branches,
+so a day visiting one branch twice (main + return) is a Type-2
+day (§21.2). **Type = visits.length** — the main branch is always
+the first visit (`visits[0]`), so the count already includes it
+(owner's visits model, 2026-08-19; C1 kernel amendment). The day
+sequence is `visits[]` in stored order (main first), sorted by
+`clockIn`; the `ብራንች:` line and the time-range
 lines follow that order.
 - Day start = the earliest `clockIn` of the day sequence.
 - The final `ከስራ የወጣሁበት ሰዓት:` equals the latest `clockOut` (the
@@ -1248,8 +1258,8 @@ content, not metadata). The fallback order for a missing value is form → revie
 transcription → blank/"not specified" (BR-19, §6.3 value-source
 cells, §8 rule 6); a value is never invented. The `ብራንች:` header
 line, the per-visit time-range lines, the day start/exit, and the
-type (Type-1/Type-2 — `visits[]` empty vs non-empty, **Type = 1 +
-visits.length**) are derived deterministically from `date`/`branch`/
+type (Type-1/Type-2 — main visit only vs additional visits,
+**Type = visits.length**, §6.4) are derived deterministically from `date`/`branch`/
 `clockIn`/`clockOut`/`visits[]` per §6.4 and are never stored as
 copies (§21.2). On a Type-2 day the branch names join with ` / `
 in chronological visit order (§6.4); a branch visited twice —
@@ -1307,8 +1317,9 @@ locked for this phase:
    fallback `form → reviewed transcription → blank` (BR-19).
 2. Audio carries content only (activities, issues, comments; any
    order) — never metadata.
-3. Type = 1 + visits.length — `visits[]` empty → Type-1, one or
-   more visits → Type-2 (§6.4, ADR-010).
+3. Type = visits.length — the main branch is always the first
+   visit (`visits[0]`, owner's visits model 2026-08-19); main only
+   → Type-1, additional visits → Type-2 (§6.4, ADR-010).
 4. Header lines derive deterministically from `date`/`branch`/
    `clockIn`/`clockOut`/`visits[]`; the `ብራንች:` value is the
    chronological ` / ` join — never a stored copy, never
@@ -1342,7 +1353,7 @@ locked for this phase:
 | 4 | Correction adds/removes a visit | `visits[]` is re-derived on the report row; item rows are untouched (they carry the report's branch + date, not visits). |
 | 5 | No rating voiced | `rating: null` — valid. |
 | 6 | No comment voiced | `comment.text: null` — valid (the comment row exists with null text). |
-| 7 | Zero visits or no audio | The wizard blocks generation (invalid report; §31.2 creation steps, §52.10). |
+| 7 | No audio (visits are never zero — the main visit is always present, §6.4/§31.2-1) | The wizard blocks generation (invalid report; §31.2 creation steps, §52.10). |
 | 8 | Multiple clips on the report tab | All merge into the report's transcription (§33) — order-independent. |
 | 9 | Spoken `በሁለቱም ብራንቾች…` | Content of the report body — no global bind, no attribution rule (retired). |
 | 10 | Capture edit after generation | Refused (403): capture fields are editable only at status < `generated` (§21.7). |
@@ -4699,7 +4710,7 @@ the §18 conventions exactly like §19 and §20.
 | `date` | Date | no (null while not captured) | the report date field of §17.2 — the `ቀን` metadata value (the form's report date, §6.3); captured at capture time, never derived from the system clock (BR-01, §6.1, §6.3); fallback from the reviewed transcription, missing stays blank, never invented (BR-19); stored as a UTC `Date` normalized to UTC midnight by the §29 validators (§18.2, §29) and displayed as Ethiopian `DD-MM-YY` at the boundary (§6.5, §7.6); range queries use the same UTC-midnight normalization |
 | `branch` | ObjectId (ref Branch) | yes | the report's branch — one report, one branch (BR-03, ADR-010); the live join key of the ERD Branch — Report edge (§17.3); drives branch filters, pickers, and analytics (no snapshot, no name copy — §18.7); removal of a referenced branch is refused (§20/§30/§62) |
 | `clockIn` / `clockOut` | String | yes | the day pair of the main visit — `HH:mm` zero-padded (§6.5); on a Type-1 day this pair is the whole working-time line; on a Type-2 day it renders as the main visit's time-range line like every `visits[]` entry (§6.4); times are display-only — no `out > in` enforcement (§6.1, owner-approval 2026-08-18); validated by the §29 validators, never composed in the schema |
-| `visits` | Array | yes (default `[]`) | the capture block — each entry is `{ branch: ObjectId (ref Branch, required), clockIn: String (required — `HH:mm`, §6.5), clockOut: String (required — `HH:mm`) }` with `_id: false`; entries are addressed **positionally by array index** (no `visitNo` key, §9.3) and stored in capture order; `visits[]` may include the report's own `branch` as RETURN visits (§6.4); the type derives from the count — **Type = 1 + visits.length** (§6.4); a branch visited twice appears as two entries (§6.4, Sample 4) |
+| `visits` | Array | yes (≥ 1 — the main visit is always the first entry) | the capture block — each entry is `{ branch: ObjectId (ref Branch, required), clockIn: String (required — `HH:mm`, §6.5), clockOut: String (required — `HH:mm`) }` with `_id: false`; entries are addressed **positionally by array index** (no `visitNo` key, §9.3) and stored in capture order; **`visits[0].branch === branch` — the report's own branch is always the first visit and is locked** (owner's visits model 2026-08-19, C1/C3 — the API enforces it: `visits` ≥ 1, `visits[0]` matches, index 0 undeletable, §31); `visits[]` may include the report's own `branch` as RETURN visits at later indexes (§6.4); the type derives from the count — **Type = visits.length** (§6.4); a branch visited twice appears as two entries (§6.4, Sample 4) |
 | `status` | String | yes (default `draft`) | member of `REPORT_STATUSES` (§11.4, BR-06, §17.2); the value always comes from the constants file, never a literal (§17.7 gates); reports enter the machine at `draft` because the wizard is the only creation path (BR-05) |
 | `transcription` | ObjectId (ref Transcription) | no (null until transcribed) | the **1:1** Transcription row reference — unique, sparse (§21.3, §23); written in the same session as the Transcription row (§23.2); null until the first transcription completes |
 | `isArchived` | Boolean | yes (default `false`) | lifecycle flag (BR-16, F4); archived rows are hidden from default reads and appear only under explicit filters (§17.4) |
@@ -4832,14 +4843,17 @@ The report document has exactly three states; there is no
   BR-19). Of those values the row stores `date`, `branch`,
   `clockIn`/`clockOut`, and `visits`; the `ብራንች:` header line, the
   time-range lines, the day start/exit, and the type are derived per
-  the locked §6.4 rules (Type = 1 + visits.length; chronological
+  the locked §6.4 rules (Type = visits.length — the main visit is
+  always `visits[0]`; chronological
   visit-start order; Type-2 names joined with ` / ` where a branch
   visited more than once is listed once in the header while its
   visits keep separate time-range lines; day start = earliest
   `clockIn`, day exit = the latest `clockOut`).
 - **One block, one source.** `branch` + `clockIn`/`clockOut` (the
   main visit) and `visits[]` are written from the capture form at
-  the same capture moment; the main visit is the day pair and every
+  the same capture moment; the main visit is the day pair and
+  **is always the first `visits[]` entry** (`visits[0].branch ===
+  branch` — owner's visits model 2026-08-19, §31.2-1), and every
   `visits[]` entry is a full visit with its own required pair
   (OQ-002 closed by amendment below). Capture edits (wizard flow,
   §52) update the block inside a single write — the coupling is
@@ -4925,7 +4939,10 @@ owning subsection and repeated nowhere else:
 
 1. **No `supervisorName` — the name is a join, not a snapshot.** The
    `ስም` header renders the user's `fullName` virtual at the boundary
-   (§19.4, §6.3 field 3); the report stores no name field. A profile
+   (§19.4, §6.3 field 3); the report stores no name field and the
+   creation payload never accepts one (a `supervisorName` key in
+   `POST /reports` → 422 — owner directive 2026-08-19; the
+   frontend dropped the field). A profile
    rename applies to new prints; the report's other header values
    (branch names) are live joins too — the whole header derives from
    live data, never stored copies (→ §21.2; §18.7; removed by the
@@ -5588,7 +5605,8 @@ this table is persisted.
   the report-detail DTO join (§31.6/§50, `withContent`).
 - **Branch–date–type–status.** `schema.index({ user: 1, branch: 1,
   date: 1, type: 1, status: 1 })` — serves the §38 filtering contract
-  (`GET /reports/items?branchId&type&status&date…`) and the §49/§56
+  (`GET /analytics/items?branch&type&status&date…` — canonical
+  path, §38.2) and the §49/§56
   rolls.
 - **Type–status–date.** `schema.index({ user: 1, type: 1, status: 1,
   date: 1 })` — serves the §49 dashboard counts (status distribution
@@ -5902,7 +5920,15 @@ listening. Health endpoint (mounted under `/api/v1`, defined in
 `routes/index.js`): `GET /api/v1/health` → 200
 `{ success: true, message: 'OK', data: { status: 'up', uptime } }`
 — unauthenticated, excluded from rate-limit tiers (§27.3), never
-touches the database.
+touches the database. Contract:
+
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": { "status": "up", "uptime": 3600 }
+}
+```
 
 **Graceful shutdown (ADR-013):** on `SIGINT`/`SIGTERM` —
 stop accepting connections (`server.close()`), clear the sweeper
@@ -6091,7 +6117,7 @@ startSession → startTransaction → writes (session-aware models) → commitTr
 ### 28.1 Purpose & scope
 
 §28 owns the auth surface (register, login, logout, refresh,
-current-user, profile, avatar) and everything the `req.user`
+profile, avatar) and everything the `req.user`
 identity provides to the other domains. It exists because §3.2.2
 (Self-service registration, ADR-009), §19 (single account type,
 ADR-036), §12.7 (dual-token JWT, ADR-004) and the ownership rule
@@ -6123,10 +6149,12 @@ BR-13 require one authoritative identity contract.
   `SameSite=Lax`, `Secure` in production). Values are JWTs signed
   with `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`; payload =
   `{ sub: user._id, type: 'access'|'refresh' }`.
-- **Rotation:** every refresh issues a new refresh token and
-  invalidates the presented one (a rotation-token use set stored
-  in-memory is acceptable; no server-side session store beyond
-  it). Forced logout (§28.3) clears cookies; there is no
+- **Rotation:** every refresh issues a new refresh token (fresh
+  JWT, fresh `exp`) and the presented one is never reused again;
+  there is **no server-side session store and no sessions
+  bookkeeping** (owner directive 2026-08-19 — the sessions card
+  and its endpoints were removed; rotation is purely cookie
+  mechanics). Forced logout (§28.3) clears cookies; there is no
   server-side blacklist for access tokens within their 15-minute
   window (documented acceptance).
 - **No delegation:** `req.user` is always the authenticated
@@ -6141,9 +6169,15 @@ BR-13 require one authoritative identity contract.
 | `POST /auth/login` | none | `{ email, password }` | 200 `{ data: { user: UserDto } }` + cookies | 401 invalid credentials (identical message for unknown email/ wrong password — no user enumeration) |
 | `POST /auth/refresh` | refresh cookie | — | 200 `{ data: { user: UserDto } }` + rotated refresh cookie | 401 expired/absent/unusable refresh token |
 | `POST /auth/logout` | optional | — | 200 `{ success: true, message, data: null }`; clears both cookies | — |
-| `GET /auth/me` | access | — | 200 `{ data: { user: UserDto } }` | 401 |
-| `GET /auth/sessions` | access | — | 200 `{ data: { sessions: [...] } }` — active refresh tokens (issued-after `exp` bookkeeping); no secrets | 401 |
-| `DELETE /auth/sessions/:sessionId` | access | — | 200; invalidates that rotation token | 401, 404 |
+| `PATCH /auth/profile` | access | `{ position }` or multipart (`avatar`) | 200 `{ data: { user: UserDto } }` (fresh DTO) | 422 validation; 401 |
+| `GET /auth/avatar` | access | — | 200 — the avatar image stream (`Content-Type` from `AVATAR_ALLOWED_MIME_TYPES`) | 401; 404 no avatar |
+
+No `GET /auth/me` (client hydration comes from redux-persist —
+owner directive 2026-08-19; there is no boot-probe, §42) and no
+session-list/invalidate endpoints (cookies only — the §57.4
+sessions card is removed). There are **no users-management
+endpoints anywhere** — the application is single-user and a solo
+user cannot manage users (owner directive 2026-08-19).
 
 Validation chains: §29 (`user.validator.js`). Passwords hash via
 the §19 `pre('save')` hook with `BCRYPT_SALT_ROUNDS`; login uses
@@ -6151,19 +6185,91 @@ the §19 `pre('save')` hook with `BCRYPT_SALT_ROUNDS`; login uses
 local part per §19 at creation — never accepted from the client
 (422 if present).
 
+**Contract JSON** (folded from the route-contract review,
+2026-08-19; literal §28.3 rows + §27.4 envelope; 422 shapes add
+`details: [{ field, message }]` per §29.2; the auth tier's 429
+body is the standard §27.3 shape):
+
+`POST /auth/register` — request:
+
+```json
+{
+  "email": "beza.ayalew@example.com",
+  "password": "secret123"
+}
+```
+
+`POST /auth/register` — 201:
+
+```json
+{
+  "success": true,
+  "message": "Account created",
+  "data": {
+    "user": {
+      "_id": "64f1a2b3c4d5e6f7a8b9c0d1",
+      "email": "beza.ayalew@example.com",
+      "firstName": "beza",
+      "lastName": "ayalew",
+      "fullName": "beza ayalew",
+      "avatar": null,
+      "position": null,
+      "createdAt": "2026-08-19T10:15:30.000Z",
+      "updatedAt": "2026-08-19T10:15:30.000Z"
+    }
+  }
+}
+```
+
+409 (dup email): `{ "success": false, "message": "An account
+with this email already exists", "data": null }`.
+
+`POST /auth/login` — request:
+
+```json
+{
+  "email": "beza.ayalew@example.com",
+  "password": "secret123"
+}
+```
+
+`POST /auth/login` — 200: same body as register's 201 but with
+cookies set and `message` "Welcome back". 401 (identical for
+unknown email and wrong password): `{ "success": false,
+"message": "Incorrect email or password", "data": null }`.
+
+`POST /auth/refresh` — no body; 200: `{ "success": true,
+"message": "Session refreshed", "data": { "user": UserDto } }` +
+rotated refresh cookie; 401: `{ "success": false, "message":
+"Session expired — sign in again", "data": null }`.
+
+`POST /auth/logout` — no body; 200 (idempotent, even with no
+session): `{ "success": true, "message": "Signed out", "data":
+null }`.
+
+`PATCH /auth/profile` — JSON request `{ "position": "Daily
+supervisor" }` or multipart field `avatar`; 200 returns the fresh
+UserDto (§28.5). 422 example: `{ "success": false, "message":
+"Check the highlighted fields", "data": null, "details":
+[{ "field": "position", "message": "Position is too long" }] }`.
+
+`GET /auth/avatar` — 200: image stream (`Content-Type:
+image/webp` or `image/jpeg`, `Cache-Control` set); 404: `{
+"success": false, "message": "No avatar", "data": null }`.
+
 ### 28.4 Auth middleware (`middleware/auth.js`)
 
 `authenticate` reads the `accessToken` cookie, verifies the JWT
 (secret, type `access`, expiry), loads the user by `sub`
 (`select('+password')` never — plain `.lean()`), attaches
 `req.user = { _id, email, firstName, lastName, fullName, avatar,
-position }`, else 401. `optionalAuth` (used only by `GET
-/auth/me`'s refresh-probe per §42) tolerates a missing cookie.
-Per-domain routes apply `authenticate` on the protected group of
-their route module (§30–§39); `/auth/register` and `/auth/login`
-skip it; `/auth/refresh` uses the refresh cookie directly.
-Controllers read `req.user._id` and `req.validated` and never
-parse cookies themselves (§26.4).
+position }`, else 401. There is no `optionalAuth` (its only
+consumer, the `GET /auth/me` boot-probe, was removed with the
+endpoint). Per-domain routes apply `authenticate` on the
+protected group of their route module (§30–§39); `/auth/register`
+and `/auth/login` skip it; `/auth/refresh` uses the refresh
+cookie directly. Controllers read `req.user._id` and
+`req.validated` and never parse cookies themselves (§26.4).
 
 ### 28.5 Profile & avatar
 
@@ -6194,8 +6300,9 @@ integration is planned.
 ### 28.7 States & edge cases
 
 - Login failure — 401, cookie-less response; refresh rotation
-  collision (reuse of a rotated token) → clear both cookies and
-  401 (theft heuristic, documented in §69).
+  is pure cookie mechanics with no server-side reuse store
+  (§28.2); a rejected/expired refresh cookie → 401 and a
+  client-side redirect to the login page.
 - Duplicate registration email → 409 `CONFLICT` via the dup-key
   11000 detection (§27.5), message "This email is already
   registered".
@@ -6365,6 +6472,55 @@ found **for this user** (BR-13 scoping — the query is
 `{ _id, user }`, so another user's branch never leaks a 403 or
 a 404 difference beyond the same 404).
 
+### 30.2.1 Branch details aggregate (owner directive 2026-08-19)
+
+`GET /branches/:branchId/detail` (access, global tier) — **one
+call serving the whole §56.5 branch-detail page**; the server
+computes; the client never fans out. Request query: `page`,
+`limit` (apply to the `reports` list only). Response: §27.4
+envelope with `data: { branch: BranchDto, reports: paginated
+ReportListDtos (§31.3, newest first, `isArchived: false` by
+default), analytics, items }`. `analytics`:
+`{ reportsTotal, reportsThisMonth, statusDistribution, openIssues,
+activitiesCompleted, commentCount, issuesTrend }` —
+`statusDistribution` lists all four `REPORT_STATUSES` members in
+order, zero-filled (§38.2); `openIssues` = issue Item rows with
+`status: open`; `activitiesCompleted` = activity Item rows with
+`status: resolved`; `issuesTrend` = 30-day daily counts.
+`items` groups the branch's Item rows by type:
+`{ activities, issues, comments }`. Errors: 401, 404 (branch not
+found for this user).
+
+```json
+{
+  "success": true,
+  "message": "Branch details",
+  "data": {
+    "branch": { "…": "BranchDto" },
+    "reports": { "docs": [ { "…": "ReportListDto" } ], "page": 1, "limit": 10, "totalDocs": 3, "totalPages": 1 },
+    "analytics": {
+      "reportsTotal": 3,
+      "reportsThisMonth": 2,
+      "statusDistribution": [
+        { "status": "draft", "count": 0 },
+        { "status": "audio_attached", "count": 0 },
+        { "status": "transcribed", "count": 1 },
+        { "status": "generated", "count": 1 }
+      ],
+      "openIssues": 1,
+      "activitiesCompleted": 4,
+      "commentCount": 1,
+      "issuesTrend": [ { "date": "2026-08-19", "count": 1 } ]
+    },
+    "items": {
+      "activities": [ { "…": "ItemDto" } ],
+      "issues": [ { "…": "ItemDto" } ],
+      "comments": []
+    }
+  }
+}
+```
+
 ### 30.3 Create
 
 `POST /branches` (access): `{ name, location }` (both required
@@ -6435,11 +6591,50 @@ row removal happens only in the sweeper after
 |---|---|---|---|---|
 | `GET /branches` | access | query `{ page, limit, sort, isArchived }` | 200 paginated BranchDtos | 401, 422 |
 | `GET /branches/:branchId` | access | — | 200 BranchDto | 401, 404 |
+| `GET /branches/:branchId/detail` | access | query `{ page, limit }` | 200 aggregate (§30.2.1) | 401, 404 |
 | `POST /branches` | access | `{ name, location }` | 201 BranchDto | 400/422 |
 | `PATCH /branches/:branchId` | access | `{ name?, location? }` | 200 BranchDto | 400/422, 404 |
 | `POST /branches/:branchId/archive` | access | — | 200 BranchDto | 401, 404, 409 |
 | `POST /branches/:branchId/restore` | access | — | 200 BranchDto | 401, 404, 409 |
 | `DELETE /branches/:branchId` | access | — | 200 (archived→retention) | 401, 404, 409 |
+
+**Contract JSON** (folded from the route-contract review,
+2026-08-19): BranchDto is `{ _id, user, name, location,
+isArchived, archivedAt, createdAt, updatedAt }`.
+
+`POST /branches` — request:
+
+```json
+{
+  "name": "Addis — Mexico",
+  "location": "Mexico Square, Addis Ababa"
+}
+```
+
+201: `{ "success": true, "message": "Branch created", "data":
+BranchDto }`. Validation: `name` 1..100 trimmed, `location`
+1..200 (§30.3); **duplicate names are allowed** (no unique
+index, §20 — there is no 409 on create; the review file's
+draft 409 was folded away against §30.3/§30.7).
+
+`PATCH /branches/:branchId` — 200: `{ "success": true, "message":
+"Branch updated", "data": BranchDto }`; empty body → 422.
+
+`POST /branches/:branchId/archive` — 200: `{ "success": true,
+"message": "Branch archived", "data": BranchDto }` with
+`isArchived: true`, `archivedAt` set; 409 re-archive:
+`{ "success": false, "message": "Branch is already archived",
+"data": null }`.
+
+`POST /branches/:branchId/restore` — 200: `{ "success": true,
+"message": "Branch restored", "data": BranchDto }` with
+`isArchived: false`, `archivedAt: null`; 409 when not archived.
+
+`DELETE /branches/:branchId` — 200 (202-style semantics, §30.6):
+`{ "success": true, "message": "Branch archived — it will be
+permanently removed after the retention period", "data":
+{ "archived": true } }`; the row is hard-deleted only by the
+sweeper after `ARCHIVED_TTL_SECONDS` (§62).
 
 ### 30.9 Verification usage
 
@@ -6496,28 +6691,37 @@ client registry exists. (Round-report-step amendment, C1: the
 §52 wizard merges Visits into step 1, so §31.2-1 is the only
 step-1 endpoint; §31.2-2 … §31.2-5 remain the act order.)
 
-**§31.2-1** `POST /reports` (access): `{ branchId, date?,
-clockIn, clockOut }` (date optional Date ISO) → 201 CREATED,
-ReportDto at `draft`, `visits: []`, `transcription: null`. The
-report row exists before visits/audio;
-wizard step 1 maps here (the payload carries the editable
-`branchId` and the day clock pair from the step-1 fields). No
-`lng`/`lat`
+**§31.2-1** `POST /reports` (access): `{ branch, date?,
+clockIn, clockOut, visits: [{ branch, clockIn, clockOut }, …] }`
+(`date` optional Date ISO; the wire field is `branch`, never
+`branchId` — owner directive 2026-08-19) → 201 CREATED,
+ReportDto at `draft`, `transcription: null`. **Visits contract
+(owner's model, C1/C3):** `visits` is required and never empty —
+it always includes the main branch at index 0 in both create
+cases (with or without additional visits); `visits[0].branch ===
+branch` (main-locked — 422 otherwise, `details[0] = { field:
+"visits[0].branch", … }`); `Type = visits.length` (§6.4, §21.2
+amendment). The report row exists before audio;
+wizard step 1 maps here. No `lng`/`lat`
 exists anywhere (§21.2) — no coordinate endpoint exists, and
-none is planned. The `ስም` header is never sent: it renders the
-user's `fullName` (§19.4, §6.3 field 3).
-Validation: `branchId` resolves to an **active** branch of this
-user (404/422 otherwise); `clockIn`/`clockOut` `HH:mm` (§29);
-times are display-only — no `out > in` enforcement (§6.1).
+none is planned. The `ስም` header is never sent and
+`supervisorName` is never accepted: the report carries no name —
+the header renders the user's live `fullName` at read time
+(§19.4, §6.3 field 3, §21.2).
+Validation: every `branch` resolves to an **active** branch of
+this user (404/422 otherwise); `clockIn`/`clockOut` `HH:mm`
+(§29); times are display-only — no `out > in` enforcement (§6.1).
 
 **§31.2-2** `PUT /reports/:reportId/visits` (access): replaces
-the `visits[]` block (validates each entry:
-`branchId` → resolves to an **active** branch of this user;
-`clockIn` and `clockOut` are both
-required per visit — `HH:mm` (the day clock rule of §6.3 field 8
+the `visits[]` block under the same visits contract as §31.2-1
+(every entry: `branch` → resolves to an **active** branch of
+this user; `clockIn` and `clockOut` both required per visit —
+`HH:mm` (the day clock rule of §6.3 field 8
 and §21.2); entries are positional — no `visitNo` key (§9.3);
 `visits[]` may include the report's own branch as RETURN visits
-(§6.4); the branch's
+(§6.4); the main entry at index 0 is **locked**: `visits` ≥ 1 and
+`visits[0].branch` must equal the report's `branch` (422 on
+violation); the branch's
 active state is checked here, **not** in §30). Capture edits are
 allowed only at status < `generated` — 403 at `generated`
 (§21.7). Returns the ReportDto.
@@ -6548,8 +6752,10 @@ per-step save; no client autosave — the server owns every write).
   `clockIn`/`clockOut`, `visits[]`, status, `transcription` ref,
   dates, `isArchived`.
 - `GET /reports` (access): paginated; filter dimensions: `status`
-  (enum from `REPORT_STATUSES`), `branchId` (index
-  `user + branch`), `isArchived` (default hidden),
+  (enum from `REPORT_STATUSES`), `branch` (index
+  `user + branch` — the wire field is `branch` per the owner
+  directive; §24A.3/§29 wording aligned), `isArchived` (default
+  hidden),
   `search` (delegated to §39), `sort` (`date` desc,
   `createdAt` tiebreak, §21 index). Data: list DTOs, heavy fields
   absent.
@@ -6582,17 +6788,21 @@ content-changing actions; read-only views still open).
 - `PUT /reports/:reportId/visits/:visitIndex` — update a single
   row by **position** (branch/time fields); re-runs §31.2-2's
   rules for the row; capture edits allowed only at status <
-  `generated` (403 at `generated`, §21.7).
+  `generated` (403 at `generated`, §21.7). **The main entry at
+  index 0 is locked** (owner's model, C3): 403 on any
+  `visitIndex` 0 write — the main branch entry is immutable.
 - `DELETE /reports/:reportId/visits/:visitIndex` — removes the
   row by position; audio rows are unaffected (they bind to the
   report, never to visits — §22); the report row is never deleted
   by this; capture edits allowed only at status < `generated`
-  (403 at `generated`).
+  (403 at `generated`). **Index 0 is undeletable** (403) — the
+  main entry always stands; `visits` never drops below 1.
 - `PATCH /reports/:reportId` — header fields
-  (`date`, `clockIn`, `clockOut`; `branchId` only while no
+  (`date`, `clockIn`, `clockOut`; `branch` only while no
   transcription/generation exists) — the wizard's step-1 save;
   capture edits allowed only at status < `generated` (403 at
-  `generated`).
+  `generated`). Swapping `branch` re-validates the §31.2-1 main
+  lock (`visits[0].branch` must equal the new `branch`).
 
 ### 31.6 Corrections, content & item endpoints
 
@@ -6642,7 +6852,10 @@ content-changing actions; read-only views still open).
   re-derivation):
   - `GET /reports/:reportId/items` — the report's items (flat
     rows, ordered: activities, issues, comment; §24A.5) — served
-    by the `{ user, report }` index.
+    by the `{ user, report }` index. Bounded per report (max ~8
+    activities + ~8 issues + 1 comment) — **no pagination**;
+    response `data: { items: [ItemDto, …] }` (C7 — distinct from
+    §38.2's paginated `docs` shape).
   - `PATCH /reports/:reportId/items/:itemId` — `{ status?,
     rating? }`: per-type validation via `ITEM_STATUSES_BY_TYPE`
     (§29 — fetch row, validate manually: `status` must be a
@@ -6656,6 +6869,9 @@ content-changing actions; read-only views still open).
   content + the Item rows in one session; status → `generated`;
   regeneration at `generated` is refused (403) — the report is
   terminal (BR-06/BR-08); corrections are the editing path.
+  **Single round-trip response (C8):** returns the full
+  ReportDetailDto (§31.3) with the generated `latest` and the
+  persisted `items` in one 200 body — the client never refetches.
 
 ### 31.7 Two-path lifecycle (BR-16, mirrors §30.5)
 
@@ -6697,21 +6913,150 @@ content-changing actions; read-only views still open).
 
 | Method+Path | Auth | Request | Success | Errors |
 |---|---|---|---|---|
-| `POST /reports` | access | `{ branchId, date?, clockIn, clockOut }` | 201 ReportDto | 401, 422 |
+| `POST /reports` | access | `{ branch, date?, clockIn, clockOut, visits }` (visits ≥ 1, main-locked at [0]) | 201 ReportDto | 401, 422 |
 | `GET /reports` | access | query filters + pagination | 200 list | 401, 422 |
 | `GET /reports/:reportId` | access | `?withContent` | 200 ReportDto | 401, 404 |
-| `PATCH /reports/:reportId` | access | `{ date?, clockIn?, clockOut?, branchId? }` | 200 | 404, 422, 403 (generated) |
-| `PUT /reports/:reportId/visits` | access | visits block (day clock pairs, OQ-002 §6.3) | 200 | 404, 422, 403 (generated) |
-| `PUT /reports/:reportId/visits/:visitIndex` | access | visit fields | 200 | 404, 422, 403 (archived/generated) |
-| `DELETE /reports/:reportId/visits/:visitIndex` | access | — | 200 | 404, 403 (generated) |
-| `GET /reports/:reportId/items` | access | — | 200 item list | 401, 404 |
+| `PATCH /reports/:reportId` | access | `{ date?, clockIn?, clockOut?, branch? }` | 200 | 404, 422, 403 (generated) |
+| `PUT /reports/:reportId/visits` | access | visits block (main-locked at [0], day clock pairs, OQ-002 §6.3) | 200 | 404, 422, 403 (generated) |
+| `PUT /reports/:reportId/visits/:visitIndex` | access | visit fields | 200 | 404, 422, 403 (generated / index 0 locked) |
+| `DELETE /reports/:reportId/visits/:visitIndex` | access | — | 200 | 404, 403 (generated / index 0 locked) |
+| `GET /reports/:reportId/items` | access | — | 200 `{ items: [...] }` | 401, 404 |
 | `PATCH /reports/:reportId/items/:itemId` | access | `{ status?, rating? }` | 200 ItemDto | 404, 422 |
-| `POST /reports/:reportId/generations` | access (ai tier §27.3) | — | 200 generated content | 404, 403 (regen gate), 502 (providers) |
+| `POST /reports/:reportId/generations` | access (ai tier §27.3) | — | 200 ReportDetailDto with generated `latest` + `items` | 404, 403 (regen gate), 502 (providers) |
 | `PATCH /reports/:reportId/content` | access | content replaced | 200 `{ content }` | 404, 422 |
 | `PUT /reports/:reportId/content` | access | — (revert: replace `latest` with `raw`) | 200 `{ content }` | 404 |
 | `POST /reports/:reportId/corrections` | access | instruction or multipart clip (optional provider, §35.2) | 200 corrected snapshot (ephemeral candidate) | 404, 502 (providers) |
 | `POST /reports/:reportId/archive` / `restore` | access | — | 200 | 404, 409 |
 | `DELETE /reports/:reportId` | access | — | 200 (archived→retention) | 404, 409 |
+
+**Contract JSON** (folded from the route-contract review,
+2026-08-19; ReportDto is §31.3's serialized surface; report
+statuses are the four `REPORT_STATUSES` members).
+
+`POST /reports` — request (owner's visits model):
+
+```json
+{
+  "branch": "64f1a2b3c4d5e6f7a8b9c0d3",
+  "date": "2026-08-19T00:00:00.000Z",
+  "clockIn": "08:30",
+  "clockOut": "17:30",
+  "visits": [
+    { "branch": "64f1a2b3c4d5e6f7a8b9c0d3", "clockIn": "08:30", "clockOut": "17:30" },
+    { "branch": "64f1a2b3c4d5e6f7a8b9c0d4", "clockIn": "10:00", "clockOut": "12:00" }
+  ]
+}
+```
+
+201:
+
+```json
+{
+  "success": true,
+  "message": "Report created",
+  "data": {
+    "_id": "64f1a2b3c4d5e6f7a8b9c0d1",
+    "user": "64f1a2b3c4d5e6f7a8b9c0d1",
+    "date": "2026-08-19T00:00:00.000Z",
+    "branch": "64f1a2b3c4d5e6f7a8b9c0d3",
+    "clockIn": "08:30",
+    "clockOut": "17:30",
+    "visits": [
+      { "branch": "64f1a2b3c4d5e6f7a8b9c0d3", "clockIn": "08:30", "clockOut": "17:30" },
+      { "branch": "64f1a2b3c4d5e6f7a8b9c0d4", "clockIn": "10:00", "clockOut": "12:00" }
+    ],
+    "status": "draft",
+    "transcription": null,
+    "isArchived": false,
+    "archivedAt": null,
+    "createdAt": "2026-08-19T08:00:00.000Z",
+    "updatedAt": "2026-08-19T08:00:00.000Z"
+  }
+}
+```
+
+422 main-lock violation (also the empty-visits shape):
+
+```json
+{
+  "success": false,
+  "message": "Check the highlighted fields",
+  "data": null,
+  "details": [
+    { "field": "visits[0].branch", "message": "The main branch must be the first visit" }
+  ]
+}
+```
+
+`PUT /reports/:reportId/visits` — request:
+
+```json
+{
+  "visits": [
+    { "branch": "64f1a2b3c4d5e6f7a8b9c0d3", "clockIn": "08:30", "clockOut": "17:30" },
+    { "branch": "64f1a2b3c4d5e6f7a8b9c0d5", "clockIn": "14:00", "clockOut": "15:30" }
+  ]
+}
+```
+
+200 returns the updated ReportDto; 403 at `generated`.
+
+`PATCH /reports/:reportId` — request:
+
+```json
+{
+  "date": "2026-08-20T00:00:00.000Z",
+  "clockIn": "09:00",
+  "clockOut": "18:00",
+  "branch": "64f1a2b3c4d5e6f7a8b9c0d4"
+}
+```
+
+200 returns the updated ReportDto; a `branch` swap re-validates
+the main lock (§31.5).
+
+`GET /reports/:reportId/items` — 200:
+
+```json
+{
+  "success": true,
+  "message": "Report items",
+  "data": { "items": [ { "…": "ItemDto" } ] }
+}
+```
+
+`PATCH /reports/:reportId/content` — request `{ "content":
+"<html>…corrected full content…</html>" }`; 200: `{ "success":
+true, "message": "Content saved", "data": { "content": "<html>…
+</html>" } }`; 403 at `generated`; 422 empty/over cap.
+
+`PUT /reports/:reportId/content` — no body; 200: `{ "success":
+true, "message": "Content reverted", "data": { "content":
+"<html>…raw transcript content…</html>" } }` (pre-generation
+only, §31.6).
+
+`POST /reports/:reportId/corrections` — request `{ "instruction":
+"Fix the branch name in the first paragraph" }` or multipart
+(instruction + optional audio clip); 200: `{ "success": true,
+"message": "Correction ready", "data": { "content": "<html>…
+corrected snapshot…</html>" } }` — the ephemeral candidate, never
+stored (ADR-033); 422 unknown provider / empty instruction; 502
+provider failure.
+
+`POST /reports/:reportId/generations` — no body; 200: ReportDetailDto
+with `status: "generated"`, `latest` = generated content, `items`
+= persisted rows, `transcription` ref set; 403 already-generated
+(not archived): `{ "success": false, "message": "This report is
+already generated", "data": null }`.
+
+`POST /reports/:reportId/archive` — 200 ReportDto with
+`isArchived: true`, `archivedAt` set; 409 already archived.
+`POST /reports/:reportId/restore` — 200 ReportDto with
+`isArchived: false`, `archivedAt: null`; 409 not archived.
+`DELETE /reports/:reportId` — 200 `{ "success": true, "message":
+"Report archived — it will be permanently removed after the
+retention period", "data": { "archived": true } }`; 409 not
+archived; hard delete by the §62 sweeper only.
 
 ### 31.10 Verification usage
 
@@ -6856,6 +7201,41 @@ the §51.4 confirm dialog).
 | `GET /audios/:audioId` | access | — | 200 AudioDto | 401, 404 |
 | `GET /audios/:audioId/play` | access | — | 200 stream | 401, 403, 404 |
 | `DELETE /audios/:audioId` | access | — | 200 | 401, 403 (generated), 404 |
+
+**Contract JSON** (folded from the route-contract review,
+2026-08-19): AudioDto is `{ _id, report, mimeType, sizeBytes,
+durationSec, createdAt, updatedAt }` — `filePath` never.
+
+`POST /reports/:reportId/clips` — multipart: `clip` (audio
+file), `language` (default `am`), informational `durationSec`
+(ffprobe enforces the §32.2 cap). 201:
+
+```json
+{
+  "success": true,
+  "message": "Clip uploaded",
+  "data": {
+    "_id": "64f1a2b3c4d5e6f7a8b9c0d7",
+    "report": "64f1a2b3c4d5e6f7a8b9c0d1",
+    "mimeType": "audio/webm",
+    "sizeBytes": 2457600,
+    "durationSec": 214,
+    "createdAt": "2026-08-19T09:05:00.000Z",
+    "updatedAt": "2026-08-19T09:05:00.000Z"
+  }
+}
+```
+
+`GET /reports/:reportId/clips` — 200: `{ "success": true,
+"message": "Clips", "data": { "docs": [ AudioDto, … ], "page":
+1, "limit": 10, "totalDocs": 2, "totalPages": 1 } }` — empty →
+`docs: []`, no 404 (§32.3).
+
+`GET /audios/:audioId` — 200 AudioDto. `GET
+/audios/:audioId/play` — 200 stream with `Content-Type: mimeType`,
+`Accept-Ranges: bytes`, `Cache-Control: private` (§32.3).
+`DELETE /audios/:audioId` — 200: `{ "success": true, "message":
+"Clip deleted", "data": null }` (+ the §31.4 rewind applies).
 
 ### 32.8 Verification usage
 
@@ -7003,6 +7383,55 @@ fresh TranscriptionDto.
 | `PUT /reports/:reportId/transcription` | access | ai | — (create-or-replace; idempotent) | 200 TranscriptionDto — on partial chunk failure the response carries `completed`/`failed` progress and the status advances per §31.4 only when all chunks succeeded | 401, 404, 403 (archived/`generated`), 422 (no audios or all already transcribed), 502, 429 |
 | `GET /reports/:reportId/transcription` | access | global | — | 200 TranscriptionDto (`report` ref, `language`, `raw`, `latest`, `stt.*`) | 401, 404 |
 | `POST /reports/:reportId/corrections/transcripts` | access | ai | multipart `clip` + `durationSec` (the round-7 correction-dialog STT, §31.6) | 200 `{ text }` — the transcribed instruction text; the clip is ephemeral, nothing persisted | 401, 404, 403 (archived), 422 (missing clip / MIME / size cap), 502, 429 |
+
+**Contract JSON** (folded from the route-contract review,
+2026-08-19): TranscriptionDto is `{ _id, user, report, raw,
+latest, language, stt: { requestId, model }, createdAt,
+updatedAt }` — `stt.model` null-if-unknown (§16.4); `stt.*`
+persisted only on the transcription, never elsewhere (§23.2).
+
+`PUT /reports/:reportId/transcription` — no body; 200:
+
+```json
+{
+  "success": true,
+  "message": "Transcription ready",
+  "data": {
+    "_id": "64f1a2b3c4d5e6f7a8b9c0d6",
+    "user": "64f1a2b3c4d5e6f7a8b9c0d1",
+    "report": "64f1a2b3c4d5e6f7a8b9c0d1",
+    "raw": "ዛሬ ጠዋት … (verbatim transcript)",
+    "latest": "<html>…transcript as content…</html>",
+    "language": "am",
+    "stt": { "requestId": "req_9f8e7d6c", "model": "whisper-1" },
+    "createdAt": "2026-08-19T09:10:00.000Z",
+    "updatedAt": "2026-08-19T09:10:00.000Z"
+  }
+}
+```
+
+Partial chunk failure (§33.7) — 200 with progress and no status
+advance:
+
+```json
+{
+  "success": true,
+  "message": "Partial transcription",
+  "data": { "completed": 2, "failed": [ { "audioId": "64f1…", "reason": "provider timeout" } ] }
+}
+```
+
+422 (no audios): `{ "success": false, "message": "Record at
+least one clip first", "data": null }`; 502 provider failure.
+
+`GET /reports/:reportId/transcription` — 200 TranscriptionDto;
+404 when the report has none: `{ "success": false, "message":
+"No transcription yet", "data": null }`.
+
+`POST /reports/:reportId/corrections/transcripts` — multipart
+`clip` + `durationSec`; 200: `{ "success": true, "message":
+"Transcript ready", "data": { "text": "Fix the branch name in
+the first paragraph" } }` — ephemeral, nothing persisted (§31.6).
 
 ### 33.9 Verification usage
 
@@ -7468,6 +7897,60 @@ to the client in prompt form.
 | `GET /reports/:reportId/chat` | access | global | — | 200 `{ data: { _id, user, report, messages } }` (empty allowed) | 401, 404 |
 | `POST /reports/:reportId/chat/messages` | access | ai | `{ content, provider, model, reasoning? }` — `reasoning` optional; absent → the conversation default (§24.2/§36.4) | 201 conversation DTO with appended message | 401, 404, 422, 409 (row race) |
 
+**Contract JSON** (folded from the route-contract review,
+2026-08-19): the message surface is exactly `role, content,
+provider, model, reasoning, createdAt` (§24.2); empty
+conversation → `messages: []`, no 404 (§36.2).
+
+`GET /reports/:reportId/chat` — 200:
+
+```json
+{
+  "success": true,
+  "message": "Conversation",
+  "data": {
+    "_id": "64f1a2b3c4d5e6f7a8b9c0d8",
+    "user": "64f1a2b3c4d5e6f7a8b9c0d1",
+    "report": "64f1a2b3c4d5e6f7a8b9c0d1",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Summarize the issues found today",
+        "provider": "anthropic",
+        "model": "claude-3-5-sonnet-20241022",
+        "reasoning": null,
+        "createdAt": "2026-08-19T14:30:00.000Z"
+      },
+      {
+        "role": "assistant",
+        "content": "The branch reported one open issue: the water pump on floor 2…",
+        "provider": "anthropic",
+        "model": "claude-3-5-sonnet-20241022",
+        "reasoning": null,
+        "createdAt": "2026-08-19T14:30:05.000Z"
+      }
+    ],
+    "createdAt": "2026-08-19T14:30:00.000Z",
+    "updatedAt": "2026-08-19T14:30:05.000Z"
+  }
+}
+```
+
+`POST /reports/:reportId/chat/messages` — request:
+
+```json
+{
+  "content": "Summarize the issues found today",
+  "provider": "anthropic",
+  "model": "claude-3-5-sonnet-20241022",
+  "reasoning": false
+}
+```
+
+201 — the fresh conversation DTO (with the user turn appended
+and the service-appended assistant answer); the endpoint never
+calls a provider itself (§36.3).
+
 ### 36.8 Verification usage
 
 - Grep gates: no message update/delete endpoint; no conversation
@@ -7566,6 +8049,39 @@ PDF/TXT/CSV/XLSX flows format (§58). `±` tokens are returned
 resolution happens only in the backend Google Docs path §37.3).
 Content is returned raw-text (not HTML), sanitized per §61.
 
+**Contract JSON** (folded from the route-contract review,
+2026-08-19):
+
+`GET /reports/:reportId/export/content` — 200:
+
+```json
+{
+  "success": true,
+  "message": "Export ready",
+  "data": {
+    "content": "<html>…report full content…</html>",
+    "date": "2026-08-19T00:00:00.000Z",
+    "branchName": "Addis — 6 Kilo",
+    "visits": [
+      { "branchName": "Addis — 6 Kilo", "clockIn": "08:30", "clockOut": "17:30" },
+      { "branchName": "Addis — Mexico", "clockIn": "10:00", "clockOut": "12:00" }
+    ]
+  }
+}
+```
+
+422 no `latest`: `{ "success": false, "message": "Nothing to
+export yet", "data": null }` (§37.2).
+
+`POST /reports/:reportId/export/docs` — no body; 200 (flag on):
+`{ "success": true, "message": "Document ready", "data":
+{ "documentId": "doc_12345", "url":
+"https://docs.google.com/document/d/…" } }`; while
+`EXPORT_DOCS_ENABLED` is `false` the route is **not mounted** —
+any call falls through to the §27.5 not-found handler (404
+`"Route not found"`) and the §58 menu item shows the "coming
+soon" copy (§37.3).
+
 ### 37.6 States & edge cases
 
 - No `latest` → 422 (title copy per §60); archived reports may
@@ -7645,6 +8161,44 @@ parameters of §24A's filtering table (`branch`, `type`, `status`,
 `dateFrom`/`dateTo`, `q`, `page`/`limit`; §27.4 envelope with
 `docs/page/limit`). It reads **only stored Item rows** — no
 derivation and no model call ever runs inside this endpoint.
+(Canonical path: `GET /analytics/items` — the §24A.3 wording
+"`GET /reports/items`" was corrected to this path in the same
+fold, owner directive 2026-08-19.)
+
+**Contract JSON** (folded from the route-contract review,
+2026-08-19):
+
+`GET /analytics/dashboard` — 200:
+
+```json
+{
+  "success": true,
+  "message": "Dashboard data",
+  "data": {
+    "kpis": {
+      "reportsThisMonth": 12,
+      "inProgress": 5,
+      "generated": 4,
+      "activeBranches": 3,
+      "trends": { "reportsThisMonthDelta": 2, "generatedDelta": -1 }
+    },
+    "charts": {
+      "statusDistribution": [
+        { "status": "draft", "count": 2 },
+        { "status": "audio_attached", "count": 1 },
+        { "status": "transcribed", "count": 3 },
+        { "status": "generated", "count": 4 }
+      ],
+      "activityByBranch": [ { "name": "Addis — 6 Kilo", "count": 8 } ],
+      "issuesTrend": [ { "date": "2026-08-19", "count": 1 } ]
+    }
+  }
+}
+```
+
+`GET /analytics/items` — request
+`?branch=…&type=issue&status=open&dateFrom=…&dateTo=…&q=pump&page=1&limit=10`;
+200: §27.4 paginated shape with `docs` = ItemDto rows (§38.2).
 
 ### 38.3 KPI computation rules
 
@@ -7794,6 +8348,36 @@ match came from a visit) / branch `location`; `matchedFields` =
 which indexed field(s)
 matched (for highlight, chrome copy per §7.6).
 
+**Contract JSON** (folded from the route-contract review,
+2026-08-19): request
+`GET /search?q=pump&page=1&limit=10&type=report&includeArchived=false`; 200:
+
+```json
+{
+  "success": true,
+  "message": "Search results",
+  "data": {
+    "docs": [
+      {
+        "type": "report",
+        "entityId": "64f1a2b3c4d5e6f7a8b9c0d1",
+        "title": "19-08-26 — Addis 6 Kilo",
+        "subtitle": "Water pump on floor 2 not working",
+        "status": "generated",
+        "matchedFields": ["latest", "items.text"]
+      }
+    ],
+    "page": 1,
+    "limit": 10,
+    "totalDocs": 1,
+    "totalPages": 1
+  }
+}
+```
+
+Zero matches → 200 with `docs: []` and `matchedFields: []`
+(§39.5); `q` missing/empty/over 100 chars → 422.
+
 ### 39.4 Scoring & ordering
 
 - Ranking: branches by text-score desc (ties by `name` asc);
@@ -7890,6 +8474,43 @@ hard-coded into models (§18.8/§25).
 - Both are **session-safe** (ADR-018): the whole mock write/
   delete set commits atomically; a mid-wipe failure aborts
   cleanly.
+
+**Contract JSON** (folded from the route-contract review,
+2026-08-19):
+
+`POST /mock/seed` — 200:
+
+```json
+{
+  "success": true,
+  "message": "Mock data seeded",
+  "data": {
+    "seeded": {
+      "users": 1,
+      "branches": 3,
+      "reports": 4,
+      "audios": 6,
+      "transcriptions": 2,
+      "items": 12,
+      "conversations": 1
+    }
+  }
+}
+```
+
+`POST /mock/wipe` — 200:
+
+```json
+{
+  "success": true,
+  "message": "Mock data wiped",
+  "data": { "wiped": { "branches": 3, "reports": 4, "audios": 6 } }
+}
+```
+
+Outside a development environment both routes are **not
+mounted** — any call falls through to the §27.5 not-found
+handler (404 `"Route not found"`), §40.5.
 
 ### 40.3 Fixture composition (per §25)
 
@@ -8256,13 +8877,15 @@ The chain is the single owner of session expiry on the client
    redirect** (clearing the slice makes `ProtectedRoute` navigate;
    no full-page reload, so the dev adapter's auto-auth never
    double-hops) — and fail the original request without a toast.
-   The expiry landing applies
-   to an **authenticated** session whose credentials just died
-   (authenticated → request → 401 → one retry → on failure,
-   session cleared, landing on `/login`); anonymous and
-   `initializing` probes fail through silently — guests are
-   already gated by §41.5 and never bounce, so public pages do
-   not reload-loop on failed boot probes.
+The expiry landing applies
+    to an **authenticated** session whose credentials just died
+    (authenticated → request → 401 → one retry → on failure,
+    session cleared, landing on `/login`); anonymous and
+    `initializing` requests fail through silently — guests are
+    already gated by §41.5 and never bounce, so public pages do
+    not reload-loop. There is no boot probe (the `GET /auth/me`
+    probe was removed with the endpoint — hydration comes from
+    redux-persist; owner directive 2026-08-19).
 6. **401s are never toasted** — expiry is a silent redirect flow
    (§12.11-2, §9.6). Only non-401 errors surface as toasts (§42.4).
 
@@ -11291,9 +11914,13 @@ page slices — never a full dataset (§45.7/ADR-034). The row's
 `components/branches/`.
 
 **Purpose & composition.** The per-branch detail surface — the
-branch's identity, its reports, and its analytics — reached from
-the Branches grid (Name link, §56.3) and from global search
-results (§59.3). Inside AppShell (§47.3):
+branch's identity, its reports, its items, and its analytics —
+reached from the Branches grid (Name link, §56.3) and from global
+search results (§59.3). Inside AppShell (§47.3), **one call**:
+`GET /branches/:branchId/detail` (§30.2.1 — the aggregate
+endpoint added on the owner directive of 2026-08-19) returns
+branch + reports + analytics + items in a single response; the
+page never fans out:
 
 1. **Page header** (§46.12): title = the
    branch `name`, subtitle = `location` with the `MuiStatusBadge`
@@ -11301,12 +11928,17 @@ results (§59.3). Inside AppShell (§47.3):
    slot (edit/archive/delete stay on the grid rows of `/branches`,
    §56.6).
 2. **Reports of this branch** — the §50 report list surface
-   (list/grid toggle, status badges, §60 states) served **server-
-   filtered by `branchId`** via the §39 query path — never a
-   client-side subset of a shared page.
-3. **Analytics** — the §38 per-branch analytics (reports per
-   status over the §38 window, recent activity) rendered with the
+   (list/grid toggle, status badges, §60 states) fed by the
+   aggregate's `reports` block (paginated server-side, §30.2.1) —
+   never a client-side subset of a shared page.
+3. **Analytics** — the aggregate's `analytics` block
+   (reportsTotal / reportsThisMonth / four-member
+   statusDistribution / openIssues / activitiesCompleted /
+   commentCount / issuesTrend) rendered with the
    §49.4 chart conventions; loading/empty/error per §60.
+4. **Items** — the aggregate's `items` block
+   (`activities` / `issues` / `comments` groups) rendered with the
+   §24A row conventions; §60 states per group.
 
 **States & edge cases.** Loading — grid overlay/skeleton rows;
 error — §60 toast + inline retry band; branch with no reports —
@@ -11413,8 +12045,11 @@ control part of the register-model (§3.2.2, §19).
 Inside AppShell (§47.3), page header first (§46.12): title
 "Profile", subtitle "Your account details";
 `actions` slot: **"Logout"** (outlined, §46.3) — §57.5. Body:
-a profile card (§44.6) with the avatar and identity, the profile
-form (§57.3), and the sessions card (§57.4).
+a profile card (§44.6) with the avatar and identity and the
+profile form (§57.3). There is no sessions card — sessions
+management was removed with the session endpoints (owner
+directive 2026-08-19; §28.2/§28.3); session lifecycle is pure
+cookie mechanics.
 
 ### 57.3 Profile fields & avatar
 
@@ -11436,18 +12071,15 @@ form (§57.3), and the sessions card (§57.4).
   position) with the §46.4 error pattern; the avatar upload
   needs no save button (files save on selection through §28.5).
 
-### 57.4 Sessions & forced logout
+### 57.4 Sessions & forced logout — RETIRED
 
-- The sessions card lists `GET /auth/sessions` (§28.3) rows:
-  device/issued caption per the §28 token bookkeeping (chrome
-  copy English; idle tidbits minimal), each row with a **"Log
-  out"** icon action → `DELETE /auth/sessions/:sessionId` behind
-  the §46.17 MuiConfirmDialog ("End this session?"); success →
-  toast + refreshed list. The current session's row is labeled
-  "This session" (chrome) with the action disabled for it
-  (logout clears it, §57.5).
-- Empty sessions list → §60 empty state ("No other active
-  sessions").
+The sessions card and its endpoints (`GET /auth/sessions`,
+`DELETE /auth/sessions/:sessionId`) were removed on the owner
+directive of 2026-08-19: the application is single-user, the
+session lifecycle is pure cookie mechanics (§28.2), and there is
+no session bookkeeping to list. The section number is retired
+(mirroring the §6.11 retirement pattern); §57.5 (logout) and
+§57.6 (states) follow unchanged minus the sessions references.
 
 ### 57.5 Logout
 
@@ -11459,17 +12091,19 @@ plain).
 
 ### 57.6 States & breakpoints
 
-- Loading — `GET /auth/me` + `GET /auth/sessions` pending ⇒
+- Loading — the profile form's `PATCH /auth/profile` and the
+  avatar fetch pending ⇒
   page-level `LoadingSpinner` (§46.14); error — §60 toast +
   inline retry per card; success — full render. A failed
   profile PATCH keeps entered values (no silent reset, ADR-033).
+  (There is no boot probe: hydration comes from redux-persist —
+  owner directive 2026-08-19.)
 - Breakpoint matrix (the §45.2 five buckets, single-column
   profile layouts):
 
 | Region | xs | sm | md | lg | lg+ |
 |---|---|---|---|---|---|
-| Identity + form | stacked, single column | stacked | profile card + sessions side by side (equal thirds) | same as md | same as md |
-| Sessions card | below the form | below the form | beside the form (third) | same as md | same as md |
+| Identity + form | stacked, single column | stacked | profile card (centered, max-width) | same as md | same as md |
 
 ### 57.7 Verification usage
 
@@ -13323,10 +13957,10 @@ Records (closed):
     ± strip guidance lives on the body card) and the §49.2
     generated-desk card is NOT backfilled this round (deferred
     to §49's round; provisional under OQ-008's pattern).
-  - **C8** — the empty body blocks finish with the highlighted
-    field + helper (the §46.4 None→error protocol in the §53.5
-    footer; supervisorName validated client-side at 1..100 per
-    §46.4 mirrors).
+- **C8** — the empty body blocks finish with the highlighted
+     field + helper (the §46.4 None→error protocol in the §53.5
+     footer; name fields validated client-side at 1..100 per
+     §46.4 mirrors).
   - **C9** — report-step CTA label = "Create" (Add) / "Finish"
     (Edit) (§52.2/§52.8; the stale step-5 "Finish is not this
     bar's job" note is amended in the same change).
@@ -13466,6 +14100,50 @@ against the SDK source: addisai ^0.2.0 adopted for all Addis
   constants `AI_REASONING_DEFAULT` (§11.4) + `AI_REASONING_LABELS`
   (§11.5). Scope decision recorded: per-conversation, not per-user
   (matches the provider-picker scope).
+
+### 69.3.1 Route-contract fold record (2026-08-19, owner-approved)
+
+The owner reviewed the complete route contract (`.opencode/plan/
+route-contract-review.md` — a review artifact, since deleted) and
+approved folding it into this specification. The fold applied the
+owner's six route directives; the decision list C1–C8 of the
+review file is resolved as follows:
+
+- **C1 (kernel) — RESOLVED, owner-approved.** §6.4/§21.2/BR-03:
+  the main branch is always the first visit (`visits[0].branch
+  === branch`), `visits` ≥ 1 always, **Type = visits.length**
+  (the "1 + visits.length" form retired). Applied §6.4, §5 BR-03,
+  §6.6/§6.10 locked decisions, §21.2 field registry, §21.7,
+  §31.2-1/§31.2-2, §31.9.
+- **C2 — RESOLVED.** `supervisorName` is never accepted (422 if
+  present); the frontend drops the field (§21.2/§31.2-1).
+- **C3 — RESOLVED.** Main-locked semantics: `visits` ≥ 1,
+  `visits[0]` must match, index 0 is undeletable/unwritable
+  (403), `PATCH /reports/:reportId` branch swaps re-validate the
+  lock (§21.2, §31.2-2, §31.5, §31.9).
+- **C4 — RESOLVED.** Wire field `branch` everywhere (the
+  `branchId` validation wording retired) (§29/§31).
+- **C5 — RESOLVED.** `GET /branches/:branchId/detail` aggregate
+  payload (§30.2.1, §56.5).
+- **C6 — RESOLVED.** Canonical items path `GET /analytics/items`;
+  §24A.3 wording fixed.
+- **C7 — RESOLVED.** `GET /reports/:reportId/items` returns
+  `{ items: [...] }` — non-paginated, bounded per report
+  (§31.6/§31.9), distinct from §38.2's paginated `docs`.
+- **C8 — RESOLVED.** `POST /reports/:reportId/generations`
+  returns the ReportDetailDto with the generated `latest` +
+  `items` in one response (§31.6/§31.9).
+- **Endpoint removals recorded.** `GET /auth/me` (redux-persist
+  hydration, §28.3/§28.4/§42.3/§57.6), `GET /auth/sessions` +
+  `DELETE /auth/sessions/:sessionId` (§28.2/§28.3/§57.4 retired),
+  and the `optionalAuth` middleware. **No users-management
+  endpoints exist** — the application is single-user.
+- **New endpoints recorded.** `GET /branches/:branchId/detail`
+  (§30.2.1) and the health contract JSON (§26.6).
+- **Fold-time correction (review-file deviation):** the review
+  file's draft said duplicate branch names → 409; the spec's
+  canonical rule (§30.3/§30.7 — no unique index, duplicates
+  allowed) governs; the 409 wording was folded away.
 
 ### 69.3 Assumptions register
 
