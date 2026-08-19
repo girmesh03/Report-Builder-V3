@@ -69,17 +69,11 @@ userSchema.index({ email: 1 }, { unique: true });
  * enters the hashing branch. The salt rounds come from
  * `BCRYPT_SALT_ROUNDS` (§11.3) — the literal never appears here.
  */
-userSchema.pre('save', async function hashPassword(next) {
+userSchema.pre('save', async function hashPassword() {
   if (!this.isModified('password') || !this.password) {
-    next();
     return;
   }
-  try {
-    this.password = await bcrypt.hash(this.password, BCRYPT_SALT_ROUNDS);
-    next();
-  } catch (err) {
-    next(err);
-  }
+  this.password = await bcrypt.hash(this.password, BCRYPT_SALT_ROUNDS);
 });
 
 /**
@@ -99,9 +93,13 @@ userSchema.methods.comparePassword = function comparePassword(candidate) {
 
 /**
  * Derived-name virtual (§19.4) — a pure getter over the two required
- * name fields; never persisted, never indexed, never queried, and
- * reproducible on lean reads (`virtuals: true`, §18.4). Both source
- * fields are required, so the getter is total.
+ * name fields; never persisted, never indexed, never queried. Both
+ * source fields are required, so the getter is total. The virtual
+ * materializes on documents (getter) and through the `toJSON`/
+ * `toObject` transform surface (§18.4) — Mongoose 9 removed the
+ * built-in lean virtuals option, so DTO read paths use full
+ * documents and the ADR-017 transform layer (§27.7 clarification,
+ * 2026-08-19).
  */
 userSchema.virtual('fullName').get(function fullName() {
   return `${this.firstName} ${this.lastName}`;

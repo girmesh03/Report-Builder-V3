@@ -3094,18 +3094,26 @@ backend/
 |-- config/
 |   `-- env.js                      (implemented)  # the only reader of process.env.; frozen config object (§10.3)
 |-- utils/
-|   |-- logger.js                   # Winston logging, no console.log (§9.5)
+|   |-- logger.js                   (implemented)  # Winston logging, no console.log (§9.5)
+|   |-- errors.js                   (implemented)  # CustomError + toErrorEnvelope; global-handler mappings
+|   |                                               # (11000, CastError, MulterError — §27.5; added 2026-08-19)
 |   |-- constants.js                (implemented)  # backend constants inventory (§11.3)
 |   |-- httpStatus.js               (implemented)  # semantic HTTP status names (§11.6)
 |   `-- wavSplitter.js              # PCM-level WAV chunking for STT (§33)
 |-- middleware/                     # fixed chain extras + auth + tiers (contents named by §26–§28)
+|   |-- mongoSanitize.js            (implemented)  # $/. operator-key stripper, Express-5 shim (§27.2)
+|   |-- rateLimit.js                (implemented)  # three-tier factory: global/auth/AI (§27.3)
+|   `-- auth.js                     (implemented)  # authenticate — access-cookie JWT gate (§28.4; added 2026-08-19)
 |-- routes/
 |   |-- index.js                    # the single route registry (§12.2, §26)
+|   |-- auth.routes.js              (implemented)  # §28 surface incl. the §28.6 Google stub (added 2026-08-19)
 |   `-- <domain>.routes.js          # per-domain route modules, kebab-case (§30–§39)
 |-- controllers/
+|   |-- auth.controller.js          (implemented)  # register/login/refresh/logout/profile/avatar (§28; added 2026-08-19)
 |   `-- <domain>.controller.js      # one controller file per domain (§26, §30–§39)
 |-- validators/
-|   |-- validation.js               # validate() harness: validationResult + req.validated (§29)
+|   |-- validation.js               (implemented)  # validate() harness: validationResult + req.validated (§29)
+|   |-- user.validator.js           (implemented)  # register/login/profile chains (§28, §29; added 2026-08-19)
 |   `-- <domain>.validator.js       # express-validator rule chains, one per domain (§29, §30–§39)
 |-- models/
 |   `-- <entity>.model.js           # one schema file per entity, session-aware (§19–§24)
@@ -4205,10 +4213,11 @@ timestamps/transforms/indexes/TTL/sessions home promised by §12.9,
   them (§28, §36); the envelope and DTOs consume only the transform
   output (§27, §42), never raw documents.
 - **Read paths.** Read-only endpoints (get/list, §12.2) query with
-  `.lean({ virtuals: true })` — declared virtuals (e.g. the User's
-  `fullName`, §19.4) reproduce on plain projections — return plain
-  objects through the same transforms, and never open sessions
-  (§12.2, §18.5).
+  `.lean()` (plain projections) or full documents where the DTO needs
+  declared virtuals — Mongoose 9 removed the built-in lean-virtuals
+  option, so `fullName`-bearing reads use documents and the
+  transform surface (§18.4 clarification, §27.7, 2026-08-19) — and
+  never open sessions (§12.2, §18.5).
 - **No mutation.** A transform never mutates the stored document;
   transient projection joins (e.g. the branch display name joined on
   the report's `branch` ref, §17.4) are
@@ -4898,7 +4907,8 @@ The report document has exactly three states; there is no
   (`startSession → startTransaction → writes → commit/abort →
   finally endSession`); write statics accept a `{ session }` option.
 - **Read contract (§12.2, §18.4).** List, detail, and export reads
-  load with `.lean({ virtuals: true })` and no session; the
+  follow the §18.4 read paths (lean, or document reads where the DTO
+  needs declared virtuals) with no session; the
   active-by-default filter is part of the query — the archive-state
   filter is never applied in a hook.
 - **Transcription 1:1 write.** The `transcription` ref and the
@@ -5145,8 +5155,9 @@ this row.
   and are invoked from a caller-owned session (ADR-018, §18.5); a
   statics method never opens a hidden session (§18.5). Read endpoints
   use no transactions (§18.5).
-- **Read contract.** Reads use `.lean({ virtuals: true })` (§18.4);
-  no transform mutates the document (§18.4).
+- **Read contract.** Reads follow the §18.4 read paths (lean, or
+  document reads where the DTO needs declared virtuals); no transform
+  mutates the document (§18.4).
 
 ### 22.7 Transforms & exposure
 
@@ -5340,7 +5351,8 @@ domain (§16.1).
 - **Write contract:** statics/methods accept `{ session }`; never
   open hidden sessions (§18.5); caller-owned sessions for the §33
   write and all correction writes (ADR-018).
-- **Read contract:** `.lean({ virtuals: true })` (§18.4); reads take
+- **Read contract:** §18.4 read paths (lean, or document reads where
+  the DTO needs declared virtuals); reads take
   no transactions (§18.5).
 
 ### 23.7 Transforms & exposure
@@ -5499,7 +5511,8 @@ No foreign display value is duplicated into messages.
 - **Write contract:** the §36 flow owns a session and the
   conversation's write statics accept `{ session }`; never a hidden
   session (§18.5).
-- **Read contract:** `.lean({ virtuals: true })`, no transactions on
+- **Read contract:** §18.4 read paths (lean, or document reads where
+  the DTO needs declared virtuals), no transactions on
   reads (§18.4, §18.5).
 
 ### 24.7 Transforms & exposure
@@ -6101,8 +6114,12 @@ startSession → startTransaction → writes (session-aware models) → commitTr
   joins the caller's transaction (§18.5); no implicit/embedded
   sessions. Controllers never split a logical write across
   sessions.
-- Read-only endpoints never open transactions; reads are
-  `.lean({ virtuals: true })`.
+- Read-only endpoints never open transactions; reads use full
+  documents for DTO-producing paths (Mongoose 9 removed the built-in
+  lean-virtuals option; the ADR-017 transform layer consumes the
+  `toJSON` surface, so `fullName`-bearing DTO reads use documents —
+  clarification 2026-08-19) and `.lean()` elsewhere (no virtuals
+  needed).
 - TTL index deletions (§18.3) are the single documented exception
   (server-side, cannot use a session); the orphan sweep (§62)
   cleans leftovers.

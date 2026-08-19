@@ -8,6 +8,9 @@
  * validation field errors (§29). `toErrorEnvelope` maps any error to
  * the ADR-016 error envelope `{ success: false, message, data: null }`
  * plus `details` for 422 — used by the global handler in `app.js`.
+ * Defensive class mappings: mongoose `CastError` (a non-ObjectId that
+ * escaped a §29 chain) and multer `MulterError` (size/parsing
+ * violations, §28.5/§32) both 422 with the §29 details shape.
  */
 import { httpStatus } from './httpStatus.js';
 import { MONGO_DUPLICATE_KEY_ERROR_CODE } from './constants.js';
@@ -61,7 +64,7 @@ export function toErrorEnvelope(err) {
       status: 'UNPROCESSABLE_ENTITY',
       body: {
         success: false,
-        message: 'Check the highlighted fields.',
+        message: 'Check the highlighted fields',
         data: null,
         details,
       },
@@ -81,6 +84,33 @@ export function toErrorEnvelope(err) {
       statusCode: httpStatus.CONFLICT,
       status: 'CONFLICT',
       body: { success: false, message: 'A record with this value already exists.', data: null },
+    };
+  }
+
+  if (err.name === 'CastError') {
+    return {
+      statusCode: httpStatus.UNPROCESSABLE_ENTITY,
+      status: 'UNPROCESSABLE_ENTITY',
+      body: {
+        success: false,
+        message: 'Check the highlighted fields',
+        data: null,
+        details: [{ field: err.path ?? 'id', message: 'Invalid identifier' }],
+      },
+    };
+  }
+
+  if (err.name === 'MulterError') {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large' : 'Invalid file upload';
+    return {
+      statusCode: httpStatus.UNPROCESSABLE_ENTITY,
+      status: 'UNPROCESSABLE_ENTITY',
+      body: {
+        success: false,
+        message: 'Check the highlighted fields',
+        data: null,
+        details: [{ field: err.field ?? 'file', message }],
+      },
     };
   }
 

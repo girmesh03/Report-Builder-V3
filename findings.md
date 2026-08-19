@@ -794,3 +794,39 @@ Owner directive: the step-5 verification run must show every request/response JS
 3. User `toJSON`/`toObject` serialized an in-memory `password` value despite `select: false` (select only affects DB projections) — the transform now also deletes `password` (§19.5 "excluded from every transform" hardening).
 
 **No spec/§11/§15.4 changes needed** — the §15.4 tree already names `models/`, every referenced constant already exists in `utils/constants.js`, and §13.3 deps (mongoose, mongoose-paginate-v2, bcryptjs) were already installed. Same-change discipline: working files only (this findings row, progress log, task_plan status block).
+
+## F90 — 2026-08-19 — Sub-phase 3 (Identity §28/§29) implementation findings
+
+**Suite:** `node scripts/test-03-identity.mjs` — **PASS=38 FAIL=0, exit 0** across seven groups via the restart-between-groups protocol (the §27.3 auth tier is 20 req/15 min): bootstrap (unit + register) 9/9, login 6/6, refresh 4/4, profile 6/6, avatar 5/5, misc 7/7 (incl. the two new logout checks), ratelimit 1/1 (the 21st rapid hit is the first 429, run isolated). Regressions on the same change set: test-01-foundation 12/12, test-02-models 39/39. Step 5 accepted by the owner; live server on :4000 + Atlas.
+
+**Three real defects caught at integration (Mongoose 9.9.1 / lib facts — spec mirrors updated in the same change set):**
+1. **Mongoose 9 async `pre('save')` hooks receive no `next`** — the §19 `hashPassword` hook (`async function hashPassword(next)` + `next()`) crashed with `TypeError` on the first real save. Latent since sub-phase 2 (test-02 constructs docs but never saves). Fixed to a pure-async hook (return the hash promise).
+2. **`lean({ virtuals: true })` silently no-ops in Mongoose 9** (built-in lean virtuals removed; requires the `mongoose-lean-virtuals` plugin, outside the §13.5 set) — `fullName` came back `undefined` on all lean read paths. Fix: read paths hand full documents to the DTO mapper (`toUserDto` consumes `doc.toJSON()` — the ADR-017 transform includes the virtual). Spec amended in the same change set: §18.4 read paths, §27.7 read contract, the §20/§21/§22/§23/§24 read-contract lines (5 `.lean({ virtuals: true })` mentions), and the user.model.js virtual docblock.
+3. **express-rate-limit v8.6.2 handler exposes only `resetKey`/`getKey`** (no `windowMs`/`limit`) — the UNIT-style tier introspection check was replaced by a wire-level assertion: auth responses carry `RateLimit-Policy: "20-in-15min"; q=20; w=900` + `RateLimit: "20-in-15min"; r=…; t=900` (check 24).
+
+**Interop/behavior facts (assertion-relevant):**
+1. `import { normalizeEmail } from 'validator'` fails at runtime (CJS named-export interop) — use `import validator from 'validator'` + destructure. express-validator named imports work.
+2. express `clearCookie` emits `Expires=Thu, 01 Jan 1970 00:00:00 GMT` (no `Max-Age=0`) — cookie-clear assertions tolerate both forms.
+
+**Derived decisions (flagged per the §69 rule — never invented):**
+1. Fixture emails are per-run unique (`sp3.<runid>.<rand>@example.com`); one invisible Atlas row per suite run (no delete endpoint; single-user app — accepted).
+2. Register names derive from the email local part (first segment + remainder joined by `.`); client-supplied names rejected 422.
+3. The at-least-one-field PATCH rule is a whole-body validator mounted after multer so it can see `req.file`; 422 message 'Provide at least one field to update'; whole-body failures carry `field: ''` in details (the §29 details shape has no contract field name for whole-body errors — the message carries the meaning).
+4. Avatar: deterministic filename `<userId>.<ext>` under `uploads/avatar/` (gitignored); two-phase write (file first, then document) with best-effort unlinks of the new file on failure and the previous file on success; paths stored relative and served via `path.resolve(process.cwd(), avatar)`; `Cache-Control: private, max-age=300` (derived); a missing file is the same 404 as a missing avatar.
+5. Derived copy additions: 'Sign in to continue' (401), 'Profile updated', 'Invalid identifier' (CastError), 'File is too large' (MulterError LIMIT_FILE_SIZE), 'Avatar must be a JPEG, PNG, or WebP image' (fileFilter), 'Too many requests — please wait a moment and try again.' (rate-limit body).
+6. Forged-token checks (expired access, refresh-as-access) sign with the real secrets imported from `config/env.js` (sanctioned read; values never printed).
+7. No dummy password-compare (documented acceptance — the identical-401 shape is preserved).
+8. `EXTENSION_BY_MIME` in auth.controller.js is keyed by the `AVATAR_ALLOWED_MIME_TYPES` constant values (a mirror, not a new literal source; the mapped values are file-format facts).
+
+**GAP closed:** the misc group gained the two missing §28.3 logout checks (65: logout without a session → 200 idempotent; 66: logout with a session → both cookies cleared to `Expires=Thu, 01 Jan 1970`). Trailing newline restored in routes/index.js.
+
+**Watch items (accepted, not defects):**
+1. A multipart avatar with a valid file but a 422-failing field leaves an orphaned file (deterministic filename → overwritten by the next successful upload; uploads dir gitignored).
+2. The `previous` read in updateProfile sits outside the try (a throw there would leak the new file — unreachable in practice: authenticate already loaded the user).
+3. test-01-foundation's `process.env.TEST_BASE` is a known drift candidate for the §63.4 process.env gate — flagged for a gate-clarification pass.
+
+**Grep gates clean:** no `console.log` (suite uses `process.stdout.write`); `role` only in the §24 chat message schema; no `GOOGLE_` env reads; no numeric status literals; `2592000` only in constants.js; no `.id` access outside model transforms; no logger calls in the auth surface (JWT/cookie values never logged — ADR-019); auth surface = exactly 7 endpoints, stub mounted once at `/auth`.
+
+**Spec amendments in the same change set (§66.6):** §15.4 tree — `utils/errors.js` row + `(implemented)` markers for logger/errors/mongoSanitize/rateLimit/auth/auth.routes/auth.controller/validation/user.validator; §18.4 read paths; §27.7 read contract; §20–§24 read-contract lines (lean-virtuals wording); user.model.js virtual docblock.
+
+**Environment lesson (recorded):** the owner's 23:03 `npm run dev` hit EADDRINUSE because the session's detached test-runner chain still held :4000. Discipline: kill the session dev-server chain when suite work ends — never hand off a busy port. Both chains were killed and the port verified free before the step-5 handoff.

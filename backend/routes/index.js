@@ -11,6 +11,7 @@
  */
 import { Router } from 'express';
 import { httpStatus } from '../utils/httpStatus.js';
+import authRoutes from './auth.routes.js';
 
 const routes = Router();
 
@@ -22,8 +23,9 @@ routes.get('/health', (req, res) => {
   });
 });
 
-// Domain modules mount here in later sub-phases (§28–§39), in order:
+// Domain modules mount here in §15.4 order:
 // auth, branches, reports, audio, transcription, chat, export,
 // analytics, search, mock.
+routes.use('/auth', authRoutes);
 
 export default routes;
