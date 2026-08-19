@@ -52,3 +52,177 @@ Full analysis approved by the owner (four decisions: keep the 4-step wizard and 
 
 ## 2026-08-17 — Round-report-step P7 finish: mock id-counter bug (F66)
 The new generate assertions failed on TWO checks with a full pre-generation 403 — root cause was a pre-existing mock defect, not the feature code: `createReportHandler` minted `_id: r-${String(counters.digest).padStart(4, "0")}` **without incrementing**, so every create before a digest operation reused the SAME id (the walk's main report and the smoke's `namedCreate` both became `r-0100`); `reportOwnerOrNull` resolved later writes against the FIRST (stale) row — the generate act hit the walk's transcribed report (200, and mutated IT), and the main-report generate then 403'd as already-reviewed. Isolation repro (create → generate in one process) returned the correct 403, which pinned the collision. Fix: `counters.digest++` in `createReportHandler` (recorded at spec §66.10; fixture rows r-0001..r-0012 unaffected, created rows r-0100+). Smoke back to **65/65 ALL PASS** with the debug lines removed. Mirrors completed: spec §52.2 (merged 4-step + C1/C9), §52.3 (merged entry indexes + prefill), §52.8 (posture machine + finish guard), §31.2-1 (supervisorName payload), §41.3 (wizard Edit route row), §58.2 (provisional export suite), §15.5 (new files), §66.10 (counter fix), §69 (C1–C10 + F65 records); StepNavBar docstring amended (the stale "Finish is not this bar's job" — C9). Final gates: lint 0, build 0 + dist deleted, console 0, `CR-|BR-` 0 in client/src. P8 commit + push still gated on explicit user approval (exclusions: `.opencode/plan/create-report-user-stories.md`, `.opencode/plan/editor.md`). F66.
+---
+
+# Effort: Correct-the-Spec-Then-Rebuild
+
+## Session 2026-08-18 — Boot + Stage 1
+
+- Branch `spec-correction` created (from phase-4 HEAD ad8c502); phase-4 uncommitted work carried over untouched.
+- Kernel sections read in full (§1–§10, §13, §61–§66, §69); digest pinned in findings F62.
+- Working files appended for this effort (task_plan, findings F62–F64, this log).
+- Stage 1 kernel inventory finalized: 18 KERNEL / 51 DERIVED, borderline calls decided by the Architect (F63).
+- Stage 1 gate passed by the owner (approval of the Correct-the-Spec-Then-Rebuild plan).
+- NEXT: Stage 2 pass 2 (backend §25–§40) after the pass-1 commit approval.
+
+## Session 2026-08-18 — Stage 2 pass 1: data-model correction set (COMPLETE)
+
+- **Kernel passes 1–2 (done earlier in this effort):** §5 BRs; §6.3/§6.4/§6.10 rewrite + §6.11 retired (owns nothing — §6.9 verification now names §6.10); §11.4/§11.5 constants; §9.3/§12.11-1 routes (no visitNo/supervisorName/branchDigest anywhere); §17 seven entities; §18 one TTL (Report on archivedAt; §12.11-1/§18.1/§24.2 fixed to the single index); §20/§21/§22/§23/§24A single Item collection (written at generation; corrections never touch it); §31/§32 (single-row Item PATCH; MuiRecorder per-take chip).
+- **Pass-1 rewrites (this session):** §33 STT (1:1 merged Transcription row: `raw` merged STT / `latest` content; re-transcribe rewrites the same row; frozen at `generated`; no per-clip accept; endpoints matrix), §34 generation (`transcribed → generated` terminal; writes transcription `latest` + Item rows in one atomic session; regen only from `transcribed`; fallback chain addis→gemini→nvidia), §35 corrections (Mode-1 at every status incl. `generated`; candidate = editable draft, never accepted; corrections never touch Item rows; revert pre-`generated` only), §37 export payload `{content: latest, date, branchName, visits}` (`generated` not required), §38 analytics (`reportsThisMonth`/`inProgress`/`generated`/`activeBranches`; four-slice `statusDistribution`; `activityByBranch` via `$lookup`; `GET /analytics/items` reads Item rows only), §39 search (exactly ONE text index — branches; reports resolved via `$in` on branch ObjectIds).
+- **Touched throughout (this session):** §1.4/§1.5, §2.4 SC-4, §3.1.2 F3/F4, §3.2.3, BR-18, §8.5, §12.4, §15.4 comment, §18.4/§18.10, §24.4/§24.5/§24.10, §25 mock rules + fixture inventory, §27.5/§27.7, §28.5/§28.6, §29.3 (visitNo out, ITEM_* in), §30.1/§30.4/§30.5/§30.7, §40 fixture keys, §43.2/§44.3, §45.3, §46.12/§46.13/§46.17, §49.2–§49.4, §50.4–§50.8, §51.1–§51.7 (full rewrite), §52.3–§52.10, §53.2/§53.5/§53.6, §54.2/§54.3/§54.4/§54.6, §55.4/§55.5, §56.3/§56.5/§56.6, §57.3, §58.1–§58.5, §60.5/§60.6, §61.3, §62.1–§62.9, §63.4/§63.6, §67 R-17, §68 glossary table, §69 (OQ-001/005 records fixed; pass-1 CLOSED record; mock-DTO deferral OPEN record), §14.3 ADR-005 row.
+- **Mirrors (same change set):** `client/src/utils/constants.js` (REPORT_STATUSES 4-member `['draft','audio_attached','transcribed','generated']`; labels `generated: 'Generated'`; ITEM_TYPES/ITEM_STATUSES/ITEM_STATUSES_BY_TYPE added; `report.completed` toast key removed), `client/src/components/reusable/MuiStatusBadge.jsx` (color map 4 states, generated → primary), `.opencode/plan/phase-6-backend-apis.md` (L38 digest contract → corrected-model paragraph).
+- **Deferred (§69 OPEN record — mock-DTO alignment):** `client/src/mock/*` + non-mock consumers of old DTO shapes (`audioEndpoints.js` visitNo URLs, `ReportNew.jsx`/`StepReport.jsx` status branches, `ReportPrint.jsx` payload, `wizardValidation.js` supervisorName, `searchEndpoints.js` comment) — re-aligned in the §52–§58 linking rounds; mock dies at P7 (§66.10 gate; only §25/§40/§66.10 may touch it).
+- **Verification:** client lint 0 on the two edited files (full `npm run lint` exceeds the 180 s tool timeout — targeted eslint used); `npx vite build` 0 errors (chunk-size warning only); `dist/` deleted per §9.7; final grep sweeps clean — `visitNo`, `tombstone`, `digest`, `accept`, `two TTL`/`five-step`/`5-state`, old status vocabulary: all remaining hits are negations, retirement text, or historical/§69 records.
+- **Commit gated:** single commit `chore: phase 4 owner-corrections` pending explicit user approval (§66.2 step 6); then pass 2 (backend).
+
+## Session 2026-08-18 — Role model, coverage register, checkpoint commit (executed)
+
+- **Owner strict requirement:** the agent is the Supervisor AND the Software Architect/Engineer/UI-UX Designer and makes the decisions; the owner is the interaction partner only (review, add/remove, iterative questions, dig, blind spots) — never a decision-maker. Recorded in AGENTS.md, prompt.md, findings.md, this log, task_plan.md (the "Correct-the-Spec-Then-Rebuild protocol").
+- **Coverage gap fixed:** the owner surfaced that need-driven correction can skip DERIVED sections (evidence: §16 never re-derived; §11/§12/§14/§15 only partial) → coverage register in task_plan.md: 51 sections, per-section status + NEXT pointer, pass closes on its section list. Pass 1b (architecture §11/§12/§14/§15/§16) inserted before the backend pass.
+- **User stories + WH transparency:** every Supervisor user story is presented to the owner one by one for add/remove before the Architect answers; the full WH battery is presented before derivations.
+- **Branch lifecycle confirmed:** `spec-correction` holds all corrections; on full correction → new branch for re-implementation → delete `spec-correction`. **Freeze:** no `backend/*`/`client/*` edits until the spec is fully corrected (Stage 3 hard gate).
+- **Checkpoint commit executed** on explicit owner approval: `chore: phase 4 owner-corrections` — spec pass-1 corrections + mirrors (constants, MuiStatusBadge, phase-6 plan file) + the 5 controlled files (AGENTS.md, prompt.md now tracked, findings.md, this log, task_plan.md with the register). No push.
+- **NEXT:** pass 1b — Supervisor enumerates the architecture user stories (§11/§12/§14/§15/§16) for per-story owner review; then WH batteries → derivations → corrections → register closes 5/5 → step-5 gate.
+
+## Session 2026-08-18 — Pass 1b opened: S13 (STT contract) closed
+
+- Owner approved the 14-story pass-1b plan; order re-decided §16-first (skip-first — §16's outputs feed §11/§14); register NEXT pointer moved §11 → §16.
+- **S13 (§16 STT contract) — battery approved, derived, corrections applied (F66):** 33-question WH battery presented (no removals) → derivations from the §2.3 kernel + corrected model. Corrections: §16.4 STT block (exactly two multipart parts; chunk MIME = the pipeline's own wav/PCM — `AUDIO_ALLOWED_MIME_TYPES` governs uploads only; `request_data` carries exactly `language_code`; conditional `modelVersion` echo → `stt.model` null-if-unknown; `confidence`/`totalBilledDuration` never persisted; partial merge never persisted — §33.7), §33.4 (stale `target_language` removed — a `chat_generate` parameter that had leaked into the STT request contract; garbled "data object: audio blobs" phrasing fixed), §33.5 (`stt.model` written only from the provider echo, else null), §16.8 (new STT contract gate), §11.3 (`ADDIS_AI_STT_MAX_DURATION_SEC` Used-by += §16). No new constants, no new paths, no invention (§16.8 gate). Register: §16 → S13 closed (re-derived), NEXT → S12 (text-generation contracts).
+- **NEXT:** S12 — §16.2 roster/registry + §16.4 text-generation contracts + §16.6 chain: WH battery → derivations → corrections → register §16 closed → §11 (S1–S4).
+## Session 2026-08-18 — S12 research + SDK decision + REST route audit
+
+- **S12 research complete:** Addis AI FAQ (12/12 answers), npm registry, GitHub SDK source (v0.2.0), announcements, pricing/limits, LinkedIn. SDK source-verified wire facts (chat `chat_generate` mapping incl. prompt/conversation_history/generation_config, STT `/api/v2/stt` 2-part multipart, finish_reason normalization, model intentionally not forwarded, SDK maxRetries 3 vs README 2). Owner decisions D1–D9: adopt `addisai@^0.2.0` for **STT + TTT only** (TTS stays D1-deferred — owner clarified after two misreads); Gemini/NVIDIA stay axios; persona never sent; topP/topK dropped for Addis; retries SDK-managed; SDK built once in `config/env.js`; 402 → top-up message.
+- **S12 battery (20 questions) + full correction plan presented to the owner** (§16.2 paid policy, §16.3-16.5 SDK contract rewrites, §13.5 addisai row, §14.3 ADR-008, §11.3 Used-by, §16.8 gates, §33/§34/§35 wording, verification). Verdict + plan approval pending. Four end-to-end AI flows with wire payloads presented (correction of transcription / of report, STT/TTT each). Flagged OQ: transcription-stage TTT correction schema shape.
+- **Owner: "the route structure is not correct and doesn't follow the REST"** → REST route audit of the reports/AI domain applied to the spec (spec-only, freeze intact): `PUT /reports/:id/transcription` (merges transcribe + re-transcribe, idempotent create-or-replace), `POST /reports/:id/corrections`, `POST /reports/:id/corrections/transcripts`, `POST /reports/:id/generations`, `PUT /reports/:id/content` (revert), `PUT /reports/:id/visits`; archive/restore/play/chat kept as documented REST extensions. Sections touched: §31.2-2/§31.6/§31.8/§33.2/§33.6/§33.8/§34.2/§34.7/§35.2/§35.5/§35.6/§52.7/§54.2/§54.5/§54.6/§66.10/§15.4 + phase-6 plan + F67 ledger. Grep-verified: zero old route literals.
+- **NEXT:** present the completed route audit + re-request the S12 battery verdict + plan approval → §16 corrections (SDK contract rewrite) → register §16 closed → §11 (S1–S4) → §14 (S10) → §15 (S11) → §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — S12 closed: addisai SDK + paid policy + no-correction-schema + standing reasoning
+
+- **Owner verdict + approval:** "show me the full plan for 1 and 2. no correction schema" → full S12 plan (21-question battery, C1–C25 correction set, OQ resolution) presented → owner: "proceed".
+- **Decisions locked:** addisai ^0.2.0 SDK for ALL Addis traffic (STT `speech.transcribe` → `/api/v2/stt`, TTT `chat.completions.create` → `/api/v1/chat_generate`; no raw HTTP, SDK instance once in `config/env.js`); no `model` (display-only), no `persona`, no `topP`/`topK` for addis; SDK-managed retries pinned to `AI_PROVIDER_RETRIES`/`AI_TIMEOUT_MS`; typed `.retryAfter`/`.availableBalance`; finish_reason `length`/`content_filter` = provider failure; paid policy replaces free-only for Addis (402 → top-up message → fallback); **transcription-stage corrections = full plain prose** (no schema — owner); **standing reasoning**: user selects reasoning for reasoning-capable providers, applied to every TTT request as the conversation default (`ChatConversation.reasoning`, `AI_REASONING_DEFAULT` `'off'`, `MuiReasoningSelect` on the generation desk + CorrectionDialog, addis never receives it).
+- **Applied C1–C25** to §16.2–§16.8, §11.3/§11.4/§11.5, §13.3/§13.5, §14.3 ADR-008, §24.2, §33.4, §34.4/§34.5, §35.2/§35.3/§35.4, §36.3/§36.4/§36.5, §46.17, §52.8, §54.2/§54.7, §69 (OQ-011/012/013 + closure records). §16 register → **closed (re-derived)**.
+- **NEXT:** §11 (S1–S4) → §14 (S10) → §15 (S11) → §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — §11 closed (S1–S4)
+
+- **Story gate:** 4 §11 user stories presented (one canonical constants home / trustworthy inventory / complete semantic httpStatus / client mirror parity) — no removals.
+- **Battery gate:** 15 WH questions presented ("present" → "do them all").
+- **Derivations (F69):** home boundary env-vs-constants; deep freeze; tolerated-literals whitelist; orphan/phantom sweep discipline at pass end; httpStatus completeness + registration gate; mirror-scope rule + parity gate. **`ADDIS_AI_BASE_URL` removed from §11.3** (dead entry after the SDK adoption — endpoint SDK-internal; §16.4/§16.7/§16.8 reworded). §11.5 mirror scope verified complete (`LANGUAGE_CODES`/`MESSAGE_ROLES` correctly server-only).
+- **Applied:** §11.2/§11.3/§11.6/§11.7 + §16.4/§16.7/§16.8 wording; register §11 → **closed (re-derived)**; findings F69; this log.
+- **NEXT:** §14 (S10) → §15 (S11) → §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — §14 closed (S10)
+
+- **Story gate:** 6 §14 user stories (inventory completeness / one status vocabulary / protocol-only change / reversal integrity / cross-register parity / verification truth) — all kept.
+- **Battery:** 4 questions answered inline (F70): status-vocabulary normalization; no new ADR rows for S12-era decisions (owner prose governs); ADR-024→OQ-004 pointer verified; §12.11 parity deferred to the §12 pass.
+- **Applied:** ADR-001 decision text rewritten (stale "STT only" clause, internally contradictory; aligned with ADR-008/§12.11-5, amendment dated); ADR-008 status cell normalized to "Approved" (§14.2 vocabulary). Dangling-citation sweep clean.
+- **Register:** §14 → **closed (re-derived)**; findings F70; this log.
+- **NEXT:** §15 (S11) → §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — §15 closed (S11)
+
+- **Story gate:** 5 §15 stories (canonical tree truth / real-state markers / placement discipline / mirror completeness / verification truth) — kept. **Battery:** 8 WH questions; owner: "show me the full plan again" → consolidated plan; "proceed".
+- **Derivations (F71):** nine-point repo-drift table corrected into the tree (useMediaRecorder home/name; report/print placement + §58.3 same-pass; reusable +MuiProviderSelect implemented / +MuiReasoningSelect planned; utils +sanitizeHtml/+wizardValidation; auth/landing real lists; §15.3 authoring-workspace; three-class state legend with markers across both trees; §15.6 lines). One self-caught error mid-application: MuiReasoningSelect is NOT in the repo (planned §54 round) — marker corrected.
+- **Verified:** zero old refs; reusable diff 30/30+1 planned; pages 11/11; §15.4 repo-true.
+- **Register:** §15 → **closed (re-derived)**; findings F71; this log.
+- **NEXT:** §12 (S5–S9) → consistency sweep → pass-1b step-5 gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — §12 closed (S5–S9); pass 1b COMPLETE
+
+- **Story gate:** 5 §12 stories (canonical HLD / principles under amendment / HLD mirrors corrected sections / locked-decision register integrity / verification truth) — kept. **Battery:** 7 WH questions; full plan presented; "proceed".
+- **Applied (F72):** §12.3 editor box "planned"→installed; §12.3 Addis box "fetch"→"SDK"; §12.8 generation parameters provider-scoped + reasoning default. §12.11↔§14.3 parity re-check closed (row 5 aligned with amended ADR-001; no new transport row). Post-edit greps clean.
+- **Pass 1b complete — all five architecture sections closed:** §16 (S12/S13), §11 (S1–S4), §14 (S10), §15 (S11), §12 (S5–S9). Working files updated; findings F72; this log.
+- **NEXT:** pass consistency sweep (§11.7 inventory, §14.6 ADR citations, §15.8 path resolution, §13 manifest mirrors, §16 SDK gate) → step-5 review gate. Commit gated on explicit owner approval.
+
+## Session 2026-08-18 — Pass-1b consistency sweep COMPLETE (F73)
+
+- All 7 gates run; 4 defect classes resolved in the same change set:
+  - **G1:** transcript carve-out added to §11.6 (frozen-file reality: httpStatus/constants tables mirror P1 files — NO_CONTENT etc. stay); INTERNAL_SERVER_ERROR consumer added in §12.5.
+  - **G2:** ADR-002 cited in §12.2 (021/022 Owner-anchored, owners kernel-frozen).
+  - **G4:** §13.4 +7 installed editor rows; §13.5 dompurify row removed.
+  - **G5:** §33.6 + §69 SDK-gate URL restatements → pointer-only; wire URLs now only §16.4/§16.8.
+- **Pass 1b fully closed:** §16 → §11 → §14 → §15 → §12 → sweep. Working files updated; this log.
+- **NEXT:** step-5 review gate — pass-1b close-out report + checkpoint commit request (explicit owner approval required for the commit).
+
+## Session 2026-08-18 — Pass-1a data-model audit re-pass COMPLETE (F74)
+
+- **Story gate:** 7 schema-detail stories (per-entity field registry truth / correct field-value pairs / hooks & methods truth / keys-indexes-TTL truth / S12-era amendment alignment / ERD cardinality truth / verification-gate truth) — presented with full plan incl. the seven-schema summary table + WH battery; "proceed".
+- **Honest framing delivered:** §17–§24A were already closed in pass 1a; the owner's "pass 2 with schemas" ask served as re-presentation + audit of the closed sections; register pointer corrected (pass 2 = backend §25–§40, not §17–§24A).
+- **Corrections (2, same change set):** §19.3 two-TTL stale parenthetical → one-TTL doctrine (contradicted §18.3 + seven model sections); §17.3 Report—ChatConversation 1—N → 1—1 (contradicted §17.2/§24.2/§24.3/§24.4) with §24.1 gloss aligned.
+- **Verified no-change:** A2 chronology index, A3 item five-index proof rule, A4 stt subdoc vs §16.4 permission; all nine per-section verification gates re-run.
+- **Register:** pass 1a audit re-pass closed; findings F74; this log.
+- **NEXT:** step-5 review gate — pass-1a/pass-1b close-out report + commit request (explicit owner approval required) → pass 2 (backend §25–§40) Supervisor story gate.
+
+## Session 2026-08-19 — Route-contract review COMPLETE (F75)
+
+- **Story gate:** the owner's six route directives (no /auth/me → redux persist; no session endpoints → cookies; no users management — solo user, "a solo user can't call users"; branch-detail aggregate; main-locked visits incl. main at [0] in both create cases; output to a file) presented as the pass plan; refinements inline: `/users` namespace rejected ("there is no Users management"), then users dropped entirely, "group by frontend pages", "no tables just like the above".
+- **Deliverable:** `.opencode/plan/route-contract-review.md` — the complete corrected backend surface, **48 endpoints**, grouped by frontend page (boot/session, auth, profile, dashboard, branches grid, branch details, reports list, report details, wizard, correction dialog, chat, exports, search, dev-only), each endpoint with exact request/response JSON, envelope/DTO/error shapes, literal vs derived tags; appendices: master index, drift register B1–B7, decision list C1–C8 for sign-off. Written on "proceed"; verified (48 endpoints + 7 cross-refs, no tables).
+- **Grounded:** four-status machine (`REPORT_STATUSES`, §11.4 BR-06) — statusDistribution one `$group` per member, 0-filled, order preserved (§38.2); clips list `docs: []` empty-no-404 (§32.3); search zero-match `docs: []` + `matchedFields: []` (§39); user's visits payload contract per the owner's model.
+- **Register:** route-contract review recorded (F75); NEXT → pass-1a/pass-1b close-out report + commit request → pass 2 (backend §25–§40) Supervisor story gate, route contract as the pass input.
+
+## Session 2026-08-19 — Route-contract fold COMPLETE (F75/F76)
+
+- **Owner:** "plan to include route-contract-review.md in spec and next gate. remember, the route-contract-review.md will be deleted" → fold plan presented (C1 kernel amendment ask included); "proceed".
+- **Fold executed (one change set, `spec-correction`):**
+  - §26.6 health JSON; §28 removals (`/auth/me`, sessions rows, `optionalAuth`) + PATCH profile / GET avatar rows + §28.7 collision-heuristic fix + no-users-management note + register/login/refresh/logout/profile/avatar contract JSON; §30 + new §30.2.1 detail aggregate (branch + paginated reports + 4-member 0-filled analytics + items) with JSON; §31 rewrite (§31.2-1 create payload with visits ≥ 1 main-locked at [0], §31.2-2 visits PUT, §31.3 branch filter, §31.5 index-0 lock + branch-swap re-validation, §31.6 items `{items}`, generations single round-trip, §31.9 matrix + JSON); §32/§33/§36/§37/§38/§39/§40 contract JSON; §24A.3 items-path fix; §21.7/§6.10 kernel-mirror wording; kernel C1 applied (§6.4 Type = visits.length + main at [0], BR-03, §6.8, §21.2, §21.1 supervisorName 422); §57.4 retired; §42.3/§57.6 boot-probe notes; §56.5 rewritten to the aggregate; §69.3.1 fold record (C1–C8 all RESOLVED + fold-time correction: branch duplicate-name 409 folded away per §30.3/§30.7).
+- **Review file DELETED** per the owner directive after the fold.
+- **Verification:** legacy route literals in the spec are removal-context only (greps); every contract endpoint has a §28/§30/§31/§32/§33/§36/§37/§38/§39/§40 matrix row + JSON; route-param `:branchId` forms kept (§9.3).
+- **Working files:** task_plan NEXT pointer → close-out sweep + commit request → pass 2 story gate; findings F76; this log.
+- **NEXT:** close-out sweep (git status/diff review) + commit request — explicit owner approval required → then pass 2 (backend §25–§40) Supervisor story gate with the folded contract as the pass input.
+
+## Session 2026-08-19 — Pass 2 (backend §25–§40) COMPLETE (F77)
+
+- **Owner:** "Exhaustively go through §25 §26 §27 §28 §29 §30 §31 §32 §33 §34 §35 §36 §37 §38 §39 §40 and plan to complete" → exhaustive read of all 16 sections + §24A/§11.4/§15.5 mirrors; full plan presented (findings F1–F18, 18 supervisor stories B1–B18, WH battery W1–W9, execution/verification protocol); "proceed" → all applied in one change set on `spec-correction`.
+- **Story gate:** 18 stories approved as presented (no adds/removes). **WH battery** answered by the Architect and applied: W1 fixture accounts = 2 (persona + second; persona not the current user; BR-13 exercisable at data level) → seed `users: 2`; W2 reasoning always recorded (never null/boolean) → §36.4 rule + register-valid examples; W3 export = stored `latest` HTML sanitized (§58 flows extract per format); W4 matchedFields = branch-index fields; W5 video copy inline "Only audio recordings are supported"; W6 conditional mount only (one 404 mechanism); W7 per-audio granularity; W8 refresh-reuse acceptance documented; W9 raw 409 (no §29 remap).
+- **Corrections applied (18 + 4):** F1 PATCH-content 403 gone; F2/F3 §36.7 register-valid examples + never-null rule; F4 §39.3 branch-index example; F5 seed users 2 + (D5) removed; F6 §34.6 ReportDetailDto single round-trip (`data.content` retired); F7 §37.5 HTML-as-stored; F8 §28.7 409 copy unified; F9 §26.4 no public static mount; F10 single 404 mechanism (guard + dev-only copy removed); F11 §31.4/§24A §34.6 cross-refs; F12 §32.2/§32.8 video = plain MIME rule; F13 §30.3 artifact cleaned; F14 §33.7 per-audio granularity; F15 §32.3 pagination prose; F16 §38.2 filter contract self-defining; F17 §36.6 raw 409; F18 §15.5 authEndpoints/profileEndpoints comments; + §28.3 profile matrix row (firstName/lastName), §28.8 stub gate, §28.2 refresh-reuse acceptance, §60.7 sessions leftover removed.
+- **Audited-no-change:** §25, §27, §29, §35, §38 (per-section re-reads; §39.2/§39.4–§39.5/§40.6–§40.7 aside from F10).
+- **Record:** §69.3.2 pass-2 close-out record (16/16 dispositions); findings F77; task_plan register 16/16 closed; this log.
+- **Verification:** per-section grep gates + global gates — `anthropic`/`claude`/`"reasoning": null|false`/`This email is already`/`ensureMockEnabled`/`§19.1 placeholder`/`deferred D1`/`24A's filtering`/`"users": 1`/`location optional`/`No other active` = 0 in the spec (remaining hits = §69.3.2 record quotes / negative-context gates); §34.4 refs verified schema-flavored (no over-fix); §28.3/§28.7 copies identical; video references coherent.
+- **NEXT:** close-out sweep (git status/diff) + commit request `chore: spec-correction pass 2 backend close-out` — explicit owner approval required → then pass 3 (frontend §41–§60) Supervisor story gate.
+
+## Session 2026-08-19 — Pass 3 (frontend §41–§60) UI/UX front-load COMPLETE + R1 design foundation (F78)
+
+- **Owner:** "for all pages just like you did for dashboard pages, make an exhaustive analysis and make each page UI/UX astonishing" → exhaustive per-page analysis + 15 ASCII UI diagrams presented (identity = the supervisor's field notebook; one artifact per surface); "Now show me the full plan Pass 3 — frontend §41–§60 and UI/UX" → full pass-3 plan (register, 22 stories, WH battery, R1–R13 rounds, §9.7 verification, git protocol) presented; "proceed, don't do 6. Git protocol (§9.8) and for your information the branch is spec-correction" → plan approved; no commits; work on `spec-correction`.
+- **R1 executed (spec amendments, one change set):** §43.2 per-surface identity + Amharic-moment rule + data-presentation rule; §46.17 MuiStatCard usage note; §48.3 sign-in sheet; §48.4 intake sheet + name-reveal (+ helper-text re-point); §49.1/§49.2/§49.3/§49.6/§49.7 ledger band (supersedes the four-card row); §51.2 masthead; §52.4 pre-printed ስም; §56.3/§56.5/§56.7 signboard cell + header (Location merged into the name subline — Architect call); §57.3 ID-card face; §69 OQ-014 (open). ThemeToggle audited conformant (§43.4 dark scheme — no OQ). Working files: task_plan register 20/20 pass-3 rows + NEXT pointer, findings F78, this log.
+- **NEXT:** R2 — shells & chrome (§47): sidebar file-tab (hairline + tab fill), app-bar search entry + Ctrl+K, layout token audit. Then R3 auth pages, R4 dashboard (ledger band + drift fixes B1–B4), R5 reports, R6 wizard/editor, R7 details, R8 correction, R9 chat, R10 branches, R11 profile, R12 exports, R13 close-out. No commit/push without explicit owner approval.
+
+## Session 2026-08-19 — Pass 3 FREEZE CORRECTION (F79) — spec-only scope
+
+- **Owner:** "why you touch backend/ or client/ working files doesn't permit to touch them" → freeze confirmed: pass 3 is SPEC-ONLY; implementation deferred to Stage 5. R2's two client edits (AppShell Ctrl+K, GlobalSearchDialog serif index) reverted via `git restore` — the design directions remain, recorded as spec amendments instead.
+- **Spec amendments completed after the correction:** §50.4 date stub; §50.5 file-tab notch; §55.2 margin-notes panel; §59.2 ruled index. Audits: §47 (selected state = the raised file tab already), §53/§54 (round-7/8 contracts stand; OQ-010 open), §58 (OQ-006 closed), §60. Register rows re-evidenced to amendments.
+- **Working files:** task_plan (NEXT = spec-only pass 3, register 20/20 rows, implementation → Stage 5), findings F79, this log.
+- **NEXT:** finish the audit reads (§41/§42/§44/§45) → 20/20 dispositions → pass-3 close-out report + commit request (explicit owner approval required). No further `backend/*`/`client/*` touches until the Stage 3 gate lifts.
+
+## 2026-08-19 — pass 3 audit reads closed; register 20/20 (spec-only)
+
+- **Audit reads completed (F80):** §41 (routes/guards), §42 (network), §44 (customizations), §45 (responsive), §47 (layout), §60 (UX protocol) all audited-no-change; one same-change fix applied: §44.6 "KPI cards of §49" → "the dashboard's §49.2 ledger band is a flat ruled surface, not a card". Combined with the earlier reads (§47/§53/§54/§58) and the R1 re-derivations (§43/§46/§48–§52/§55–§57/§59), the pass-3 register is **20/20 dispositions, zero partials** — pass 3 CLOSED on its section list.
+- **Working files:** task_plan NEXT → pass-3 close-out report + commit request; findings F80; this log.
+- **NEXT:** present the pass-3 close-out report (dispositions, amendment summary, verification greps, diff scope) + commit request — explicit owner approval required. No further `backend/*`/`client/*` touches until the Stage 3 gate lifts.
+
+## 2026-08-19 — pass 4 (cross-cutting §67/§68) re-derived; register 51/51 (spec-only)
+
+- **Owner:** "do it exhaustively and Read, understand and respect AGENTS.md findings.md progress.md prompt.md README.md task_plan.md" → all six read in full; exhaustive pass-4 plan presented (10 stories, WH battery, known stale points R-1/R-3/R-4/R-13/R-14/R-15 + unregistered risk classes R-cands A–D, §68 stale points, maxima re-verification) → owner: "proceed".
+- **Citation sweep:** every §67 control cite re-read (§16.5, §27.3, §31.8, §33.7, §36.6, §55.3, §34.6, §40.4/§40.5, §24.2, §19.2, §46.6, §63.6, §26.2/§26.6, §62.3, §13.5, §65.6) + maxima greps (BR-19/ADR-038/OQ-014/A6/G9/F9/D5/SC-8) — one real defect surfaced: §16.5's STT bullet still said "the final transcription fuses the succeeded chunks" (contradicts §33.7 — no partial merge is ever persisted).
+- **Corrections (one change set):** §16.5 fixed first (owning-section-first); §67.2 register re-derived (R-1 paid-policy residual, R-3 §33.7 residual, R-4 `.retryAfter`+OQ-011, R-13 cites verified, R-14 §26.2/§26.6, R-15 §31.8+§36.6 raw 409, R-17 §65.6+§62.3, R-20 verified; **R-22 credit exhaustion / R-23 Ethiopian-calendar / R-24 STT accuracy / R-25 addisai SDK added** — each citing only existing controls); §67.3 new standing mitigation (paid AI is a user-facing cost); §67.5 mirrors; §68.3 Visit main-locked [0], wizard four steps, Candidate "(round-6)" token removed, 10 backfilled rows + backfill note; §68.5 mirrors.
+- **Verification:** diff scope = spec + 3 working files only; stale-fuse tokens = 0; control-citation resolution sweep clean; round-6 remaining hits = historical amendment annotations only.
+- **Working files:** task_plan (pass-4 register 2/2 closed; 51/51; NEXT = close-out + commit request), findings F81, this log.
+- **NEXT:** present the pass-4 close-out report (dispositions, corrections summary, verification greps, diff scope) + commit request — explicit owner approval required. Then Stage 3 (§63.9 C1–C6 audit + §69 zero-`TODO(open)` reconciliation).
+
+## 2026-08-19 — Stage 3: §63.9 audit C1–C6 GREEN — single-source-of-truth milestone (spec-only)
+
+- **Owner:** approved the Stage 3 plan via the two C2 dispositions ("Keep as manifest", "Keep as deletion record") + "proceed".
+- **C1:** citation extractor tooling (read-only, temp): 7931 §-citations vs 654 headings → **3 stale cites fixed** (§21.5 ×2 → §58/§37; §4.10 §52.3 reworded). Re-run after edits: zero misses.
+- **C2:** 9 `editor.md §x` provenance citations pruned (decision kept, path dropped); 2 sanctioned tokens kept per owner dispositions; count 0.
+- **C3:** §24A (Item Model) TOC entry ADDED (was missing, §24→§25 jump); 70/70 anchors resolve.
+- **C4:** green. **C5:** one dangling pointer fixed (§30.2 "review file's" → "draft contract's").
+- **C6:** sign-off record appended as §69.3.3; `TODO(open)` reconciliation green (marker only at its 5 definitional sites); OQ rows all carry pointers.
+- **Working files:** task_plan (Stage 3 closed; NEXT = close-out + commit request + branch lifecycle), findings F82, this log.
+- **NEXT:** present the Stage-3 close-out report + commit request (explicit owner approval required) → §9.8 branch lifecycle (new re-implementation branch, `spec-correction` deleted) → Stage 4 (backend-first per §15.4; frontend frozen; Postman-style endpoint tests per endpoint).
+
+## 2026-08-19 — Effort reorientation to implementation & re-implementation (5 controlled files)
+
+- **Owner directives (2026-08-19):** (1) reorient AGENTS.md, findings.md, progress.md, prompt.md, task_plan.md from spec-correction to implementation & re-implementation; (2) strictly state/log the protocol chain — Phase protocol (§66) + specs (`.opencode/plan/*`) + skills (`.opencode/skills/*`) + AGENTS.md + findings.md + progress.md + task_plan.md → role agent = Supervisor + Software Architect/Engineer/UI-UX + Design Lead ⇒ implementation ⇒ Postman-like tests until all green (backend only) ⇒ phase-protocol step 5 (backend only: request to run the script to test and verify) ⇒ document ⇒ phase-protocol step 6 ⇒ ready for the next; (3) hard gate — unless the backend is completed, the frontend is never re-implemented.
+- **Context:** correction effort CLOSED at commit `7fb1580` (51/51, C1–C6 green, §69.3.3; owner: "only commit" — no push, no branch lifecycle, no Stage 4).
+- **Changes applied (same change set, no spec edits):** AGENTS.md — repository status + protocol section replaced (implementation & re-implementation protocol, chain, role with Design Lead, per-phase flow, hard gate, branch lifecycle); prompt.md — full rewrite (correction content kept as the closed record; §1 role + chain, §2.2 closure record, §3 corrected-spec-as-sole-input method, §4 objectives with the gate, §6 Stages 1–3 CLOSED / Stage 4 ACTIVE / Stage 5 gated, §7 Postman until all green, §8–§14 implementation terms); task_plan.md — title/goal/Next Step reoriented (Stage 4 NEXT), stages list updated (Stage 2/3 closed, Stage 4 NEXT with the flow, Stage 5 strictly gated), standing rules = chain + gate + flow; findings.md — F83; this log.
+- **Verification:** canonical-chain tokens + directive-3 gate present in all 5 files; no stale "freeze until spec fully corrected" wording remains; working tree = 5 controlled files only.
+- **NEXT:** close-out report + commit request (explicit owner approval required) → §9.8 branch lifecycle (new implementation branch, `spec-correction` deleted — gated) → Stage 4: backend implementation per §15.4, sub-phase flow = implement → Postman-like tests until all green (backend only) → step 5 (owner runs the test script to test and verify) → document → step 6 → ready for the next.

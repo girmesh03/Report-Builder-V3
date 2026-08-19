@@ -35,7 +35,17 @@
 
 ## Decision points & blockers
 
-- Generation/correction contract details (§34/§35) include the branch digest lifecycle — re-read §6.11 + §31.5/§31.6 before building; unassigned-accept gate and digest retry endpoint are in scope here.
+- Generation/correction contract details (§34/§35) follow the corrected
+  model (2026-08-18): the branch-digest mechanism is **retired**
+  (§6.11); generation writes the transcription `latest` + Item rows in
+  one session and moves the report to `generated` (terminal, BR-08);
+  corrections save through `PATCH /reports/:reportId/content`
+  (Mode-1) or the Mode-2/3 `POST /reports/:reportId/corrections`
+  candidate endpoint (ephemeral — no accept
+  step anywhere); clips are report-level (`POST /reports/:reportId/
+  clips`, §32), visits are positional (no `visitNo`); the report holds
+  one `branch` ref + `visits[]` (no snapshot); transcription is the
+  report's 1:1 merged row (§23/§33).
 
 ## Session close (step 5 format)
 
