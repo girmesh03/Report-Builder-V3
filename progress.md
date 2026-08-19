@@ -241,3 +241,35 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - **Executed:** prep commit `b1a5ff5` on stage-4-backend → pushed spec-correction + stage-4-backend → three `--no-ff` merges on main (phase-4-frontend-pages → spec-correction → stage-4-backend; conflict-free linear chain) → main pushed (8ce7b2a..8c2374c) → all three branches deleted local + remote → verified: only `main`/`origin/main` remain.
 - **Record:** F85 + branch-lifecycle lines updated in AGENTS.md/task_plan.md (post-merge record, §66.6).
 - **NEXT:** Stage 4 sub-phase 1 (Foundation, §26/§27) — branch from `main` per §9.8, per-phase flow (implement → Postman-like tests until all green (backend only) → step 5 = owner runs the test script → document → step 6 → ready for the next); awaiting the owner's go.
+
+## 2026-08-19 — Stage 4 plan finalized (F86); sub-phase 1 STARTED
+
+- **Owner directive:** "make exhaustive analysis and prepare a full backend implementation plan" → four explore agents extracted the corrected spec's backend surface; exhaustive plan synthesized and presented.
+- **Owner decisions (approved):** (1) per-sub-phase branches; (2) hand-rolled allowlist sanitizer for §61.3 (no new dependency); (3) start sub-phase 1 on plan-mode lift → owner: "proceed".
+- **Branch:** `phase-6-backend-foundation` created at main head (`9dded83`, clean, not pushed) — sub-phase 1 works here.
+- **F86** records the audit gaps: stale 5-state `REPORT_STATUSES`, banned `ADDIS_AI_BASE_URL`, missing ITEM_\*/AI_REASONING_DEFAULT constants, addisai planned install at sub-phase 4, ethiopianDate §15.4 tree amendment, env.js/httpStatus.js verified correct.
+- **Plan** finalized into task_plan.md (Stage-4 FINALIZED EXECUTION PLAN block: file inventories, exit gates, test matrices, branch map).
+- **NEXT:** sub-phase 1 implementation (constants re-sync → utils/errors.js + utils/logger.js → app.js/server.js/routes/index.js + health) → Postman-like tests until green → step 5 (owner runs the test script) → document → step 6 (gated commit).
+
+## 2026-08-19 — Amendment set: terminal-visible verification contract (F87)
+
+- **Owner directive:** step-5 verification must print every request/response JSON + PASS/FAIL to the terminal for live owner verification; state it strictly in AGENTS.md, findings.md, progress.md, task_plan.md, prompt.md and the spec FIRST.
+- **Applied (one change set, §66.6):** spec §63.10 (new normative terminal-visible contract), §15.4 backend tree `scripts/` entry, §63.4 Scripts gate row; AGENTS.md per-phase-flow step 5 + Verify commands; prompt.md §7 rewritten (Node/fetch suites replace the curl example); task_plan.md verification-script contract block; findings F87; this log.
+- **Design:** `backend/scripts/test-<NN>-<name>.mjs` per sub-phase, Node 24 + fetch, stdout via `process.stdout.write` (no console.log literal — grep-gate clean), per-endpoint sections + `--only=<endpoint>`, `PASS=N FAIL=M` + non-zero exit, restart-backend-between-runs note (15-min rate window).
+- **NEXT:** owner approval → return to sub-phase 1 (write `test-01-foundation.mjs`, restart backend, run to green, present ledger → step 5 → document → gated commit).
+
+## 2026-08-19 — Sub-phase 1 close-out: npm run dev fix + review findings (F88)
+
+- **Owner report:** `npm run dev` does not start the server. **Root causes (confirmed):** (1) nodemon watches `backend/logs/*` (default ignoreRoot excludes only node_modules/.git/etc.) → every Winston write restarts the server in a loop → fixed with `backend/nodemon.json` `ignore: ["logs/**","*.log"]`; (2) port 4000 held by the agent's leftover detached server (EADDRINUSE loop) → port freed at handoff; temp mongod (PID 10756) stopped, MongoDB service covers 27017.
+- **Review fixes (same change set):** errors.js magic literals → `httpStatus.BAD_REQUEST` + new `MONGO_DUPLICATE_KEY_ERROR_CODE`; boot fail-fast → `MONGO_CONNECT_TIMEOUT_MS` passed to mongoose.connect; spec amendments — §26.4/§27.2 add `express.json` to the fixed chain, §15.4 adds `nodemon.json`, §11.3 adds the two new constants rows.
+- **Long-running-command rule (owner directive):** strictly stated in the 6 controlled files (spec §63.10, AGENTS.md, prompt.md, task_plan.md, findings F88, this log) — no `nohup & disown`, no `Start-Process -Redirect*`, no grep -r over node_modules, no sleep > 3 s; detached servers via redirect-free `Start-Process -WindowStyle Hidden` with separate readiness check; timed-out command = failed command.
+- **NEXT:** code fixes applied → node --check all → ports freed → backend restarted → suite to green → step 5 (owner: `npm run dev` + suite run) → document → gated commit.
+
+## 2026-08-19 — Sub-phase 1 CLOSED (step 5 accepted, step 6 executed)
+
+- **Suite:** `node scripts/test-01-foundation.mjs` — **PASS=12 FAIL=0, exit 0** on the fixed code (health contract, envelope/404, JSON 400, CORS 204, compression, helmet, global tier 100-budget→429 + health exempt; probe-based remaining-budget assertion robust on any store state; `--only=<group>` verified).
+- **`npm run dev` verified live:** nodemon restart-loop fixed via `backend/nodemon.json` (logs/** + *.log ignored); detached launch showed monotonic uptime (10.5→14.8→18.9 s) across polls with zero restarts; port freed at handoff (owner runs `npm run dev` themselves at each step-5 gate).
+- **Runtime facts:** `MONGO_URI` = MongoDB Atlas (cloud; local MongoDB service/port 27017 unused — the temp mongod was removed; Atlas cold handshake needs ~10 s → `MONGO_CONNECT_TIMEOUT_MS = 10000`; the earlier 5 s value failed live and was corrected in the same change set).
+- **Grep gates clean:** no console.log (doc comments only), process.env only in config/env.js (plus the test script's TEST_BASE override), one `/api/v1` mount; `node --check` green on all 8 files + script.
+- **Deferrals recorded (F88):** pagination helper → sub-phase 4 (read endpoints), session middleware → sub-phase 3 (identity), CastError mapping → sub-phase 2 (models), §61.3 allowlist sanitizer → sub-phase 4.
+- **Step 6:** committed on `phase-6-backend-foundation` (owner directive). NEXT: sub-phase 2 — models (§18–§24A) on `phase-6-backend-models` from `main` after the merge approval.

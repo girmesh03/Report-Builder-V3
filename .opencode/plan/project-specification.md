@@ -2117,6 +2117,8 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `EXPORT_DOCS_ENABLED`             | `false`                                      | §37                         |
 | `AI_PROVIDER_RETRIES`             | 3                                            | §16 (the SDK `maxRetries` for addis; the axios retry count for gemini/nvidia) |
 | `AI_PROVIDER_BACKOFF_BASE_MS`     | 1000                                         | §16                         |
+| `MONGO_DUPLICATE_KEY_ERROR_CODE`  | 11000                                        | §27 (error envelope mapping; added 2026-08-19) |
+| `MONGO_CONNECT_TIMEOUT_MS`        | 10000                                        | §26 (boot fail-fast; added 2026-08-19) |
 | `GEMINI_BASE_URL`                 | `https://generativelanguage.googleapis.com/v1beta` | §16                |
 | `RATE_LIMIT_GLOBAL_WINDOW_MIN`    | 15                                           | §27                         |
 | `RATE_LIMIT_GLOBAL_MAX`           | 100                                          | §27                         |
@@ -3087,6 +3089,7 @@ backend/
 |-- app.js                          # Express app; middleware wiring + route-registry mount; registers no route directly (§12.2, §26)
 |-- package.json                    (scaffold)
 |-- package-lock.json               (scaffold)
+|-- nodemon.json                    # dev-watch config: ignores logs/* (restart-loop guard, §9.7; added 2026-08-19)
 |-- .env                            (runtime, never committed — §10.2)
 |-- config/
 |   `-- env.js                      (implemented)  # the only reader of process.env.; frozen config object (§10.3)
@@ -3110,6 +3113,7 @@ backend/
 |                                   # chat, exports, analytics, search — contents §33–§39
 |-- jobs/
 |   `-- sweeper                     # single in-process timer, two passes (§12.5, §62)
+|-- scripts/                       # per-sub-phase Postman-like verification scripts (§63.10; added 2026-08-19)
 |-- mock/                           # seed and wipe scripts, session-safe (§40, ADR-037)
 `-- uploads/
     |-- audio/                      (runtime; gitignored; created by multer — §32)
@@ -5889,7 +5893,7 @@ directly** (§12.2-7) — only `routes/index.js` does. Order (fixed,
 ADR-035 — never reordered, never dropped):
 
 ```
-helmet → cors → compression → cookie-parser → express-mongo-sanitize → rate-limit
+helmet → cors → compression → cookie-parser → express.json → express-mongo-sanitize → rate-limit
 ```
 
 wired in that order, then the `/api/v1` registry mount (§26.5),
@@ -5991,6 +5995,9 @@ Installed in §26.4 order, never reordered. Behavior notes:
 - **compression** — gzip for responses.
 - **cookie-parser** — read `accessToken`/`refreshToken` httpOnly
   cookies (§28).
+- **express.json** — JSON body parsing; precedes the sanitizer so
+  `$`/`.` operator keys in bodies are stripped before validation
+  (§27.2 chain, added 2026-08-19 to match the §26.4 order).
 - **express-mongo-sanitize** — strips `$`/`.` operator keys from
   bodies/queries before validation.
 - **rate-limit** at §27.3.
@@ -13065,6 +13072,7 @@ section is the rule's authority:
 | Gate | Rule | Owner |
 |---|---|---|
 | Logger | No `console.log` in the backend — Winston only | §9.5, ADR-019 |
+| Scripts | Verification scripts print to stdout via `process.stdout.write` — no `console.log` literal | §63.10, §9.5 |
 | Status codes | No numeric HTTP codes — semantic `httpStatus.js` names only | §11.6, §9.7 |
 | Magic values | No literals outside §10/§11 frozen objects | §11.2, §10.3 |
 | Key doctrine | No `.id` property access; primary keys are `_id` | §9.3, §9.7 |
@@ -13156,6 +13164,45 @@ freeze after any pruning of working notes re-runs it. Six checks:
 The audit is exercised through the tooling kept with the planning
 notes (read-only; it never modifies this document) and through the
 grep sweeps of §63.4.
+
+### 63.10 Terminal-visible verification scripts (step-5 gate)
+
+The backend's manual gate is exercised through per-sub-phase
+Postman-style suites under `backend/scripts/` (the §15.4 tree). This
+subsection is normative for every such suite (owner directive
+2026-08-19):
+
+- **Output contract.** Every check MUST print to stdout the request
+  (method + path) and, when the check performs an HTTP request, the
+  response status and the full JSON body — then a `PASS`/`FAIL`
+  verdict per check. Non-HTTP checks (model/schema declarations,
+  pure functions, the sweeper, constants parity) print a labeled
+  check line (`MODEL CHECK` / `UNIT` / `SWEEPER`) with the same
+  PASS/FAIL framing. Each suite ends with a summary line
+  (`PASS=N FAIL=M`) and exits non-zero on any failure.
+- **Step-5 gate.** The step-5 run is the owner's live terminal read:
+  a sub-phase advances only on a fully green live run.
+- **Grep-gate boundary.** Scripts write to stdout via
+  `process.stdout.write` — no `console.log` literal — preserving the
+  §9.5/§63.4 grep gates (§63.4 Scripts row).
+- **Structure.** Suites are per sub-phase (`test-<NN>-<name>.mjs`,
+  Node + built-in `fetch`, zero dependencies), grouped per endpoint
+  (`─── <endpoint> ───` section headers), and support an
+  `--only=<endpoint>` filter to run one endpoint's checks.
+- **Operational note.** The rate-limit stores are in-memory; restart
+  the backend before each suite run (the 15-minute global window
+  resets on restart, §27.3).
+- **Tool-command responsiveness rule (owner directive 2026-08-19).**
+  Verification commands must return promptly — never burn a command
+  timeout. Prohibited patterns that hold the terminal/tool capture
+  pipe open: backgrounding via `nohup … & disown`, PowerShell
+  `Start-Process` with `-RedirectStandardOutput`/
+  `-RedirectStandardError` (blocks until the child exits), recursive
+  `grep -r` over `node_modules`, and command chains with `sleep`
+  longer than 3 s. Detached dev servers start through a single
+  redirect-free `Start-Process -WindowStyle Hidden` command;
+  readiness is verified in a separate quick command. A command that
+  hits its timeout is a failed command.
 
 ---
 

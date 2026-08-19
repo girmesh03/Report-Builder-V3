@@ -141,12 +141,23 @@ export const AI_PROVIDER_RETRIES = 3;
 export const AI_PROVIDER_BACKOFF_BASE_MS = 1000;
 
 /**
- * Provider base URLs — §16.
- * @type {string}
+ * MongoDB duplicate-key error code — §27 (error-envelope mapping).
+ * @type {number}
  */
-export const ADDIS_AI_BASE_URL = 'https://api.addisassistant.com';
+export const MONGO_DUPLICATE_KEY_ERROR_CODE = 11000;
 
 /**
+ * MongoDB connection timeout for boot fail-fast — §26.6. Budgets a
+ * cold Atlas TLS + replica-set discovery handshake (the §10.4
+ * MONGO_URI is a cloud URI); still fail-fast vs the 30 s driver
+ * default.
+ * @type {number}
+ */
+export const MONGO_CONNECT_TIMEOUT_MS = 10000;
+
+/**
+ * Provider base URL — §16 (gemini/nvidia only; the addisai SDK is
+ * SDK-internal — no `ADDIS_AI_BASE_URL` constant exists, §16.7).
  * @type {string}
  */
 export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
@@ -212,9 +223,34 @@ export const REPORT_STATUSES = Object.freeze([
   'draft',
   'audio_attached',
   'transcribed',
-  'reviewed',
+  'generated',
+]);
+
+/**
+ * Domain — item types (§24A, §34, §38).
+ * @type {readonly string[]}
+ */
+export const ITEM_TYPES = Object.freeze(['activity', 'issue', 'comment']);
+
+/**
+ * Domain — item statuses (§24A, §54).
+ * @type {readonly string[]}
+ */
+export const ITEM_STATUSES = Object.freeze([
+  'reported',
+  'in_progress',
   'completed',
 ]);
+
+/**
+ * Domain — per-type item status vocabulary (§24A, §54).
+ * @type {readonly Object<string, readonly string[]>}
+ */
+export const ITEM_STATUSES_BY_TYPE = Object.freeze({
+  activity: Object.freeze(['completed', 'in_progress']),
+  issue: Object.freeze(['reported', 'in_progress', 'completed']),
+  comment: Object.freeze([]),
+});
 
 /**
  * Domain — provider ids, also the §16.6 fallback chain order.
@@ -258,6 +294,13 @@ export const AI_MODELS = Object.freeze({
  * @type {readonly string[]}
  */
 export const AI_REASONING_EFFORTS = Object.freeze(['off', 'low', 'medium', 'high']);
+
+/**
+ * Domain — the conversation-level standing reasoning effort applied
+ * to every TTT request (§16.2, §24.2).
+ * @type {string}
+ */
+export const AI_REASONING_DEFAULT = 'off';
 
 /**
  * Domain — conversation message roles (§24, §36).

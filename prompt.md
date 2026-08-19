@@ -240,21 +240,14 @@ For **every** backend endpoint you produce a test record with all of the followi
 
 1. **Purpose** — one sentence, cited to the corrected specification section.
 2. **Contract** — method, path, authentication tier required, request body schema, validation rules.
-3. **Request script** — a paste-ready script that exercises the endpoint against the running dev server (backend on port 4000, `npm run dev` in `backend/`). Example shape:
-
-   ```bash
-   # POST /api/branches — create a branch (happy path)
-   curl -i -X POST http://localhost:4000/api/branches \
-     -H "Content-Type: application/json" \
-     -H "Authorization: Bearer <access-token>" \
-     -d '{"name":"Bole","address":"..."}'
-   ```
-
+3. **Request script** — a per-sub-phase suite under `backend/scripts/` (`test-<NN>-<name>.mjs`, Node 24 + built-in `fetch`, zero dependencies) that exercises the endpoint against the running dev server (backend on port 4000, `npm run dev` in `backend/`). Suites are grouped per endpoint (a section header per endpoint) and support `--only=<endpoint>` to run one endpoint's checks. **Terminal-visible contract (§63.10):** every check prints to the terminal the request (method + path) and the response status + full JSON body, then a `PASS`/`FAIL` verdict; non-HTTP checks (model/schema, pure-function, sweeper, constants parity) print a labeled `MODEL CHECK` / `UNIT` / `SWEEPER` line with the same framing; the suite ends with `PASS=N FAIL=M` and exits non-zero on any failure. Scripts write to stdout via `process.stdout.write` (no `console.log` literal — keeps the §9.5/§63.4 grep gate clean). Restart the backend before each suite run (in-memory rate store resets on restart; 15-min global window).
 4. **Happy path** — the script, the request, the expected response (status code, envelope shape, body snapshot), and the actual result recorded.
 5. **Edge-case matrix** — at minimum every row: missing fields; invalid field types; empty strings and empty collections; oversized values; duplicate create; unknown `_id`; unauthenticated request; expired access token; expired refresh token; forbidden status transition (against the §31.4 transition-guard table); concurrent writes to the same resource; pagination boundaries (page 0, page beyond the end, stable sort order); multipart with malformed or empty audio; provider failure paths (STT, generation, correction, chat); the 422 field-error detail shape; the 502/503 honest-error envelope; and TTL window edges.
 6. **Result ledger** — for every case, the actual result: pass/fail and the recorded response; any fix traced to its commit. **The ledger closes only when every case is green.**
 
-Testing is manual and Postman-style: start the dev server, run the scripts, verify responses, record everything — **until all green**. No automated test frameworks — permanently excluded (§4.3, §13.6). Every endpoint, every edge case, documented.
+Testing is manual and Postman-style: start the dev server, run the scripts, verify responses on the terminal (every request/response JSON + PASS/FAIL visible to me at the step-5 gate), record everything — **until all green**. No automated test frameworks — permanently excluded (§4.3, §13.6). Every endpoint, every edge case, documented.
+
+**Tool-command responsiveness rule (owner directive 2026-08-19, §63.10):** commands must return promptly — never burn a timeout. Prohibited: backgrounding that holds the capture pipe (`nohup … & disown`), PowerShell `Start-Process` with `-RedirectStandardOutput`/`-RedirectStandardError` (blocks until the child exits), recursive `grep -r` over `node_modules`, chains with `sleep` > 3 s. Detached dev servers start via a single redirect-free `Start-Process -WindowStyle Hidden`; readiness is verified in a separate quick command. A command that hits its timeout is a failed command.
 
 ---
 

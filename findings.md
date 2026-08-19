@@ -724,3 +724,46 @@ Owner directive: "add, commit, push, merge all branches to main and clean them f
 - **Merges (conflict-free — linear chain off `main` 8ce7b2a, three `--no-ff` merge commits on `main`):** `merge: phase 4 frontend pages (close-out)` (71 files — phase-4 client pages + mirrors), `merge: spec-correction corrections + reorientation (close-out)` (9 files — spec corrections + reorientation + prompt.md), `merge: stage 4 backend prep (implementation ready)` (3 files). `main` pushed to origin (8ce7b2a..8c2374c).
 - **Cleanup:** `phase-4-frontend-pages`, `spec-correction`, `stage-4-backend` deleted locally (`git branch -d`, all merged) and remotely (`git push origin --delete`). Verified: local + remote show **only `main`/`origin/main`**.
 - **Record:** branch-lifecycle lines in AGENTS.md/task_plan.md updated (post-merge record, same-change discipline §66.6). Stage 4 continues from `main` — sub-phase branches per §9.8. NEXT: Stage 4 sub-phase 1 (Foundation, §26/§27) — awaiting the owner's go.
+
+## F86 — 2026-08-19 — Exhaustive backend analysis + full implementation plan (owner approved)
+
+Owner directive: "make exhaustive analysis and prepare a full backend implementation plan". Four explore agents extracted the corrected spec's backend surface (data layer §17–§24A/§18 conventions/§11.3/§16; foundation+identity §26–§29/§13.3/§13.5; domain APIs §30–§36 incl. §31.4 transition-guard table; aggregations+gates §37–§40/§61–§63/§66.9 P6-P7/§66.10-11). Plan synthesized, presented, owner approved with three decisions: **per-sub-phase branches** (§9.8), **hand-rolled allowlist sanitizer** (§61.3/§61.4, no new dep), **start sub-phase 1 on plan-mode lift**.
+
+**Ground-truth audit of the P1 foundation (gaps to fix):**
+1. `backend/utils/constants.js` — `REPORT_STATUSES` still the OLD 5-state (`reviewed`,`completed`); corrected §11.4 = 4-state `['draft','audio_attached','transcribed','generated']`. **Stale — must re-sync.**
+2. `constants.js` ships the BANNED `ADDIS_AI_BASE_URL = 'https://api.addisassistant.com'` — §16.7: "No `ADDIS_AI_BASE_URL` constant exists (removed 2026-08-18 — SDK-internal)". **Must be deleted.**
+3. Missing: `ITEM_TYPES`, `ITEM_STATUSES`, `ITEM_STATUSES_BY_TYPE`, `AI_REASONING_DEFAULT` (`'off'`).
+4. **addisai ^0.2.0 is a §13.5 planned install with entrance gate "P6 transport phase"** → installs at sub-phase 4 (corrects F84's "no installs planned" — that held only until the transport phase). NVIDIA helper P7-conditional, never proactive.
+5. Server-side sanitize-on-write (§61.3): owner decision = hand-rolled allowlist sanitizer (no manifest change).
+6. §38.5 Ethiopian-month bucketing needs a backend calendar util → §15.4 tree amendment `utils/ethiopianDate.js` (mirror of client §6.3/§43.6), same-commit (§66.6).
+7. `env.js` (frozen, fail-fast, §10.4 required set + defaults) and `httpStatus.js` (§11.6) verified CORRECT — no change.
+
+**Stage-4 execution plan finalized into task_plan.md** (sub-phases 1–6 with per-file inventories, endpoint matrices, exit gates, per-phase flow; finalized branch map). NEXT: sub-phase 1 (Foundation & constants re-sync, §26/§27/§11) on `phase-6-backend-foundation`.
+
+## F87 — 2026-08-19 — Terminal-visible verification contract (owner directive)
+
+Owner directive: the step-5 verification run must show every request/response JSON + PASS/FAIL on the terminal so the owner can watch each check live and gate sub-phase transitions with confidence. Owner asked for the requirement to be **strictly stated first** in the controlled files and the spec, then implemented.
+
+**Architect decision (owner: "you know your role"):**
+1. **Scripts live in the repo** under `backend/scripts/` (`test-<NN>-<name>.mjs`, per sub-phase) — a versioned, reproducible artifact for the step-5 gate across all six sub-phases (better than ephemeral temp tooling).
+2. **Node 24 + built-in `fetch`** (not bash/curl, not Python): a single Node process fires requests concurrently — the whole suite runs in ~2–3 s; bash+curl cost ~40–60 s (105 sequential `curl.exe` process spawns on Windows). Zero new dependencies (§66.8 clean).
+3. **Terminal-visible output per check:** request (method + path) → response status + full JSON body → PASS/FAIL; non-HTTP checks labeled `MODEL CHECK` / `UNIT` / `SWEEPER`; suite ends `PASS=N FAIL=M` + non-zero exit on any failure.
+4. **Grep-gate boundary:** scripts write via `process.stdout.write` — no `console.log` literal — so the §9.5/§63.4 "no console.log in backend/" gates stay green. This resolved the collision that a naive `backend/scripts/` would have caused.
+5. **Per-endpoint visibility:** suites group checks per endpoint (`─── <endpoint> ───` section headers) with an `--only=<endpoint>` filter — per-endpoint focus without 30 fragmented files.
+6. **Operational note:** restart the backend before each suite run — the in-memory rate-limit store resets on restart (15-min global window).
+
+**Amendment set applied (one change set, §66.6):** spec §63.10 (new normative subsection), §15.4 tree `scripts/` entry, §63.4 Scripts gate row; AGENTS.md (per-phase flow step 5 + Verify commands); prompt.md (§7 rewritten to the Node/fetch terminal-visible standard, curl example replaced); task_plan.md (verification script contract block); findings F87; progress log. Sub-phase 1 execution resumes after this set lands (owner: "then ask me to back to the Sub-phase 1").
+
+## F88 — 2026-08-19 — Sub-phase 1 close-out findings + long-running-command rule
+
+**Exhaustive sub-phase 1 review (owner request) — verdict: implemented correctly, suite 12/12 green.** Findings:
+
+1. **`npm run dev` broken (owner report) — TWO root causes, both confirmed:**
+   - **nodemon restart loop:** nodemon 3.1.14 default `ignoreRoot` = `.git/.nyc_output/.sass-cache/bower_components/coverage/node_modules` only — `backend/logs/*` is watched; every Winston file write restarts the server forever. Fix: `backend/nodemon.json` with `ignore: ["logs/**", "*.log"]` (+ §15.4 tree entry, same commit).
+   - **EADDRINUSE:** the agent's leftover detached background server held :4000 (PID 9908); nodemon's child exited(1) and retried forever. Fix: free the port at handoff; temp mongod (PID 10756, temp dbpath) stopped — the MongoDB service mongod (PID 6724) covers 27017.
+2. **Magic literals (§11.2):** `errors.js` used `err.statusCode === 400` → `httpStatus.BAD_REQUEST`; `err.code === 11000` → new constant `MONGO_DUPLICATE_KEY_ERROR_CODE = 11000` (+ §11.3 row). Both fixed in this change set.
+3. **Boot fail-fast (§26.6):** `mongoose.connect` without `serverSelectionTimeoutMS` hung ~30 s when Mongo was down. Fixed: `MONGO_CONNECT_TIMEOUT_MS = 5000` (+ §11.3 row), passed to connect.
+4. **Spec gap — §26.4/§27.2 chain lists omitted `express.json`:** the implementation correctly inserts it before the sanitizer (body must be parsed to strip `$`/`.` operators). Both lists amended (same commit).
+5. **Deferrals recorded (not bugs):** sub-phase-1 inventory's "pagination helper, session middleware" are over-inclusive — the §15.4 tree has no such files; pagination arrives with read endpoints (sub-phase 4), sessions with identity (sub-phase 3); CastError mapping deferred to sub-phase 2 (models); the §61.3 hand-rolled allowlist sanitizer (owner decision) is a separate concern from the mongoSanitize Express-5 shim — lands at sub-phase 4. env.js "pre-defined .env" slot = backend/.env (no root .env exists) — accepted derivation.
+
+**Long-running-command rule (owner directive, strictly stated in AGENTS.md, findings, progress, task_plan, prompt.md, spec §63.10):** commands must return promptly — never burn a timeout; prohibited: `nohup … & disown` backgrounding (holds the capture pipe), `Start-Process -RedirectStandardOutput/-RedirectStandardError` (blocks until child exit), recursive `grep -r` over node_modules, `sleep` > 3 s chains; detached dev servers start via a single redirect-free `Start-Process -WindowStyle Hidden`; readiness verified separately; a timed-out command is a failed command.
