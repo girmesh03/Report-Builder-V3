@@ -179,3 +179,42 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - **Record:** §69.3.2 pass-2 close-out record (16/16 dispositions); findings F77; task_plan register 16/16 closed; this log.
 - **Verification:** per-section grep gates + global gates — `anthropic`/`claude`/`"reasoning": null|false`/`This email is already`/`ensureMockEnabled`/`§19.1 placeholder`/`deferred D1`/`24A's filtering`/`"users": 1`/`location optional`/`No other active` = 0 in the spec (remaining hits = §69.3.2 record quotes / negative-context gates); §34.4 refs verified schema-flavored (no over-fix); §28.3/§28.7 copies identical; video references coherent.
 - **NEXT:** close-out sweep (git status/diff) + commit request `chore: spec-correction pass 2 backend close-out` — explicit owner approval required → then pass 3 (frontend §41–§60) Supervisor story gate.
+
+## Session 2026-08-19 — Pass 3 (frontend §41–§60) UI/UX front-load COMPLETE + R1 design foundation (F78)
+
+- **Owner:** "for all pages just like you did for dashboard pages, make an exhaustive analysis and make each page UI/UX astonishing" → exhaustive per-page analysis + 15 ASCII UI diagrams presented (identity = the supervisor's field notebook; one artifact per surface); "Now show me the full plan Pass 3 — frontend §41–§60 and UI/UX" → full pass-3 plan (register, 22 stories, WH battery, R1–R13 rounds, §9.7 verification, git protocol) presented; "proceed, don't do 6. Git protocol (§9.8) and for your information the branch is spec-correction" → plan approved; no commits; work on `spec-correction`.
+- **R1 executed (spec amendments, one change set):** §43.2 per-surface identity + Amharic-moment rule + data-presentation rule; §46.17 MuiStatCard usage note; §48.3 sign-in sheet; §48.4 intake sheet + name-reveal (+ helper-text re-point); §49.1/§49.2/§49.3/§49.6/§49.7 ledger band (supersedes the four-card row); §51.2 masthead; §52.4 pre-printed ስም; §56.3/§56.5/§56.7 signboard cell + header (Location merged into the name subline — Architect call); §57.3 ID-card face; §69 OQ-014 (open). ThemeToggle audited conformant (§43.4 dark scheme — no OQ). Working files: task_plan register 20/20 pass-3 rows + NEXT pointer, findings F78, this log.
+- **NEXT:** R2 — shells & chrome (§47): sidebar file-tab (hairline + tab fill), app-bar search entry + Ctrl+K, layout token audit. Then R3 auth pages, R4 dashboard (ledger band + drift fixes B1–B4), R5 reports, R6 wizard/editor, R7 details, R8 correction, R9 chat, R10 branches, R11 profile, R12 exports, R13 close-out. No commit/push without explicit owner approval.
+
+## Session 2026-08-19 — Pass 3 FREEZE CORRECTION (F79) — spec-only scope
+
+- **Owner:** "why you touch backend/ or client/ working files doesn't permit to touch them" → freeze confirmed: pass 3 is SPEC-ONLY; implementation deferred to Stage 5. R2's two client edits (AppShell Ctrl+K, GlobalSearchDialog serif index) reverted via `git restore` — the design directions remain, recorded as spec amendments instead.
+- **Spec amendments completed after the correction:** §50.4 date stub; §50.5 file-tab notch; §55.2 margin-notes panel; §59.2 ruled index. Audits: §47 (selected state = the raised file tab already), §53/§54 (round-7/8 contracts stand; OQ-010 open), §58 (OQ-006 closed), §60. Register rows re-evidenced to amendments.
+- **Working files:** task_plan (NEXT = spec-only pass 3, register 20/20 rows, implementation → Stage 5), findings F79, this log.
+- **NEXT:** finish the audit reads (§41/§42/§44/§45) → 20/20 dispositions → pass-3 close-out report + commit request (explicit owner approval required). No further `backend/*`/`client/*` touches until the Stage 3 gate lifts.
+
+## 2026-08-19 — pass 3 audit reads closed; register 20/20 (spec-only)
+
+- **Audit reads completed (F80):** §41 (routes/guards), §42 (network), §44 (customizations), §45 (responsive), §47 (layout), §60 (UX protocol) all audited-no-change; one same-change fix applied: §44.6 "KPI cards of §49" → "the dashboard's §49.2 ledger band is a flat ruled surface, not a card". Combined with the earlier reads (§47/§53/§54/§58) and the R1 re-derivations (§43/§46/§48–§52/§55–§57/§59), the pass-3 register is **20/20 dispositions, zero partials** — pass 3 CLOSED on its section list.
+- **Working files:** task_plan NEXT → pass-3 close-out report + commit request; findings F80; this log.
+- **NEXT:** present the pass-3 close-out report (dispositions, amendment summary, verification greps, diff scope) + commit request — explicit owner approval required. No further `backend/*`/`client/*` touches until the Stage 3 gate lifts.
+
+## 2026-08-19 — pass 4 (cross-cutting §67/§68) re-derived; register 51/51 (spec-only)
+
+- **Owner:** "do it exhaustively and Read, understand and respect AGENTS.md findings.md progress.md prompt.md README.md task_plan.md" → all six read in full; exhaustive pass-4 plan presented (10 stories, WH battery, known stale points R-1/R-3/R-4/R-13/R-14/R-15 + unregistered risk classes R-cands A–D, §68 stale points, maxima re-verification) → owner: "proceed".
+- **Citation sweep:** every §67 control cite re-read (§16.5, §27.3, §31.8, §33.7, §36.6, §55.3, §34.6, §40.4/§40.5, §24.2, §19.2, §46.6, §63.6, §26.2/§26.6, §62.3, §13.5, §65.6) + maxima greps (BR-19/ADR-038/OQ-014/A6/G9/F9/D5/SC-8) — one real defect surfaced: §16.5's STT bullet still said "the final transcription fuses the succeeded chunks" (contradicts §33.7 — no partial merge is ever persisted).
+- **Corrections (one change set):** §16.5 fixed first (owning-section-first); §67.2 register re-derived (R-1 paid-policy residual, R-3 §33.7 residual, R-4 `.retryAfter`+OQ-011, R-13 cites verified, R-14 §26.2/§26.6, R-15 §31.8+§36.6 raw 409, R-17 §65.6+§62.3, R-20 verified; **R-22 credit exhaustion / R-23 Ethiopian-calendar / R-24 STT accuracy / R-25 addisai SDK added** — each citing only existing controls); §67.3 new standing mitigation (paid AI is a user-facing cost); §67.5 mirrors; §68.3 Visit main-locked [0], wizard four steps, Candidate "(round-6)" token removed, 10 backfilled rows + backfill note; §68.5 mirrors.
+- **Verification:** diff scope = spec + 3 working files only; stale-fuse tokens = 0; control-citation resolution sweep clean; round-6 remaining hits = historical amendment annotations only.
+- **Working files:** task_plan (pass-4 register 2/2 closed; 51/51; NEXT = close-out + commit request), findings F81, this log.
+- **NEXT:** present the pass-4 close-out report (dispositions, corrections summary, verification greps, diff scope) + commit request — explicit owner approval required. Then Stage 3 (§63.9 C1–C6 audit + §69 zero-`TODO(open)` reconciliation).
+
+## 2026-08-19 — Stage 3: §63.9 audit C1–C6 GREEN — single-source-of-truth milestone (spec-only)
+
+- **Owner:** approved the Stage 3 plan via the two C2 dispositions ("Keep as manifest", "Keep as deletion record") + "proceed".
+- **C1:** citation extractor tooling (read-only, temp): 7931 §-citations vs 654 headings → **3 stale cites fixed** (§21.5 ×2 → §58/§37; §4.10 §52.3 reworded). Re-run after edits: zero misses.
+- **C2:** 9 `editor.md §x` provenance citations pruned (decision kept, path dropped); 2 sanctioned tokens kept per owner dispositions; count 0.
+- **C3:** §24A (Item Model) TOC entry ADDED (was missing, §24→§25 jump); 70/70 anchors resolve.
+- **C4:** green. **C5:** one dangling pointer fixed (§30.2 "review file's" → "draft contract's").
+- **C6:** sign-off record appended as §69.3.3; `TODO(open)` reconciliation green (marker only at its 5 definitional sites); OQ rows all carry pointers.
+- **Working files:** task_plan (Stage 3 closed; NEXT = close-out + commit request + branch lifecycle), findings F82, this log.
+- **NEXT:** present the Stage-3 close-out report + commit request (explicit owner approval required) → §9.8 branch lifecycle (new re-implementation branch, `spec-correction` deleted) → Stage 4 (backend-first per §15.4; frontend frozen; Postman-style endpoint tests per endpoint).

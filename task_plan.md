@@ -211,7 +211,7 @@ Fix the root cause, then rebuild: re-derive every DERIVED spec section (§11, §
 
 ## Next Step
 
-**Pass 2 (backend §25–§40) CLOSE-OUT COMPLETE (2026-08-19).** Owner approved the pass plan as presented ("proceed"): 18 supervisor stories + the WH battery (W1–W9) answered and applied. 16/16 sections disposed (12 re-derived incl. fold-touched regions, §25/§27/§29/§35/§38 audited-no-change; §39/§40 dispositions recorded at §69.3.2). Findings F1–F18 of the pass register applied + 4 extra fixes (PATCH-profile request row, §28.8 stub gate, §28.2 refresh-reuse acceptance, §60.7 sessions leftover) — full record at **§69.3.2**. NEXT pointer → **close-out sweep (git status/diff + grep gates) + commit request `chore: spec-correction pass 2 backend close-out` (gated)** → **Stage 2 pass 3 (frontend §41–§60) Supervisor story gate**.
+**Pass 3 (frontend §41–§60) IN PROGRESS (2026-08-19) — SPEC-ONLY SCOPE.** The pass-2 close-out commit is executed (`f7ac528`). The pass-3 front-load: owner-directed exhaustive UI/UX design work ("for all pages just like you did for dashboard pages, make an exhaustive analysis and make each page UI/UX astonishing") produced the 15-surface analysis + diagrams (identity = "the supervisor's field notebook"; ledger band, sign-in sheet, intake sheet + name-reveal, date-stub index, document masthead, pre-printed form, registry signboards, ID card, margin-notes chat, ruled index) — owner approved the full pass-3 plan ("proceed, don't do 6. Git protocol (§9.8)"; branch `spec-correction`). **Freeze correction (owner, 2026-08-19): the plan approval does not authorize `backend/*` or `client/*` edits — the freeze stands; pass 3 is SPEC-ONLY.** Two client files touched in R2 were reverted (`git restore`); the register rows below record spec amendments only. Spec amendments applied: §43.2 per-surface identity + Amharic-moment + data-presentation rules; §46.17 MuiStatCard usage note; §48.3 sign-in sheet; §48.4 intake sheet + name-reveal; §49.1/§49.2/§49.3/§49.6/§49.7 ledger band; §50.4 date stub + §50.5 file-tab notch; §51.2 masthead; §52.4 pre-printed ስም; §55.2 margin notes; §56.3/§56.5/§56.7 signboards; §57.3 ID-card face; §59.2 ruled index; §44.6 KPI-card reference fix (same-change discipline with §49.2); §69 OQ-014. **Audit reads completed (2026-08-19): §41/§42/§44/§45/§47/§53/§54/§58/§60 audited-no-change (F80) — the register is 20/20 dispositions, zero partials; pass 3 CLOSED on its section list.** Frontend implementation of the amended directions is deferred to Stage 5 (frontend linking) after the Stage 3 hard gate — backend-first per Stage 4. NEXT: pass-3 close-out report + commit request (explicit owner approval required). No commit/push without explicit owner approval. **[2026-08-19 — PASS-4 STATUS] Pass 4 (cross-cutting §67/§68) is IN PROGRESS — SPEC-ONLY.** Owner directive: "do it exhaustively and Read, understand and respect AGENTS.md findings.md progress.md prompt.md README.md task_plan.md" — executed in full; plan approved ("proceed"). Citation-verification sweep completed: every §67 control citation re-read at its owning section (§16.5, §27.3, §31.8, §33.7, §36.6, §55.3, §34.6, §40.4/§40.5, §24.2, §19.2, §46.6, §63.6, §26.2/§26.6, §62.3, §13.5) + §68.4 maxima greps (BR-19 / ADR-038 / OQ-014 / A6 / G9 / F9 / D5 / SC-8) — all confirmed. Corrections applied: §16.5 stale "fuses the succeeded chunks" line → §33.7 semantics (owning-section-first); §67.2 register re-derived (R-1 paid-policy residual, R-3 no-partial-merge residual, R-4 `.retryAfter`+OQ-011, R-13 verified cites, R-14 §26.2/§26.6, R-15 §31.8+§36.6 409, R-17 no-backups §65.6 + §62.3 commit-order, R-20 verified; **four unregistered risk classes added as R-22 credit exhaustion / R-23 Ethiopian-calendar conversion / R-24 STT accuracy / R-25 addisai SDK dependency** — each citing only existing controls); §67.3 credit-exhaustion standing mitigation; §67.5 cross-section mirrors; §68.3 corrected (Visit main-locked [0], "Wizard steps 1–5" → four steps, Candidate→save "(round-6)" token removed) + 10 backfilled rows + backfill note; §68.5 mirrors. NEXT: pass-4 close-out report + commit request (explicit owner approval required). **[2026-08-19 — commit request DECLINED by owner ("No commit yet") — working tree held as-is (pass-3 + pass-4 sets uncommitted).] NEXT: Stage 3 — the §63.9 C1–C6 single-run audit + §69 zero-`TODO(open)` reconciliation; Stage 4 (backend re-implementation) begins only after the Stage 3 hard gate and an explicit commit approval.** **[2026-08-19 — STAGE 3 CLOSED. The §63.9 single-run audit executed (owner-approved plan + two C2 dispositions "keep as manifest"/"keep as deletion record"): C1 zero unresolved (3 stale cites fixed — §21.5 ×2 retargeted to §58/§37, §4.10 reworded; 7931 cites vs 654 headings), C2 nine editor.md provenance citations pruned + the two sanctioned tokens kept, C3 §24A TOC entry added (70/70 anchors resolve), C4 green, C5 one dangling pointer fixed (§30.2), C6 sign-off record appended as §69.3.3; `TODO(open)` zero-marker reconciliation green; register reconciled 51/51 zero partials. NEXT: Stage-3 close-out report + commit request (explicit owner approval required), then the §9.8 branch lifecycle (new re-implementation branch; `spec-correction` deleted — gated) and Stage 4 (backend-first, freeze lifts after the gate).]** **[2026-08-19 — Stage-3 commit request DECLINED by owner ("No commit yet") — the full correction set (pass 3 + pass 4 + Stage 3) remains uncommitted in the working tree. The Stage 3 hard gate is satisfied; Stage 4 (backend re-implementation, §15.4) waits on an explicit commit + branch-lifecycle approval.]**
 
 ## Stages (status), F75/F76 — owner approved "proceed"):** the contract's 48 endpoints folded into the spec (contract JSON blocks in §26.6/§28/§30/§30.2.1/§31/§32/§33/§36/§37/§38/§39/§40; §28 session/`/auth/me`/`optionalAuth` removals; §57.4 retired; §42.3/§57.6 boot-probe notes; §56.5 rewritten to the detail aggregate; §24A.3 items-path fix; §21.7/§6.10/§6.4/§5 BR-03 kernel C1 applied; §69.3.1 fold record with C1–C8 sign-off; review file DELETED per owner directive; fold-time correction — branch duplicate-name 409 folded away per §30.3/§30.7, no unique index) — **close-out sweep + commit request NEXT**; then Stage 2 pass 2 (backend §25–§40) Supervisor story gate (folded contract = pass input).
 
@@ -219,8 +219,8 @@ Fix the root cause, then rebuild: re-derive every DERIVED spec section (§11, §
 
 - Stage 0 — Boot: branch `spec-correction` created; kernel sections read (§1–§10, §13, §61–§66, §69); working files appended. **complete**
 - Stage 1 — Kernel classification: 18 KERNEL / 51 DERIVED, borderline calls decided by the Architect (F63); owner confirmed. **complete**
-- Stage 2 — Pipeline passes, dependency order: data model (§17–§24A) → architecture & constants (§11/§12/§14/§15/§16) → backend (§25–§40) → frontend (§41–§60) → cross-cutting (§67/§68); step-5 review gate per pass; coverage register (below) is the section inventory. **in progress — pass 1a closed (+ audit re-pass F74), pass 1b closed (F69–F73), pass 2 closed (2026-08-19, §69.3.2), pass 3 NEXT**
-- Stage 3 — §63.9 audit C1–C6 green; §69 closure records; zero `TODO(open)` without an OQ row; coverage register reconciled 51/51 dispositions, zero partials. **pending** (hard gate before any code — freeze: no `backend/*`/`client/*` edits until then)
+- Stage 2 — Pipeline passes, dependency order: data model (§17–§24A) → architecture & constants (§11/§12/§14/§15/§16) → backend (§25–§40) → frontend (§41–§60) → cross-cutting (§67/§68); step-5 review gate per pass; coverage register (below) is the section inventory. **in progress — pass 1a closed (+ audit re-pass F74), pass 1b closed (F69–F73), pass 2 closed (2026-08-19, §69.3.2), pass 3 closed (2026-08-19, 20/20 — F78/F80), pass 4 in progress (2026-08-19, §67/§68 re-derivation)**
+- Stage 3 — §63.9 audit C1–C6 green; §69 closure records; zero `TODO(open)` without an OQ row; coverage register reconciled 51/51 dispositions, zero partials. **closed 2026-08-19** (single-run audit record §69.3.3; hard gate satisfied — freeze lifts after the owner-approved commit)
 - Stage 4 — Backend re-implementation per §15.4 (frontend frozen); Postman-style endpoint tests per endpoint (edge-case matrix, result ledger). **pending**
 - Stage 5 — Frontend linking & correction; mock adapter deleted (§66.10 grep gate). **pending**
 - Stage 6 — Close-out: §9.7 sweep, §63 gates, DoD, handoff report. **pending**
@@ -284,13 +284,43 @@ Fix the root cause, then rebuild: re-derive every DERIVED spec section (§11, §
 | §39 Search              | closed | re-derived (F4)    | §69.3.2               |
 | §40 Mock endpoints      | closed | re-derived (F5, F10) | §69.3.2               |
 
-### Pass 3 — frontend §41–§60 [pending]
+### Pass 3 — frontend §41–§60 [IN PROGRESS 2026-08-19 — SPEC-ONLY (freeze); owner-approved plan, no commits]
 
-§41 §42 §43 §44 §45 §46 §47 §48 §49 §50 §51 §52 §53 §54 §55 §56 §57 §58 §59 §60
+| Section | Status | Disposition | Evidence |
+| --- | --- | --- | --- |
+| §41 Routing & guards | closed | audited-no-change | §41 read (P3 delivered; §41.5 state.from/expiry verified) |
+| §42 Network layer | closed | audited-no-change | §42 read (reauth, envelope, tags delivered P3) |
+| §43 Design language | closed | re-derived | pass-3 UI/UX front-load — per-surface identity, Amharic-moment rule, data-presentation rule (F78) |
+| §44 Component system | closed | audited-no-change | §44 read (tokens/cards/charts delivered) |
+| §45 Layout & responsive | closed | audited-no-change | §45 read (5 buckets applied per surface) |
+| §46 Component inventory | closed | re-derived | §46.17 MuiStatCard usage note (ledger band supersedes the dashboard row) |
+| §47 Shells | closed | audited-no-change | §47 read — the §47.4 selected state already reads as the raised file tab (§43.2); search entry + Ctrl+K already specified (§59.2) |
+| §48 Auth pages | closed | re-derived | sign-in sheet + intake sheet + name-reveal (OQ-014) |
+| §49 Dashboard | closed | re-derived | ledger band supersedes the four-card row (cell bucket matrix, gates) |
+| §50 Reports list | closed | re-derived | date stub (grid) + file-tab notch (card) |
+| §51 Report details | closed | re-derived | masthead + filing stamps |
+| §52 Wizard | closed | re-derived | pre-printed ስም line |
+| §53 Editor components | closed | audited-no-change | §53 read (round-8.5/8.6 contract stands; OQ-010 open) |
+| §54 Correction modes | closed | audited-no-change | §54 read (round-7/8 contract stands) |
+| §55 Chat | closed | re-derived | margin-notes panel + ቀን serif header |
+| §56 Branches | closed | re-derived | signboard cell (Location merged into the name subline) + signboard header |
+| §57 Profile | closed | re-derived | ID-card face |
+| §58 Exports | closed | audited-no-change | §58 read (print + TXT/XLSX/CSV + OQ-006 naming closed) |
+| §59 Search + 404 | closed | re-derived | ruled index (serif key text); 404 audited-no-change (§59.4 stands) |
+| §60 Toasts/states | closed | audited-no-change | §60 read (toast protocol delivered P3) |
 
-### Pass 4 — cross-cutting §67/§68 [pending]
+Implementation of the amended directions: **deferred to Stage 5** (frontend linking) — the freeze stands until the Stage 3 hard gate; backend re-implementation comes first (Stage 4).
 
-§67 §68
+### Pass 4 — cross-cutting §67/§68 [IN PROGRESS 2026-08-19 — SPEC-ONLY (freeze); owner-approved plan, no commits]
+
+| Section | Status | Disposition | Evidence |
+| --- | --- | --- | --- |
+| §67 Risks & Mitigation | closed | re-derived | citation-verification sweep + register re-derivation (R-1…R-25; R-22…R-25 new) |
+| §68 Glossary | closed | re-derived | row corrections (Visit main-locked, wizard four steps, Candidate token) + 10 backfilled rows + maxima re-verified |
+
+§16.5 (owning-section-first) corrected in the same change: the stale "final transcription fuses the succeeded chunks" line → the §33.7 no-partial-merge semantics.
+
+51/51 dispositions (18 KERNEL untouched; Stage 3 audit C1–C6 + zero-`TODO(open)` reconciliation NEXT, then backend-first re-implementation).
 
 ---
 

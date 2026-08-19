@@ -58,6 +58,7 @@ Authored top sections (each heading links to its section):
 - [22. Audio Model](#22-audio-model)
 - [23. Transcription Model](#23-transcription-model)
 - [24. ChatConversation Model](#24-chatconversation-model)
+- [24A. Item Model](#24a-item-model)
 - [25. Mock Content & Seeding](#25-mock-content--seeding)
 - [26. Backend Foundation](#26-backend-foundation)
 - [27. Global Backend Concerns](#27-global-backend-concerns)
@@ -2763,9 +2764,9 @@ is NOT a package** (no stable release on npm); the v3
 `setFontSize`/`unsetFontSize` commands natively, so the ADR-038 "Font
 size" toolbar action needs no extra dependency.
 
-**Round-6 amendment (2026-08-16, editor.md pass):** the toolbar scope
-changed — font size and text color were REMOVED (editor.md §18-1),
-Underline and alignment were ADDED (editor.md §5/§19). Manifest truth
+**Round-6 amendment (2026-08-16):** the toolbar scope
+changed — font size and text color were REMOVED,
+Underline and alignment were ADDED. Manifest truth
 now: `@tiptap/extension-underline` + `@tiptap/extension-text-align`
 installed; `@tiptap/extension-text-style` + `@tiptap/extension-color`
 UNINSTALLED (their only consumer — the font-size select and color
@@ -3741,7 +3742,10 @@ knowledge, never a source literal, §16.8 SDK gate):
   chunk is handled per chunk: after retries the chunk is marked
   **failed** and the pipeline continues processing the remaining
   chunks — a failed chunk does not abort the whole recording (§33);
-  the final transcription fuses the succeeded chunks.
+  the transcription completes only when every chunk succeeded — a
+  failed chunk leaves the report `pending`, because no partial merge
+  is ever persisted (§33.7; the §33 pipeline re-run succeeds from the
+  failed/pending audios only).
 - **App rate limits vs provider limits.** The app enforces its own AI
   tiers (RATE_LIMIT_AI_WINDOW_MIN=1, RATE_LIMIT_AI_MAX=10,
   §27/§11.3) as **the** primary guard. Provider-issued 429s (usage
@@ -4058,7 +4062,7 @@ audio addition, removal, or content edit (BR-10).
 | `draft` | report row only (no audio required) |
 | `audio_attached` | report + at least one `Audio` row |
 | `transcribed` | report + audio rows + the 1:1 Transcription row with `raw` (and `latest`, both initialized equal), connected via the report's `transcription` ref (unique sparse, §23) — the presence check is the ref/query, never a materialized field |
-| `generated` | the report's Transcription `latest` holds the generated content; the report's Item rows (activities, issues, comment — §24A) exist; report exported (§37) — the export is a deliverable, never a persisted artifact on any row (§21.5, §37/§58) |
+| `generated` | the report's Transcription `latest` holds the generated content; the report's Item rows (activities, issues, comment — §24A) exist; report exported (§37) — the export is a deliverable, never a persisted artifact on any row (§58, §37) |
 
 An invariant across every status: the report's `user` equals the
 session owner and every artifact of §17.4/§17.6 is present — a row that
@@ -5732,7 +5736,7 @@ and exists for development only (§12.10).
    `generated` report has the content plus its Item rows). A
    `generated` mock report never carries an export artifact
    — export deliverables are never persisted on any row (§17.6,
-   §21.5, §37).
+   §37, §58).
 5. **Content-language boundary.** Mock Amharic content fills the
    content surfaces (reports, transcriptions, conversations) and
    English copy fills the chrome surfaces (§7.9) — the §7.6 boundary
@@ -6618,8 +6622,8 @@ isArchived, archivedAt, createdAt, updatedAt }`.
 201: `{ "success": true, "message": "Branch created", "data":
 BranchDto }`. Validation: `name` 1..100 trimmed, `location`
 1..200 (§30.3); **duplicate names are allowed** (no unique
-index, §20 — there is no 409 on create; the review file's
-draft 409 was folded away against §30.3/§30.7).
+ index, §20 — there is no 409 on create; the draft contract's
+409 was folded away against §30.3/§30.7).
 
 `PATCH /branches/:branchId` — 200: `{ "success": true, "message":
 "Branch updated", "data": BranchDto }`; empty body → 422.
@@ -9093,6 +9097,30 @@ to the subject's own artifact rather than to a decorative trope —
 no Ge'ez ornament, no RTL, no invented Ethiopian styling beyond the
 product's own header (§7.6, ADR-011).
 
+**Per-surface identity (pass-3 UI/UX amendment, normative).** One
+artifact metaphor — "the supervisor's field notebook on the
+dictation desk" — expresses itself per page as its signature
+surface: the ruled **ledger band** (dashboard, §49.2), the
+**sign-in sheet** (login, §48.3), the **intake sheet with the
+name-reveal line** (register, §48.4), the **date stub index and
+file-tab cards** (reports, §50.4/§50.5), the **document masthead
+with filing stamps** (details, §51.2), the **pre-printed form**
+(wizard, §52.4), the **registry signboards** (branches, §56.3/
+§56.5), the **ID card** (profile, §57.3), the **margin-notes
+conversation** (chat, §55.2), and the **ruled index** (search,
+§59.2). Two rules govern every surface:
+
+- **Amharic-moment rule:** content Amharic (the serif Ethiopic
+  face) appears **exactly once per page surface** — the signature
+  element named in the owning section (e.g. the ቀን cell, the
+  pre-printed ስም line, the branch signboard). Everything else on
+  the page stays chrome English (§7.6).
+- **Data presentation rule:** values wear tabular numerals and
+  hairlines — never decorative icon chips on KPIs or labels
+  (§44.2's icon rule extends to KPI/stat presentation; the §46.17
+  `MuiStatCard` icon-chip row is retired from the dashboard,
+  §49.2).
+
 ### 43.3 Theme definition (`AppTheme.jsx`)
 
 `AppTheme.jsx` composes the MUI theme exactly once (a `useMemo`
@@ -9317,7 +9345,8 @@ inline overrides.
   (§43.2).
 - `MuiCard`: padding 16, gray[50] background (light) / gray[800]
   (dark), divider border, **no box-shadow**; `outlined` variant on
-  white paper — the report cards of §50 and the KPI cards of §49.
+  white paper — the report cards of §50 (the dashboard's §49.2
+  ledger band is a flat ruled surface, not a card).
 - `MuiCardContent`/`MuiCardHeader`/`MuiCardActions`: zero padding
   (the card owns spacing) — the composition contract for card
   bodies and action rows.
@@ -9939,19 +9968,19 @@ in bold), states, and responsive behavior. Forms bind through the
   (left/center/right/justify) · Undo/Redo** (with `can()`-guarded
   buttons) — the §44-styled toolbar; no other toolbar actions exist
   in this scope (text color stays out). The former font-size select
-  and color swatches were REMOVED (round-6, editor.md §18-1 — no
+  and color swatches were REMOVED (round-6 — no
   font-size/color controls in scope), taking
   `@tiptap/extension-color` and `@tiptap/extension-text-style` out
   of the manifest (§13.5); `@tiptap/extension-underline` and
-  `@tiptap/extension-text-align` were installed for the new actions
-  (editor.md §19); round 7 reinstalled
+  `@tiptap/extension-text-align` were installed for the new actions;
+  round 7 reinstalled
   `@tiptap/extension-text-style@^3.30.1` for the font-size ladder
   (the deprecated `@tiptap/extension-font-size` remains not a
   package; Underline is registered ONCE — StarterKit v3 ships it,
   the explicit `@tiptap/extension-underline` was removed in round-8
   after the duplicate-extension warning). The toolbar **wraps** at
   sm/md and runs a single row from lg up (round-6 — wrapping is the
-  preferred overflow behavior, editor.md §17; supersedes the
+  preferred overflow behavior; supersedes the
   round-5 `overflowX` scroll directive; round-8 amendment: BELOW sm
   the toolbar runs the xs scroll rail — nowrap, overflow-x auto,
   dividers hidden, compact font-size select — because wrapping
@@ -10049,7 +10078,7 @@ in bold), states, and responsive behavior. Forms bind through the
   (§21.2).
 - **Ethiopic content:** the content stack of §43.5 renders through
   the editor — `'Noto Serif Ethiopic', 'Inter', sans-serif`,
-  line-height 1.75 (round-6 amendment, editor.md §6); the writing
+  line-height 1.75 (round-6 amendment); the writing
   size stays at the comfortable 1.0625rem (the editing surface,
   not the 0.875rem reading size of §43.5 `contentBody`); the
   toolbar labels are chrome (English, §7.6).
@@ -10138,9 +10167,14 @@ Justified by their sections; the same contract discipline applies:
   MIME list (single source §11.3/§32 — mirrors only, §14.3
   ADR-032).
 - **MuiStatCard** (`components/reusable/MuiStatCard.jsx`) — the
-  Dashboard KPI card (§49): `label` (small-caps eyebrow), `value`
+  KPI card (§49): `label` (small-caps eyebrow), `value`
   (h3), `icon` (start adornment, role color), optional `trend`
-  caption; plain card surface (§44.6).
+  caption; plain card surface (§44.6). **Usage note (pass-3 UI/UX
+  amendment):** the dashboard's four-card row is **superseded by
+  the §49.2 ledger band** (the pass-3 UI/UX amendment; §43.2
+  data-presentation rule) — `MuiStatCard` remains available to
+  other §46.17 consumers, but the dashboard row never renders
+  four stat cards with icon chips again.
 - **MuiStepper** (`components/reusable/MuiStepper.jsx`) — the
   wizard step indicator (§52): the §44.5 dot style, step labels,
   `activeStep`, `onStepClick` (only to visited steps), completed
@@ -10411,9 +10445,18 @@ surfaces via the §60 toast only on the destination.
 
 **Purpose & composition.** Session entry; also the target of the
 §41.5 guard redirect (`state.from`) and the §42 expiry redirect.
-Composition: centered card (paper surface, §43.2/§44.6) inside
-PublicLayout; page header title "Log in" (§46.12); the `LoginForm`; the OAuth entry; the sign-up link
-(§48.5).
+Composition: the **sign-in sheet** (pass-3 UI/UX amendment,
+§43.2) — a centered card (paper surface, §43.2/§44.6) inside
+PublicLayout whose surface is a **ledger entry sheet, not a
+generic auth card**: the §46.12 header hairline carries the
+**entry datum** — `TODAY · {Ethiopian date in tabular digits}`
+(e.g. `TODAY · 12/04/2018 EC`; numerals only — no Amharic words,
+§7.6), a **full-height left margin hairline** runs the card, and
+the submit button is the page's only saturated element — the
+**signing act** (contained, brand blue, §46.3). Page header
+title "Log in" (§46.12); the `LoginForm`; the OAuth entry; the
+sign-up link (§48.5). The lg brand panel stays **static** (the
+§43.2 waveform animation is landing-only — never animates here).
 
 **`LoginForm` (full specification — the §46.2 form pattern):**
 
@@ -10471,9 +10514,17 @@ decision anywhere — not added).
 
 **Purpose & composition.** Self-service registration (F1); the
 form collects **only `email` and `password`** (§3.2.2, §19.2) plus
-a confirm-password field on the client side. Composition: same
-centered card pattern; header title "Sign up";
-`RegisterForm`; OAuth entry; login link (§48.5).
+a confirm-password field on the client side. Composition: the same
+**sign-in sheet** skeleton as §48.3 (one surface family; entry
+datum, margin hairline, signing act), header title "Sign up";
+`RegisterForm`; OAuth entry; login link (§48.5). The sheet's one
+serif moment is the **name-reveal line** (§43.2 Amharic-moment
+rule): while the email field holds a valid address, a serif
+caption under it reads `Your name will be: {derived name}` —
+derived client-side with the §19.2 rule (email prefix before
+`@`, `.`/`_`/`-` separators → spaces, each part capitalized),
+display-only and marked approximate: the server decides at
+creation (OQ-014).
 
 **`RegisterForm`:**
 
@@ -10483,10 +10534,11 @@ centered card pattern; header title "Sign up";
 | `password` | MuiTextField `type="password"` | Lock icon | — | yes | empty → required; min 8 chars | "Password is required" / "Password must be at least 8 characters" |
 | `confirmPassword` | MuiTextField `type="password"` | Lock icon | — | yes | empty → required; `validate: (value) => value === getValues('password')` | "Please confirm your password" / "Passwords must match" |
 
-- Helper text under `email`: "Your name is taken from your email
-  (for example, beza.ayalew@gmail.com becomes Beza Ayalew)." —
-  English chrome (§7.6), matching the §19.2 auto-extraction
-  contract.
+- Helper text under `email`: the §19.2 auto-extraction
+  explanation renders through the **name-reveal line** (§48.4
+  composition) — the serif preview when the address is valid,
+  the plain helper otherwise — both English chrome (§7.6),
+  matching the §19.2 auto-extraction contract (OQ-014).
 - **Empty-submit behavior:** the manual resolver marks all three
   fields, focus moves to `email`, nothing submits, no toast.
 - **Success (locked decision 11, §41.2):** the §28 account-creation
@@ -10562,8 +10614,8 @@ finish", which the Reports list answers only after navigation.
   composition and actions (§49.2/§49.5), states and the breakpoint
   matrix (§49.6).
 - **Owned elsewhere — deliberately not repeated here.** The
-  analytics data contract and endpoints = §38 (Part C); the KPI
-  card and chart reuse = §46.17 MuiStatCard and §44.9 charts;
+  analytics data contract and endpoints = §38 (Part C); the ledger
+  band and chart reuse = §49.2/§46.17 usage note and §44.9 charts;
   navigation = §47; empty/success/error presentation = §60.
 - **Explicitly out of scope §49.** No endpoint shape, no analytics
   join logic (§38), no new constant (§11 unchanged), no new path,
@@ -10575,8 +10627,20 @@ Order (top to bottom) inside AppShell's Outlet (§47.3), with the
 per-page header first (§46.12): title "Dashboard", subtitle "Your supervision reports at a glance";
 `actions` slot hosts the primary action — "New report" (contained,
 success — the §46.3 create color, owner decision) → `/reports/new`
-(§52). Then: **KPIs** — Row of four
-`MuiStatCard`s (§46.17); **Charts** — the §49.4 chart trio in a
+(§52). Then: **the day's ledger** — one hairline-ruled band
+(pass-3 UI/UX amendment, §43.2; **supersedes the four-card
+`MuiStatCard` row of earlier rounds** — the §46.17 usage note): a
+single flat surface with vertical hairline cell separators and
+tabular numerals. The leading cell holds **TODAY** (small-caps
+eyebrow) with today's **Ethiopian date in Noto Serif Ethiopic**
+(weight 600, ~32px — the page's one Amharic moment, §43.2) and
+the four data cells of §49.3 follow; no icon chips anywhere in
+the band (§43.2 data-presentation rule); trend captions render
+only when the §38 payload provides the delta (else the cell is
+bare — no invented numbers, §69). Cell counts per bucket: **xs**
+date cell full-width + 2×2 data cells; **sm** date cell full row
++ four cells; **md+** one row, date cell 1.4× the data cells.
+**Charts** — the §49.4 chart trio in a
 responsive Grid (`size` prop, §46.2); **Latest reports** — a
 compact read-only list (date, branch name via live join,
 `MuiStatusBadge`, updatedAt) of the five most recent reports,
@@ -10587,7 +10651,8 @@ empty the section shows the §60 empty state.
 
 ### 49.3 KPI set (normative — closure of OQ-005)
 
-OQ-005 (open in §69) is closed here by decision. The four cards:
+OQ-005 (open in §69) is closed here by decision. The four data
+cells of the §49.2 ledger band:
 
 | Card label (chrome copy) | Value (from the §38 analytics payload) |
 |---|---|
@@ -10597,7 +10662,7 @@ OQ-005 (open in §69) is closed here by decision. The four cards:
 | Active branches | count of active branches (the §20/§38 branch surface) |
 
 Every value is served by the §38 analytics endpoint via the §42
-layer — no client-side aggregation over full lists (ADR-034). KPI
+layer — no client-side aggregation over full lists (ADR-034). Cell
 labels are chrome copy (English, §7.6); trend captions ("vs last
 month") may render when the §38 payload provides them — anything
 absent renders no caption (no invented numbers, §69).
@@ -10631,7 +10696,7 @@ and show a compact loading skeleton while pending (§49.6).
 
 ### 49.6 States & breakpoints
 
-- **States (ADR-033).** Loading — KPI skeletons + chart skeletons;
+- **States (ADR-033).** Loading — ledger skeleton cells + chart skeletons;
   error — §60 toast on the §38 fetch failure and a compact inline
   retry on the chart band; empty — **no account-level empty band**
   (owner decision, R3-fix): each chart degrades to its own §60
@@ -10644,7 +10709,7 @@ and show a compact loading skeleton while pending (§49.6).
 | Region | xs | sm | md | lg | lg+ |
 |---|---|---|---|---|---|
 | Page header | title + actions inline (no subtitle) | title + subtitle + actions inline right | actions inline right | inline right | inline right |
-| KPI cards | 1 column (stacked) | 2 columns | 4 columns | 4 columns | 4 columns |
+| Ledger band | date cell full-width + 2×2 data cells | date cell full row + four cells | one row, date cell 1.4× | same | same |
 | Charts | stacked (1 column each) | 1 column | status donut + bars side by side, trend below full-width | 3 per grid row, equal thirds | equal thirds |
 | Latest reports | list rows (compact) | list rows | list rows | list rows | list rows |
 
@@ -10653,12 +10718,14 @@ keep fixed minimum heights to avoid reflow (§45.5).
 
 ### 49.7 Verification usage
 
-- Grep gates: exactly four KPI labels; no client-side aggregation
+- Grep gates: exactly four ledger data cells (no `MuiStatCard` row
+  and no icon chips on the band — §43.2); no client-side aggregation
   over report lists (ADR-034); all chart series named from the §38
   contract; no invented metric beyond §49.3's table; no amharic
-  chart labels (§7.6).
+  chart labels (§7.6); the Ethiopian date cell is the page's only
+  Amharic surface (§43.2).
 - Cross-section checks: mirrors §38 (analytics data owner), §46.17
-  (MuiStatCard), §44.9 (chart styling), §45 buckets, §60 states,
+  (MuiStatCard usage note), §44.9 (chart styling), §45 buckets, §60 states,
   §11.5 (`REPORT_STATUSES` mirror), §69 (OQ-005 closed here).
 - §49 introduces no constant (§11 unchanged), no path, and no
   package; it is standalone — it references only specification
@@ -10738,7 +10805,7 @@ column set, §15.6, ADR-034):
 
 | Column | Content | Notes |
 |---|---|---|
-| Date | `date` as `DD-MM-YY` (§43.6) | falls back to `—` while uncaptured |
+| Date | `date` as `DD-MM-YY` (§43.6) | falls back to `—` while uncaptured; renders as the **date stub** (pass-3 UI/UX amendment, §43.2): the content serif stack at weight 600 with tabular numerals — the day's face, the index stub of §43.2 |
 | Branch | the report's branch name via live join (§17.4/§20) | archived branches still resolve read-only |
 | Status | `MuiStatusBadge` (§46.13) | from `status` |
 | Updated | `updatedAt`, `DD-MM-YY` | |
@@ -10766,7 +10833,11 @@ the branch name via live join (ellipsized), `MuiStatusBadge`,
 Updated
 caption, and the same action icon row as
 §50.4 (§46.8 icon styling) — **no owner/supervisor caption**
-(per-user model §9). The Updated caption sits on its own line,
+(per-user model §9). The card carries the **file-tab notch**
+(pass-3 UI/UX amendment, §43.2): the date title sits on a small
+tab projecting past the card's top-left edge (a file-divider
+stub, border/pseudo-element treatment — no DOM hack, no new
+component), styled from the committed shape tokens. The Updated caption sits on its own line,
   and the action icon row renders on the line below it,
   right-aligned — the two never share a row, so no overlap is
   possible. Grid: responsive
@@ -10897,10 +10968,15 @@ report" while uncaptured), subtitle =
 the user's `fullName` joined live (§21.2, the `ስም` value — called
 by its
 chrome label "Supervisor"); `actions` slot per §51.5. Below the
-header, a **status band**: `MuiStatusBadge` (§46.13) + the
-Type-1/Type-2 label derived per §6.4 (§21.2 — **derived, never
-stored**): "Type-1" (single visit) / "Type-2" (two or more) +
-report `status` in English chrome copy. Then the body sections
+header, the **document masthead** (pass-3 UI/UX amendment,
+§43.2): a ruled band that is the filed day's page head — left, the
+**Ethiopian ቀን in Noto Serif Ethiopic** (~28px, the page's one
+Amharic moment, §43.2) over the `ስም` letterhead line (the live
+`fullName`, §21.2); right, the **filing stamps**: the Type-1/
+Type-2 label derived per §6.4 (§21.2 — **derived, never
+stored**) and the report `status` `MuiStatusBadge` (§46.13)
+rendered as letter-spaced, hairline-bordered stamp chips (chrome
+copy, §7.6). Then the body sections
 (§51.3) and metadata sections (§51.4).
 
 ### 51.3 Content surface & corrections entry
@@ -11074,8 +11150,9 @@ section index (`data` from the form values when valid,
 
 - **Add** (`/reports/new`): **step 1's Next creates the report
   through §31.2-1 (metadata + visits only) → `draft` (round-4
-  amendment — two-payload creation: the §4.10 one-payload submission
-  is superseded; a failed create keeps the user on step 1 with the
+  amendment — two-payload creation: the one-payload submission of
+  the original contract is superseded; a failed create keeps the
+  user on step 1 with the
   server's message applied to the fields, §52.11); step 2's Next
   attaches the day's takes → `audio_attached` (round-4 amendment —
   the attach act; a failed attach preserves the takes and keeps the
@@ -11105,7 +11182,11 @@ copy of the fields).
 
 - **Supervisor name** — the `ስም` header value (§6.3 field 3):
   rendered read-only from the user's live `fullName` (§21.2 —
-  never stored, never editable in the form).
+  never stored, never editable in the form). Pass-3 UI/UX
+  amendment (§43.2): the line renders as a **pre-printed form
+  line** — `ስም:` in Noto Serif Ethiopic (the step's one Amharic
+  moment) followed by the live name — the form's own printed
+  header, never a disabled input.
 - **date** — the `ቀን` value (§6.3 field 1): the §46.6
   Ethiopian date picker (`MuiDatePicker` + `ethiopianDate.js`),
   stored as a UTC-midnight `Date` at the boundary (§21.2, §29),
@@ -11450,7 +11531,7 @@ review segment (the Mode-1 hosts, §54), renders in this order:
   `updatedAt`, §66.10), "Unsaved changes" while the dirty flag is
   set, "Saving…" while a save is in flight, "✓ Saved just now"
   for a few seconds after it lands (the success check icon), and
-  "No changes yet" before the first save (editor.md §16). Copy
+  "No changes yet" before the first save. Copy
   from `WIZARD.modes.*` (§11.4). The footer — status line +
   Revert/Save — renders on the transcription step's story card
   (TranscriptionCard, §52.7) and the review surfaces, and reflows
@@ -11646,7 +11727,7 @@ Round-7 amendment: Mode 2 lives in the **CorrectionDialog**
 (§54.2), not in a panel on the page.
 
 - The dialog holds the typed instruction — a SMALL,
-  subordinate one-to-three-row field (round-6, editor.md §7: a
+  subordinate one-to-three-row field (round-6: a
   brief note telling what to fix, never a form); it may name the
   exact §6.3 field/§6.7 content class (§35.2). The provider
   selector (§46.17) sits right-aligned BELOW the field (round-7:
@@ -11704,7 +11785,7 @@ correction action, §52.7). Leaving/saving → save/revert in the
 persistent footer (round-6 — no accept step). The machine is
 §53.6's host state — nothing persisted (ADR-034).
 
-- **Single-surface rule (round-6 amendment, editor.md §2/§14):**
+- **Single-surface rule (round-6 amendment):**
   the editor is ONE persistent instance — always visible, always
   EDITABLE, never destroyed or recreated; the persistent footer
   (save-state line + Revert/Save, §53.5) renders below it at all
@@ -11815,7 +11896,12 @@ this section renders the conversation verbatim.
 - The panel is **collapsible and dismissible**; it restores a
   min-height (no reflow jump, §45.5); the header is chrome copy:
   "Correction chat" plus the report's `ቀን` (Ethiopian date,
-  §43.6) and a "close" icon. No conversation name, mission label,
+  §43.6) and a "close" icon. The panel is styled as the **margin
+  notes** of the day's page (pass-3 UI/UX amendment, §43.2): the
+  paper-tinted surface with a hairline top edge, and the `ቀን` in
+  the content serif stack — the page's day marker, never a second
+  Amharic moment beyond the owning page's signature (§43.2
+  Amharic-moment rule). No conversation name, mission label,
   or read/unread states exist anywhere (§24 has none).
 
 ### 55.3 Messages panel
@@ -11914,16 +12000,17 @@ band and the `MuiDataGrid` (§56.3).
 
 | Column | Content | Notes |
 |---|---|---|
-| Name | `name`, truncation per §45.4 | the live join source for report displays (§20/§21.2) |
-| Location | `location`, ellipsized | management/display only; never snapshotted into reports (§20) |
+| Name | `name`, truncation per §45.4 | the live join source for report displays (§20/§21.2); renders as the **signboard cell** (pass-3 UI/UX amendment, §43.2): the name in the content serif stack with the `location` as a small-caption subline beneath — the branch's signboard |
 | Status | `MuiStatusBadge` (`branchActive` variant — "Active" / "Archived", §46.13) | from `isArchived` — chrome copy, §7.6 |
 | Archived | `archivedAt` as `DD-MM-YY` | `—` for active rows |
 | Created | `createdAt` as `DD-MM-YY` | |
 | Actions | Edit / Archive-or-Restore / Delete (§46.8 icon row) | per §56.6 |
 
-Responsive: below **md** (900px, §45.2) the Location and Created
-columns drop (icons keep tooltips, §45.3); the grid always reads
-page slices — never a full dataset (§45.7/ADR-034). The row's
+Responsive: below **md** (900px, §45.2) the Created
+column drops (icons keep tooltips, §45.3); the signboard
+cell's location subline ellipsizes on xs (§45.4); the grid
+always reads page slices — never a full dataset (§45.7/ADR-034).
+The row's
 **Name** cell links to the Branch Details page
 (`/branches/:branchId`, §56.5).
 
@@ -11959,11 +12046,13 @@ endpoint added on the owner directive of 2026-08-19) returns
 branch + reports + analytics + items in a single response; the
 page never fans out:
 
-1. **Page header** (§46.12): title = the
-   branch `name`, subtitle = `location` with the `MuiStatusBadge`
-   (`branchActive` — "Active" / "Archived", §46.13); no actions
-   slot (edit/archive/delete stay on the grid rows of `/branches`,
-   §56.6).
+1. **Page header** (§46.12): the **signboard header** (pass-3
+   UI/UX amendment, §43.2) — the branch `name` in Noto Serif
+   Ethiopic (~32px, the page's one Amharic moment) over the
+   `location` caption line, with the `MuiStatusBadge`
+   (`branchActive` — "Active" / "Archived", §46.13) as the
+   right-aligned stamp; no actions slot (edit/archive/delete stay
+   on the grid rows of `/branches`, §56.6).
 2. **Reports of this branch** — the §50 report list surface
    (list/grid toggle, status badges, §60 states) fed by the
    aggregate's `reports` block (paginated server-side, §30.2.1) —
@@ -12031,7 +12120,7 @@ the route + placeholder only.
 |---|---|---|---|---|---|
 | Page header | stacked | stacked | inline right | inline right | inline right |
 | Filter band | stack (switch above grid) | inline row | inline row | inline row | inline row |
-| Grid columns | Name, Status, Actions | Name, Status, Location, Actions | full | full | full |
+| Grid columns | Name (signboard, subline ellipsized), Status, Actions | Name (signboard), Status, Actions | full | full | full |
 | Create dialog | full-width (maxWidth sm) | sm | sm | sm | sm |
 
 ### 56.8 Verification usage
@@ -12090,13 +12179,18 @@ cookie mechanics.
 
 ### 57.3 Profile fields & avatar
 
-- **Identity block** — avatar (**48px** — the Profile-page avatar
+- **Identity block** — the **ID-card face** (pass-3 UI/UX
+  amendment, §43.2): the profile card's upper half renders as a
+  staff ID card — the **48px** avatar (the Profile-page avatar
   size, owned here; distinct from the §46.11 app-bar avatar
-  32/36px) with an edit affordance (camera overlay) opening
+  32/36px) centered with a camera-stamp edit affordance opening
   `MuiFileInput` (§46.17) accepting `AVATAR_ALLOWED_MIME_TYPES`,
   sized ≤ `AVATAR_MAX_SIZE_BYTES` (§29 mirror; client-side
-  pre-check with the §60 toast on violation); plus `fullName`
-  (§19 virtual) as the display title.
+  pre-check with the §60 toast on violation); below it `fullName`
+  (§19 virtual) in the content serif stack (the page's one
+  Amharic moment, §43.2) and `position` as the title line, closed
+  by a hairline rule — the card's face, then the reverse-of-card
+  form below.
 - **Form** (§46.4) — `position` (free string, display-only,
   ADR-036) and `firstName`/`lastName` (editable; the §19
   derived names unlock after a manual rename — nothing else
@@ -12308,7 +12402,10 @@ for unmatched or invalid routes (§14.2 fallback).
   result list is grouped by kind: **Reports** (all statuses,
   drafts included) and **Branches** — each group shows the
   entity's key display text (date, branch name) plus its
-  status badge where applicable.
+  status badge where applicable. The groups render as the **ruled
+  index** (pass-3 UI/UX amendment, §43.2): hairline-divided
+  groups whose key display text (report dates, branch names)
+  wears the content serif stack at 600 — the book's index.
 - The dialog keeps focus in the field, closes on `Esc` or the
   back-arrow, and its state is wholly ephemeral (§12.2-10; never
   persisted). When the header is hidden by the active layout
@@ -13532,8 +13629,8 @@ the `raw`/`latest` storage format was decided on 2026-08-15
 that change: `@tiptap/react`, `@tiptap/starter-kit`,
 `@tiptap/extension-text-style`, `@tiptap/extension-color` +
 `dompurify` (§13.5 editor phase); amended §13.4, §15.5, and the
-OQ-007 row in §69. **Round-6 amendment (editor.md pass,
-2026-08-16):** the toolbar scope changed — installed
+OQ-007 row in §69. **Round-6 amendment (2026-08-16):**
+the toolbar scope changed — installed
 `@tiptap/extension-underline` + `@tiptap/extension-text-align`,
 uninstalled `@tiptap/extension-text-style` +
 `@tiptap/extension-color` (§13.5/§46.16/§14.4 mirrors). Exit gate:
@@ -13718,12 +13815,16 @@ residuals are visible decisions rather than accidents.
 
 ### 67.2 Risk register
 
+The register rows cite only existing controls — each citation was
+verified against its owning section at the pass-4 re-derivation
+(2026-08-19) and resolves (§67.5).
+
 | ID | Risk | Existing controls (owner) | Residual | Risk owner |
 |---|---|---|---|---|
-| R-1 | AI provider outage or drift (paid-model drift) | Fallback chain ADR-014 (§16.6); retry schedule §16.5; schema gates §34/§35 | AI actions unavailable until a provider returns; manual report authoring | §34 |
+| R-1 | AI provider outage or drift (paid-model drift) | Fallback chain ADR-014 (§16.6); retry schedule §16.5; schema gates §34/§35; the §16.2 paid policy is the current pricing reality (the free-only policy does not apply) | AI actions unavailable until a provider returns; manual report authoring; paid-tier cost exposure while addis remains the default text provider (calibrated against the live account at implementation, §16.2) | §34 |
 | R-2 | Provider API contract drift (endpoint/schema changes) | Structured-output contracts §16.4; response validation §34/§35; adapters isolated | Re-point/version-pin at deploy (§16.8); brief breakage | §16 |
-| R-3 | STT chunk failure | Per-chunk failure marking; fuse of succeeded chunks (§33/§16.5) | Partial transcription → re-record or re-transcription (§33) | §33 |
-| R-4 | Provider rate-quota storms (429) | App AI tier primary guard (§27.3); `Retry-After` honor (§16.5) | Transient 502s with §60 copy; retry affordance | §27 |
+| R-3 | STT chunk failure | Per-chunk failure marking; the pipeline continues past a failed chunk (§16.5/§33); re-run succeeds from failed/pending audios only (§33.7) | Report stays `pending` until every chunk succeeded (no partial merge is ever persisted, §33.7) → re-run or re-record (§33) | §33 |
+| R-4 | Provider rate-quota storms (429) | App AI tier primary guard (§27.3 — the AI tier caps provider calls); `Retry-After` honor under the tier cap (§16.5; addis `.retryAfter` via the SDK, OQ-011) | Transient 502s with §60 copy; retry affordance; STT chunk marked failed on a persistent 429 (§33) | §27 |
 | R-5 | Session-token theft on a shared device | httpOnly + `SameSite`; dual-token rotation (ADR-004, §28) | Logged-off sessions; re-login | §28 |
 | R-6 | Reauth loops on expiry | Single-refresh rule; fail-through on the refresh call (§42.3) | Silent redirect to login (§42.3) | §42 |
 | R-7 | Orphaned files / disk growth | Orphan sweep §62.4; upload caps §32 | Disk contention until next sweep (≤ interval) | §62 |
@@ -13732,15 +13833,19 @@ residuals are visible decisions rather than accidents.
 | R-10 | Aborted uploads | Multer limits §32; temp reclaim §62.4 | Temp bytes until reclaimed | §32 |
 | R-11 | Offline connectivity | Offline toast (§60); retry re-runs the same §42 call | Work paused until connected | §60 |
 | R-12 | Editor-choice reversal (TipTap/DOMPurify) | Standing replacement path (§14.4, §13.7) | Migration cost at the editor phase | §46 |
-| R-13 | Rich-content XSS | Double gate §61.3/§61.4; no raw HTML (§46.16, §55.3) | Residual surface minimized; defense-in-depth | §61 |
-| R-14 | MongoDB outage | Fail-fast boot (§26.6); health endpoint (§65.5) | Complete unavailability during the outage | §26 |
-| R-15 | Concurrent-write conflicts | Session template (§27.7); conflict surfacing as 422/409 + §60 toast (§31.8) | One action loses; user retries | §18 |
+| R-13 | Rich-content XSS | Double gate §61.3/§61.4; no raw HTML — the TipTap editor's output contract (§46.16) and the §61 sanitize rule before render (§55.3) | Residual surface minimized; defense-in-depth | §61 |
+| R-14 | MongoDB outage | Fail-fast boot — config env validation §26.2 and the DB-connect fail-fast after it (§26.6); health endpoint §26.6 (mounted under `/api/v1`, §26.6 — not §65.5, which is the runtime-ops section) | Complete unavailability during the outage | §26 |
+| R-15 | Concurrent-write conflicts | Session template (§27.7); writes serialize in one session; conflicts surface as toast via §27.5/§60, never silent overwrites (§31.8) — with the chat-row race as the raw 409 that §29 never remaps and the client resolves by re-reading and retrying (§36.6) | One action loses; user retries | §18 |
 | R-16 | Unbounded list growth | Server-side pagination (ADR-034); caps §11.3 | Deeper pages beyond max limits unavailable | §27 |
-| R-17 | Data loss without backups | Two-path lifecycle + reference rule (§17.4); no-backups scope (§12.9) | **Accepted exposure:** permanent loss on infrastructure failure | §12.9 |
+| R-17 | Data loss without backups | Two-path lifecycle + reference rule (§17.4); no-backups scope (§12.9, §65.6); sweeper transactions unlink binaries only after commit (§62.3) | **Accepted exposure:** permanent loss on infrastructure failure | §12.9 |
 | R-18 | Node LTS EOL in the environment | LTS binding (§13.2/§65.6) | Upgrade lag on the host | §65 |
 | R-19 | Deployment unknowns (OQ-003) | Topology contract §65; dev-env P8 execution | Production not deployed until closure | §69 |
 | R-20 | Google OAuth open (OQ-004) | Stub + `EXPORT_DOCS_ENABLED` flag (§37.3, §28.6) | Google Docs unavailable; SC-5 partial | §37 |
 | R-21 | Export fidelity (BR-18) | Verbatim serialization; DD-MM-YY strings §58 | Browser print variations (A4/paper) | §58 |
+| R-22 | AI credit exhaustion (addis 402) | SDK typed `.availableBalance`; 402 maps to a 502 envelope with the user-facing top-up message and participates in the fallback chain (§16.5/§16.6) | STT cannot fall back (Addis-only, ADR-001) — transcription blocks until top-up | §16 |
+| R-23 | Ethiopian-calendar conversion errors (incl. the 13-day Gregorian offset and Pagume) | `utils/ethiopianDate.js` + the MUI date adapter as the only calendar path (§46.6); dayjs for all formatting (§43.6) — no native `Date` arithmetic for domain dates | A format/parser defect surfaces to every report date; the SC-2 walk gates the day-name/date mapping (§63.6) | §46 |
+| R-24 | STT accuracy below the acceptance bar | SC-1 gate — real-Amharic walk through the §52 wizard (§63.6); chunking + split settings (§33, ADR-007); the §7.7 language contract | Accuracy is empirically unproven until P7; no numeric claim is asserted (SC-8, §63.7) | §33 |
+| R-25 | addisai SDK dependency (single-vendor transport) | ADR-008 — the SDK replaces any raw HTTP to Addis; §16.4 contracts stay in force; the standing replacement path (§14.4/§13.7) covers SDK-level reversal | SDK defects or breaking releases surface at the addis adapter only (§16.7); no other provider SDK is installed (§13.5) | §16 |
 
 ### 67.3 Standing mitigations
 
@@ -13753,7 +13858,12 @@ residuals are visible decisions rather than accidents.
   residual (R-17).
 - **State never tears**: every multi-document write is a session
   (ADR-018); the client surfaces conflicts, never overwrites
-  them (§31.8).
+  them (§31.8; the §36.6 chat 409 is the raw form of the same
+  rule).
+- **Paid AI is a user-facing cost, not a silent one**: addis
+  credit exhaustion surfaces as a 502 envelope with the top-up
+  message (R-22) — a blocked transcription is visible and
+  actionable, never a silent stall.
 - **The register is read at every phase gate** (§66): a phase
   whose sections touch an R-row re-validates the control at that
   phase's exit gate (§63).
@@ -13771,10 +13881,12 @@ residuals are visible decisions rather than accidents.
 ### 67.5 Verification usage
 
 - Grep gates: every register control citation resolves to an
-  authored subsection; no numeric likelihood/impact anywhere in
-  §67; §69 carries any undecided control.
-- Cross-section checks: mirrors §16.5/§16.6 (R-1…R-4), §28
-  (R-5), §42 (R-6), §62 (R-7/R-8), §32 (R-9/R-10), §61 (R-13),
+  authored subsection (resolution sweep, pass 4); no numeric
+  likelihood/impact anywhere in §67; §69 carries any undecided
+  control.
+- Cross-section checks: mirrors §16.5/§16.6 (R-1…R-4, R-22),
+  §28 (R-5), §42 (R-6), §62 (R-7/R-8/R-17), §32 (R-9/R-10),
+  §61 (R-13), §33 (R-3/R-24), §46 (R-23), §16 (R-2/R-22/R-25),
   §12.9 (R-17), §69 (R-19/R-20).
 - §67 introduces no constant (§11 unchanged), no path, and no
   package; it references only specification sections.
@@ -13815,11 +13927,17 @@ once and cites it uniformly.
 
 ### 68.3 Term table
 
+> Backfill note (pass-4 re-derivation, 2026-08-19): the rows
+> marked §31.9 / §34.6 / §35.5 / §40.5 / §49.2 were introduced
+> by earlier passes without a table mirror; the §68.2 rule-2
+> discipline is restored here in one change (their terms
+> pre-existed the rows).
+
 | Term | One-line meaning | Home |
 |---|---|---|
 | Report | The day's supervision record (the product's core artifact) | §1, §21 |
 | Type-1 / Type-2 | Single-branch day / multi-visit day | §6.4 |
-| Visit | One branch visit block with `clockIn`/`clockOut`; positional array entry (no key) within `visits[]` | §21.2 |
+| Visit | One branch visit block with `clockIn`/`clockOut`; positional array entry (no key) within `visits[]`; index [0] is the **main-locked** entry (the day's main branch) and is never reordered or removed | §21.2, §31.2-1, §31.9 |
 | Clip | One recorded audio segment bound to the report | §22, §32 |
 | Branch reference | Reports/items hold the branch ObjectId; names resolve by live join | §21.2, §20 |
 | `raw` / `latest` | STT-merged original / the single current-content slot (both on the 1:1 Transcription) | §23, BR-11 |
@@ -13860,15 +13978,24 @@ once and cites it uniformly.
 | Error boundary | The App-level render fallback | §60.8 |
 | `MuiEditor` | The single rich-text editor + read-only renderer | §46.16 |
 | AppShell | The shared layout chrome | §47 |
-| Wizard steps 1–5 | The creation flow steps | §52 |
+| Wizard steps (four) | The creation flow steps: 1. Basic info & Visits → 2. Audio → 3. Transcription → 4. Report (the original five-step list merged Visits into step 1 — the round-report-step amendment) | §52.2 |
 | Modes 1–3 | Content-save / typed-instruction / voice-instruction correction | §54 |
 | Surgical correction | Only addressed sections change (diff-verified) | BR-09, SC-3, §35.3 |
-| Candidate → save flow | Corrected candidates persist only on Save (round-6) | §35.5 |
+| Candidate → save flow | Corrected candidates persist only on Save | §35.5 |
 | Mock adapter | Client-side dev module implementing §42 contracts over §40 fixtures | §66.10 |
 | SPA fallback | Production static fallback that never shadows the API | §65.3 |
 | Health endpoint | `GET /api/v1/health`, unauthenticated, no DB touch | §26.6 |
 | Sanitize-on-write / on-render | The §61.3 double gate | §61.3 |
 | Mock-data seeding | The §25-rules-driven dev dataset | ADR-037, §40 |
+| Main-locked | `visits[0]` is the day's main branch entry — never reordered or removed | §31.2-1, §31.9 |
+| Report-detail aggregate | The single response `{ report, transcription: { latest, items } }` that a detail action returns | §34.6 |
+| Single round-trip | One request/response pair carries the whole detail state — no follow-up fetches | §31.6, §34.6 |
+| Ephemeral candidate | The draft correction state that exists only until Save or Cancel (no persisted versioning) | ADR-033, §35.5 |
+| Conditional mount | The mock routes exist only in `development` — mounted by `routes/index.js`, absent otherwise | §40.5 |
+| Top-up message | The user-facing 402 copy: "insufficient AI credits — top up the Addis account" | §16.5, §16.6 |
+| Standing reasoning | The conversation-level reasoning-effort setting applied to every §34/§35 request of that conversation | §24.2, §16.2 |
+| Derived name | `firstName`/`lastName` extracted from the email local part at account creation | §19.2, §48.4 |
+| Ledger band | The dashboard's ruled-paper totals band — a flat ruled surface, not a card | §49.2, §44.6 |
 
 ### 68.4 Administrative keys
 
@@ -13889,6 +14016,8 @@ once and cites it uniformly.
   one-liner set); terms used in §66 phase tables resolve to
   rows here.
 - Cross-section checks: mirrors §6.3 (labels), §21.2 (slots),
+  §31.2-1/§31.9 (main-locked), §34.6 (aggregate/round-trip),
+  §35.5 (candidate), §40.5 (mount), §44.6/§49.2 (ledger band),
   §62 (sweeper rows), §64 (tokens), §66.10 (adapter) — a row
   whose home changes is updated in the same change (§68.2).
 - §68 introduces no constant (§11 unchanged), no path, and no
@@ -13949,6 +14078,7 @@ content rules: no prose invention outside this registry).
 | OQ-011 | **OPEN** | Addis AI free-tier limits (60 RPM / 1000 RPD / 3 concurrent requests) — provider-published at research time (2026-08-18); policy-only today, calibrated against the live account at implementation | §16.2, §16.5, §27 | None — the app AI tier (RATE_LIMIT_AI_*) is the primary guard; provider 429s are second-layer |
 | OQ-012 | **OPEN** | The addisai SDK's `SttLanguage` enum accepts am \| om \| en \| ha \| sw while the docs list am \| om — provider self-conflict; moot for the app (am-only, §7.7 reserves om/ti); whichever language activates later follows the SDK enum | §16.4, §33 | None |
 | OQ-013 | **OPEN** | The SDK's `chat_audio_input` + `transcription.clean` single-call option — a future Mode-3 one-call alternative to STT-then-TTT; not adopted (the current two-step path is the §35.2 contract) | §16.4, §35 | None — future option only |
+| OQ-014 | **OPEN** | The Register page's name-reveal line (§48.4) mirrors the §19.2 auto-extraction rule client-side — display-only, the server decides at creation; the preview is marked approximate so a later §19.2 rule change never misleads | §48.4, §19.2, §43.2 | The §48.4 name-reveal line (pass-3 UI/UX amendment) |
 
 Records (closed):
 
@@ -14099,6 +14229,16 @@ Records (open):
   toolbar/select contract of §46.16/§53.3 stands otherwise.
   Closure: root cause recorded here with the §46.16/§53.3
   amendments in the same change (§66.6).
+- **OQ-014 — OPEN.** Registered at the pass-3 UI/UX front-load
+  (2026-08-19): the Register page's **name-reveal line** (§48.4)
+  previews the §19.2 auto-extraction (email prefix, separators →
+  spaces, parts capitalized) while the email is valid — display-
+  only, marked approximate, and the server's decision at
+  creation is the authority (a §19.2 rule change only updates
+  the preview in the same change set, §66.6). Until closure: the
+  reveal line renders per §48.4. Closure: an owner decision
+  recorded here with the §48.4/§19.2 amendments in the same
+  change.
 - **S12 text-generation contracts + addisai SDK — CLOSED
   2026-08-18 (owner: "proceed" on the S12 plan).** §16 derived
 against the SDK source: addisai ^0.2.0 adopted for all Addis
@@ -14260,6 +14400,59 @@ derived answers, all applied:
   modes), §38 (KPI/chart rules), §39.2/§39.4–§39.5 (index
   decision/scoring), §40.6–§40.7 (edge cases/gates, aside from
   F10's guard removal).
+
+### 69.3.3 Stage-3 specification-integrity audit record (2026-08-19)
+
+The §63.9 single-run audit (C1–C6) ran read-only over the
+corrected specification on 2026-08-19; the coverage register was
+reconciled 51/51 dispositions, zero partials, in the same change
+set (task_plan.md). Results:
+
+- **C1 — Internal links closed.** Tooling (a read-only citation
+  extractor kept in the planning tooling, never modifying this
+  document) compared 7931 `§N`/`§N.M`/`§N.M-K` citations against
+  654 authored headings. Three stale citations fixed: two
+  references to a retired report-schema subsection (the §31.4
+  status matrix and the §25 mock rule) retargeted to their real
+  homes (§58 — client exports are ephemeral — and §37); one
+  reference to a retired deferred-features subsection in §52.3
+  reworded ("the one-payload submission of the original contract
+  is superseded"). The
+  `§N.M-K` convention (e.g. §31.2-1…§31.2-5, §12.11-1…) resolves
+  against its base subsection by design. Zero unresolved after the
+  fixes.
+- **C2 — No work-note leaks.** Nine provenance citations
+  referencing the pruned editor planning note (in §14.4, §46.16
+  ×5, §53.5, §54.2, §66.9) rewritten to
+  decision-only form (dates kept, paths dropped). Two tokens are kept by explicit
+  owner disposition (2026-08-19): the §15.6 repository-tree
+  manifest row listing the planning notes (sanctioned manifest,
+  like the §13 transcripts) and the §69.3.1 fold record naming
+  the deleted review artifact (sanctioned deletion
+  record). No other planning-note name, repository path, or
+  document-format suffix appears in the body.
+- **C3 — TOC injected.** The `## Table of Contents` is a real
+  link list. One missing entry fixed: §24A (Item Model) was
+  absent between the §24 and §25 entries. All 70 numbered-section
+  entries resolve to their headings (anchor-resolution check);
+  the Part dividers and the TOC heading itself are intentionally
+  unlinked.
+- **C4 — No reserved anchors.** Grep confirms "reserved anchor"
+  appears only in §63.9's own definition; every promised anchor is
+  an authored subsection (§6.10, §6.11).
+- **C5 — No external dependence.** One dangling pointer fixed in
+  §30.2 ("the review file's draft 409" → "the draft contract's
+  409"). No paragraph or decision references material outside
+  this document; the only remaining artifact mentions are the two
+  sanctioned tokens of C2.
+- **C6 — Sign-off.** All of the above held with zero pending at a
+  single run on 2026-08-19 ⇒ the single-source-of-truth milestone.
+  The `TODO(open)` reconciliation: the marker appears only in its
+  five definitional sites (preamble, §3.1.3 negation, §68.4,
+  §69.1 mechanics, §69.5 gate) — zero markers without a §69 row.
+  Every OPEN OQ row (OQ-003/004/008/009/010/011/012/013/014) has
+  its owning-section pointer and blocks column. The audit is
+  re-run at every §66 phase gate per §63.9.
 
 ### 69.3 Assumptions register
 
