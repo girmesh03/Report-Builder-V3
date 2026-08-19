@@ -702,3 +702,15 @@ The spec-correction effort closed with `7fb1580` (owner: "only commit" — no pu
 - The §66.5 chain now reads: standing instructions → corrected spec as sole behavioral input → logical reasoning → implementation; the corrected spec (51/51, C1–C6 green, §69.3.3) is the complete behavioral contract — the codebase is implemented toward it, never cited as justification.
 
 **Change set (same change):** AGENTS.md (repository status + protocol section), prompt.md (full rewrite — correction content becomes the closed record, operative content is implementation & re-implementation), task_plan.md (title/goal/Next Step/stages/standing rules), findings.md (F83), progress.md (session log). Spec untouched (already committed at `7fb1580`). NEXT → Stage 4 (backend-first per §15.4; per-phase flow above).
+
+## F84 — 2026-08-19 — Stage 4 prep (branch created, plan laid, NOT started)
+
+Owner directive: "commit, checkout and prepare for stage 4 but don't start". Executed:
+
+- **Commit** `b58082e chore: reorient controlled files to implementation & re-implementation` on `spec-correction` (the 5 controlled files; 171 insertions / 117 deletions).
+- **Checkout:** new branch `stage-4-backend` created from `spec-correction` (owner's "checkout" = the §9.8 branch lifecycle — new implementation branch; `spec-correction` retained, deletion still gated).
+- **Prep (no backend/client files touched):**
+  - Backend state audited: P1 foundation only (`config/env.js`, `utils/constants.js`, `utils/httpStatus.js`); full §13.3/§13.5 dependency set already installed (express 5.2, mongoose 9.7, winston, express-validator, multer, bcryptjs, jsonwebtoken, helmet, cors, compression, express-mongo-sanitize, express-rate-limit, cookie-parser, dayjs, axios, mongoose-paginate-v2, express-async-handler, dotenv, winston-daily-rotate-file) → **no installs planned** (§66.8; §16.4 NVIDIA helper P7-conditional, never proactive). `server.js`/`app.js` absent → `npm run dev` fails until sub-phase 1.
+  - §15.4 tree + §66.9 P6 rows read as the Stage-4 contract; six sub-phases laid into task_plan.md (foundation → models → identity → domain APIs → aggregations → seeding & sweepers) each with owning sections, §15.4 deliverables, exit gates, and the per-phase flow (implement → Postman-like tests until all green (backend only) → step 5 = owner runs the test script → document → step 6 → ready for the next).
+  - Stage 4 COMPLETE definition recorded: §15.4 tree implemented, every endpoint Postman-green with result ledger, backend on :4000; then (and only then) Stage 5 frontend re-implementation.
+- **State:** working tree = 3 controlled files modified (task_plan, findings, progress) — uncommitted, awaiting the next gated commit. NEXT: Stage 4 sub-phase 1 (Foundation, §26/§27) — NOT started until the owner's go.

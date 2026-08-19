@@ -242,6 +242,25 @@ Implement the backend from the corrected specification (Stage 4, §15.4, phase b
 - Working files: append-only; the correction-era content is kept as the record.
 - Git: the correction set is committed on `spec-correction` (`7fb1580`); implementation work moves to a new branch per §9.8 and `spec-correction` is deleted — branch operations and every commit/push/merge/delete require explicit owner approval (§9.8 step 5).
 
+## Stage 4 — Backend implementation per §15.4 (PREPARED 2026-08-19 — NOT STARTED)
+
+Branch: `stage-4-backend` (created 2026-08-19 from `spec-correction` at `b58082e`; `spec-correction` retained — deletion gated). Repo state: P1 foundation exists (`config/env.js`, `utils/constants.js`, `utils/httpStatus.js`); the full §13.3/§13.5 backend dependency set is already installed (`express` 5.2, `mongoose` 9.7, `winston`, `express-validator`, `multer`, `bcryptjs`, `jsonwebtoken`, … — backend/package.json) — **no installs planned** (§66.8; the §16.4 NVIDIA helper is P7-conditional, never proactive). `server.js`/`app.js` absent → `npm run dev` fails until sub-phase 1.
+
+Per-phase flow for EVERY sub-phase (owner directive 2026-08-19): implement → Postman-like tests until all green (backend only) → step 5 (request to run the script to test and verify) → document → step 6 → ready for the next. Verification per sub-phase: `node --check` on every file (§9.7); §66.6 mirrors (§15.4 tree amendments, §11 constants with consumers, §14.3 ADR index, §69 records) in the same commit; Postman-style test scripts + result ledger per §7 (edge-case matrix, all green) recorded in findings/progress; step-5 = the owner runs the test script to test and verify; step 6 (commit) only with explicit owner approval.
+
+| # | Sub-phase | Owning sections | Deliverables (§15.4 tree) | Exit gate |
+|---|---|---|---|---|
+| 1 | Foundation | §26, §27 | `server.js`, `app.js`, `utils/logger.js` (Winston), middleware chain (helmet/cors/compression/express-mongo-sanitize/rate-limit/cookie-parser/express.json + auth tiers §27/§28), response envelope, error handling (global handler + CustomError), pagination helper, session middleware, health, graceful shutdown, `routes/index.js` registry | boot smoke on :4000; health + envelope + 404 contract; node --check; step-5 script run |
+| 2 | Models | §18, §19–§24A | `models/*.model.js` — User, Branch, Report, Audio, Transcription, ChatConversation, Item; §18 conventions (timestamps, transforms, indexes, ONE TTL, session template §27.7) | model syntax + index/TTL declarations grep-verified against §18/§62; node --check |
+| 3 | Identity | §28, §29 | `middleware/auth*`, sessions, OAuth stub, `validators/validation.js` harness + rule chains | register/login/refresh/logout/me flows Postman-green incl. refresh-reuse acceptance (§28); 422 field-error shape |
+| 4 | Domain APIs | §30–§36 | `routes/` + `controllers/` + `validators/` per domain — branches; reports + §31.4 transition-guard table; audio upload (multer, §32); STT pipeline (+ `utils/wavSplitter.js`, §33); generation (§34); correction (§35); chat (§36) | every endpoint's edge-case matrix green (missing/invalid/empty/oversized/duplicate/unknown-id/unauth/expired-tokens/forbidden-transition/concurrent/pagination/multipart/provider-failure/422/502-503/TTL edges); one transition-guard table |
+| 5 | Aggregations | §37–§39 | exports (content surface + Google Docs stub), analytics, search (exactly ONE text index — branches) | aggregate contracts green; search index count = 1 |
+| 6 | Seeding & sweepers | §40, §12.5, §62 | `mock/` deterministic seed + wipe endpoints (session-safe, ADR-037); `jobs/sweeper` (single in-process timer, two passes — built here, live retention validation at P7) | seed/wipe deterministic (§40.6); sweeper code passes node --check |
+
+Stage 4 COMPLETE ⇔ §15.4 tree implemented, every endpoint Postman-green (result ledger), backend runs on :4000; then the hard gate lifts for Stage 5 (frontend re-implementation — NEVER before backend completion, owner directive 2026-08-19).
+
+---
+
 ## Coverage register (51 DERIVED sections; per-section status + NEXT pointer)
 
 ### Pass 1a — data model [CLOSED] (audit re-pass 2026-08-18, F74: §19.3 two-TTL stale parenthetical → one-TTL doctrine; §17.3 Report—ChatConversation 1—N → 1—1 with `report` unique-sparse key cell + §24.1 gloss aligned; A2 chronology-index / A3 item-index / A4 stt-subdoc verifications → no-change; §17.7/§18.10/§19.8/§20.10/§21.13/§22.10/§23.10/§24.10/§24A.8 grep gates re-run clean)
