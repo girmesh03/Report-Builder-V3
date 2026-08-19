@@ -714,3 +714,13 @@ Owner directive: "commit, checkout and prepare for stage 4 but don't start". Exe
   - §15.4 tree + §66.9 P6 rows read as the Stage-4 contract; six sub-phases laid into task_plan.md (foundation → models → identity → domain APIs → aggregations → seeding & sweepers) each with owning sections, §15.4 deliverables, exit gates, and the per-phase flow (implement → Postman-like tests until all green (backend only) → step 5 = owner runs the test script → document → step 6 → ready for the next).
   - Stage 4 COMPLETE definition recorded: §15.4 tree implemented, every endpoint Postman-green with result ledger, backend on :4000; then (and only then) Stage 5 frontend re-implementation.
 - **State:** working tree = 3 controlled files modified (task_plan, findings, progress) — uncommitted, awaiting the next gated commit. NEXT: Stage 4 sub-phase 1 (Foundation, §26/§27) — NOT started until the owner's go.
+
+## F85 — 2026-08-19 — All branches merged to main; only main left (owner directive)
+
+Owner directive: "add, commit, push, merge all branches to main and clean them from local/remote and ensure only main is left". Executed:
+
+- **Commit:** `b1a5ff5 chore: stage 4 prep (sub-phase plan, F84, session log)` on `stage-4-backend` (the 3 pending working files).
+- **Push:** `spec-correction` + `stage-4-backend` pushed to origin (phase-4-frontend-pages and main were already in sync).
+- **Merges (conflict-free — linear chain off `main` 8ce7b2a, three `--no-ff` merge commits on `main`):** `merge: phase 4 frontend pages (close-out)` (71 files — phase-4 client pages + mirrors), `merge: spec-correction corrections + reorientation (close-out)` (9 files — spec corrections + reorientation + prompt.md), `merge: stage 4 backend prep (implementation ready)` (3 files). `main` pushed to origin (8ce7b2a..8c2374c).
+- **Cleanup:** `phase-4-frontend-pages`, `spec-correction`, `stage-4-backend` deleted locally (`git branch -d`, all merged) and remotely (`git push origin --delete`). Verified: local + remote show **only `main`/`origin/main`**.
+- **Record:** branch-lifecycle lines in AGENTS.md/task_plan.md updated (post-merge record, same-change discipline §66.6). Stage 4 continues from `main` — sub-phase branches per §9.8. NEXT: Stage 4 sub-phase 1 (Foundation, §26/§27) — awaiting the owner's go.

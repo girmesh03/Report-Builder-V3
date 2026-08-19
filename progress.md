@@ -234,3 +234,10 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - **Checkout:** `stage-4-backend` created from `spec-correction` (implementation branch per §9.8; `spec-correction` retained — deletion gated).
 - **Prep:** backend state audited (P1 foundation only; full §13.3/§13.5 deps installed → no installs planned; `server.js`/`app.js` absent → `npm run dev` fails until sub-phase 1); §15.4 tree + §66.9 P6 read as the Stage-4 contract; six sub-phases + exit gates + per-phase flow written to task_plan.md (F84); no backend/client files touched.
 - **State:** 3 controlled files modified (task_plan, findings, progress), uncommitted — next commit gated. **Stage 4 NOT started** — waiting for the owner's go.
+
+## 2026-08-19 — All branches merged to main; only main left
+
+- **Owner directive:** "add, commit, push, merge all branches to main and clean them from local/remote and ensure only main is left".
+- **Executed:** prep commit `b1a5ff5` on stage-4-backend → pushed spec-correction + stage-4-backend → three `--no-ff` merges on main (phase-4-frontend-pages → spec-correction → stage-4-backend; conflict-free linear chain) → main pushed (8ce7b2a..8c2374c) → all three branches deleted local + remote → verified: only `main`/`origin/main` remain.
+- **Record:** F85 + branch-lifecycle lines updated in AGENTS.md/task_plan.md (post-merge record, §66.6).
+- **NEXT:** Stage 4 sub-phase 1 (Foundation, §26/§27) — branch from `main` per §9.8, per-phase flow (implement → Postman-like tests until all green (backend only) → step 5 = owner runs the test script → document → step 6 → ready for the next); awaiting the owner's go.
