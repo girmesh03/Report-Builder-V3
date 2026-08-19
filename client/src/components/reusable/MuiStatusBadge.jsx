@@ -3,11 +3,12 @@
  *
  * Read-only presentation of `report.status` — a non-interactive,
  * color-coded chip (§46.13, §43.2 role binding). Also renders the
- * branch variant ("Active" / "Archived", §56.3).
+ * branch variant ("Active" / "Archived", §56.3). Labels come from
+ * the §11.5 mirror (`REPORT_STATUS_LABELS`, §49.4).
  */
 import PropTypes from "prop-types";
 import Chip from "@mui/material/Chip";
-import { REPORT_STATUSES } from "../../utils/constants";
+import { REPORT_STATUSES, REPORT_STATUS_LABELS } from "../../utils/constants";
 
 /**
  * @type {Object<string, string>}
@@ -18,17 +19,6 @@ const REPORT_COLOR_MAP = Object.freeze({
   transcribed: "info",
   reviewed: "primary",
   completed: "success",
-});
-
-/**
- * @type {Object<string, string>}
- */
-const REPORT_LABEL_MAP = Object.freeze({
-  draft: "Draft",
-  audio_attached: "Audio attached",
-  transcribed: "Transcribed",
-  reviewed: "Reviewed",
-  completed: "Completed",
 });
 
 /**
@@ -55,7 +45,7 @@ export default function MuiStatusBadge({ status, branchActive }) {
   return (
     <Chip
       size="small"
-      label={REPORT_LABEL_MAP[status]}
+      label={REPORT_STATUS_LABELS[status]}
       color={REPORT_COLOR_MAP[status]}
       variant="outlined"
     />

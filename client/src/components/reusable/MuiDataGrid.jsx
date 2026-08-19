@@ -8,6 +8,7 @@
  * the lists.
  */
 import PropTypes from "prop-types";
+import { useMemo } from "react";
 import Box from "@mui/material/Box";
 import { DataGrid } from "@mui/x-data-grid";
 
@@ -22,9 +23,14 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
  * @param {('server'|'client')} [props.paginationMode] - Server-driven by contract.
  * @param {number} [props.page] - Current page (1-based).
  * @param {number} [props.pageSize] - Page size.
+ * @param {Array<number>} [props.pageSizeOptions] - Selectable page sizes (default [10,25,50,100]).
+ * @param {Array} [props.rowSelectionModel] - Controlled checkbox selection ids
+ * (array form at the wrapper boundary — internally translated to the v9
+ * `{ type, ids }` model, which is the only shape v9.11 accepts; the change
+ * callback is unwrapped back to an array).
  * @param {Function} [props.onPaginationModelChange] - Pagination callback.
  * @param {Function} [props.onRowClick] - Row click navigation.
- * @param {Function} [props.onSelectionModelChange] - Selection callback.
+ * @param {Function} [props.onSelectionModelChange] - Selection callback (receives an array of ids).
  * @param {Object} [props.slots] - Slot overrides.
  * @param {Object} [props.slotProps] - Slot props; `toolbar` per the v9 built-in toolbar.
  * @param {Object} [props.sx] - Style overrides; default height 400.
@@ -37,6 +43,8 @@ export default function MuiDataGrid({
   paginationMode = "server",
   page,
   pageSize,
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
+  rowSelectionModel,
   onPaginationModelChange,
   onRowClick,
   onSelectionModelChange,
@@ -45,6 +53,14 @@ export default function MuiDataGrid({
   sx,
   ...rest
 }) {
+  const selectionModel = useMemo(
+    () =>
+      rowSelectionModel
+        ? { type: "include", ids: new Set(rowSelectionModel) }
+        : undefined,
+    [rowSelectionModel],
+  );
+
   return (
     <Box sx={{ height: 400, width: "100%", ...sx }}>
       <DataGrid
@@ -62,8 +78,11 @@ export default function MuiDataGrid({
         onRowClick={onRowClick}
         checkboxSelection
         disableRowSelectionOnClick
-        onRowSelectionModelChange={onSelectionModelChange}
-        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        rowSelectionModel={selectionModel}
+        onRowSelectionModelChange={(model) =>
+          onSelectionModelChange?.(model ? [...model.ids] : [])
+        }
+        pageSizeOptions={pageSizeOptions}
         autoHeight={false}
         showToolbar
         slots={slots}
@@ -96,6 +115,8 @@ MuiDataGrid.propTypes = {
   paginationMode: PropTypes.oneOf(["server", "client"]),
   page: PropTypes.number,
   pageSize: PropTypes.number,
+  pageSizeOptions: PropTypes.array,
+  rowSelectionModel: PropTypes.array,
   onPaginationModelChange: PropTypes.func,
   onRowClick: PropTypes.func,
   onSelectionModelChange: PropTypes.func,

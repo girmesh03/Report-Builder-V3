@@ -3,8 +3,8 @@
  *
  * The §48.4 Register page (`/register`) — guests only (PublicRoute,
  * §41.5): the same centered paper-card pattern as Login with the
- * header-strip eyebrow "Create your account" + title "Sign up"
- * (§46.12), `RegisterForm` (email + password + client-only
+ * header-strip title "Sign up" (§46.12), `RegisterForm` (email +
+ * password + client-only
  * confirmation), the shared OAuth entry, and the login link.
  * Success lands on `/login` (decision 11, §41.2) — `state.from`
  * from a prior guard redirect is deliberately ignored; the card
@@ -48,7 +48,7 @@ export function Component() {
             borderColor: "divider",
           }}
         >
-          <MuiPageHeader eyebrow="Create your account" title="Sign up" />
+          <MuiPageHeader title="Sign up" />
           <RegisterForm />
           <Box sx={{ mt: 2 }}>
             <GoogleOAuthButton />

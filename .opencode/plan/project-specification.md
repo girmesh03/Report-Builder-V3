@@ -2248,11 +2248,22 @@ by the UI:
 | Constant              | Value (mirror of)    | Used by |
 | --------------------- | -------------------- | ------- |
 | `REPORT_STATUSES`     | §11.4                | §51, §50 |
+| `REPORT_STATUS_LABELS`| §11.4 (English chrome, §7.6) | §49, §46.13 |
 | `AI_PROVIDERS`        | §11.4                | §54     |
 | `AI_MODELS`           | §11.4                | §54     |
 | `AI_REASONING_EFFORTS`| §11.4                | §54     |
+| `AI_PROVIDER_LABELS`  | §11.4 (display names, English chrome §7.6; round-7: the `nvidia` row displays "Deepseek" — the wire id stays `nvidia`) | §54 |
+| `WIZARD.modes.*` correction chrome (`revision`, `instructionPlaceholder`, `recordInstruction`, `transcribingInstruction`, `save`, `revertToOriginal`, `apply`, `cancel`, `aiProvider`, `savedAt`, `unsaved`, `saving`, `savedJustNow`, `noChanges`) | §11.4 (English chrome §7.6) | §53.5, §54 |
+| `WIZARD.transcription.*` step chrome (`ledgerTitle`, `ledgerSubtitle`, `transcribe`, `transcribing`, `storyDivider`, `storySubtitle`, `addCorrection`, `failedLine`, `retry`, `reTranscribe`, `storyChangeNotice`, `emptyTitle`, `emptyDescription`) | §11.4 (English chrome §7.6) | §52.7 |
+| `WIZARD.toolbar.*` editor toolbar labels (`bold`, `italic`, `underline`, `paragraph`, `heading1`–`heading3`, `bulletList`, `orderedList`, `alignLeft`–`alignJustify`, `undo`, `redo`, `fontSize`) | §11.4 (English chrome §7.6) | §46.16 |
+| `FONT_SIZES`           | `[Default(0), 10, 11, 12, 14, 16]` — the round-8 toolbar font-size ladder (a 0 sentinel = the editor's default size; selection-level via the TextStyle extension, §46.16; values apply with a `px` suffix because the extension's `renderHTML` emits the inline style bare) | §46.16 |
 | `PAGINATION_*`        | §11.3                | §50     |
+| `PICKER_DATE_FORMAT`  | §46.6 (`DD-MM-YY`)   | §46.6   |
+| `PICKER_TIME_FORMAT`  | §46.6 (`HH:mm`)      | §46.6   |
+| `ETHIOPIAN_MONTH_LABELS` | §43.6 (English chrome) | §46.6 |
 | `AUDIO_*`             | §11.3 (MIME list)    | §53     |
+| `AVATAR_*`            | §11.3 (max size, MIME list) | §57 |
+| `OFFICIAL_TOKEN_PREFIX` | §11.3              | §51, §53, §58 |
 | `TOAST_AUTO_DISMISS_MS` | §60.5 cadence (success/info 5000, error/warning 8000; loading never auto-dismisses) | §60, §48 |
 | `TOAST_CATALOGUE`     | §60.6 catalogue — single-sourced strings (one occurrence per string, §48.6) | §27, §48, §60 |
 
@@ -2784,9 +2795,37 @@ become manifest truth:
 
 | Package       | Purpose                                          | Manifest target | Entrance gate              |
 | ------------- | ------------------------------------------------ | --------------- | -------------------------- |
-| @tiptap/react | `MuiEditor` rich-text editing (toolbar: bold, italic, font size, text color) | client dependencies | editor phase in §66 |
 | dompurify     | Sanitizes rich-text HTML on save and on render  | client dependencies | editor phase in §66; §61 |
 | NVIDIA multipart transport helper (named at install) | Conditional (§16.4): only if the installed runtime lacks reliable multipart forwarding to NVIDIA | backend dependencies | transport phase in §66; §16.4 rules stay in force |
+
+Installed at the §66 P4 editor phase (2026-08-15, wizard steps 1–3
+round): `@tiptap/react`, `@tiptap/starter-kit`,
+`@tiptap/extension-text-style`, `@tiptap/extension-color`,
+`dompurify` — now manifest truth (§13.4). **`@tiptap/extension-font-size`
+is NOT a package** (no stable release on npm); the v3
+`@tiptap/extension-text-style` provides the font-size attribute and
+`setFontSize`/`unsetFontSize` commands natively, so the ADR-038 "Font
+size" toolbar action needs no extra dependency.
+
+**Round-6 amendment (2026-08-16, editor.md pass):** the toolbar scope
+changed — font size and text color were REMOVED (editor.md §18-1),
+Underline and alignment were ADDED (editor.md §5/§19). Manifest truth
+now: `@tiptap/extension-underline` + `@tiptap/extension-text-align`
+installed; `@tiptap/extension-text-style` + `@tiptap/extension-color`
+UNINSTALLED (their only consumer — the font-size select and color
+swatches — no longer exists; the ADR-038 "Font size"/"Text color"
+actions are gone from §46.16). The old `setFontSize` note above is
+historical: it applied to the removed action.
+
+**Round-7 amendment (2026-08-17, owner R3 review):** the font-size
+toolbar action is BACK IN SCOPE (§46.16) as a small bucket select
+(Default / 18 / 22 / 26 px, selection-level). Manifest truth now:
+`@tiptap/extension-text-style@^3.30.1` INSTALLED (reinstalled with
+round 7; its `setFontSize`/`unsetFontSize` commands and the
+`textStyle.fontSize` mark attribute drive the select); the deprecated
+`@tiptap/extension-font-size` remains NOT a package (§13.4 note
+above stands). `@tiptap/extension-color` stays out — text color
+remains out of scope.
 
 Until these are installed, no section may assume their behavior; the
 editor and its sanitization are introduced by the editor phase (§66),
@@ -2935,9 +2974,18 @@ The editor of the report content area (§51) and the transcription
 review surface (§54) is **TipTap + DOMPurify**:
 
 - **Components.** `@tiptap/react` (headless editor; MUI-themed toolbar
-  of Bold, Italic, Font size, Text color) and `dompurify` (HTML
-  sanitizer). Both are approved planned dependencies and are installed
-  when the editor phase implements them (§13.5, §66).
+  of Bold, Italic, Underline, Paragraph/Heading, **Font size**
+  (round-7 amendment — a small bucket select, Default/18/22/26 px,
+  selection-level through the TextStyle mark, §13.5/§46.16; the
+  round-6 removal is superseded for font size only), lists,
+  alignment, Undo/Redo — round-6 amendment; the earlier
+  Bold/Italic/Font size/Text color scope and its
+  `@tiptap/extension-text-style` + `@tiptap/extension-color`
+  packages were replaced by `@tiptap/extension-underline` +
+  `@tiptap/extension-text-align`, §13.5/§46.16) and `dompurify`
+  (HTML sanitizer). Both are approved
+  planned dependencies and are installed when the editor phase
+  implements them (§13.5, §66).
 - **Storage.** The value persisted is an HTML string; `dompurify`
   sanitizes on write **and** on render; `dangerouslySetInnerHTML` is
   used only on already-sanitized input (§61). The same HTML feeds the
@@ -3152,24 +3200,64 @@ client/
     |       |                                #   baseQueryWithReauth; network & error layer (§41–§42)
     |       |-- authSlice.js                  # session/identity UI state (§41.5, §42)
     |       |-- authEndpoints.js              # getCurrentUser/login/logout/refresh (§28, §42)
+    |       |-- reportsEndpoints.js           # report CRUD + visits + content + lifecycle (§30, §31, §34, §35)
+    |       |-- branchesEndpoints.js          # branch CRUD + lifecycle (§30, §56)
+    |       |-- audioEndpoints.js             # clips CRUD, audio stream URL (§32)
+    |       |-- transcriptionEndpoints.js     # list, transcribe, re-transcribe, accept (§33, §54)
+    |       |-- conversationEndpoints.js      # chat get/send (§35, §55)
+    |       |-- analyticsEndpoints.js         # dashboard + items analytics (§38, §49, §56)
+    |       |-- searchEndpoints.js            # global search (§39, §59)
+    |       |-- profileEndpoints.js           # profile + sessions (§28, §57)
     |       `-- <domain>Slice.js             # one slice per domain (e.g. reports, branches) (§41)
     |-- components/
     |   |-- AppErrorPage.jsx                   # §60 render-error fallback (ADR-025, §41.4)
     |   |-- layout/                          # PublicLayout, AppShell, AppSidebar, PublicRoute,
     |   |                                    #   ProtectedRoute, Logo, ThemeToggle, AvatarMenu (§47)
     |   |-- reusable/                        # Mui* belt (§46), one file per component: MuiButton,
-    |   |                                    #   MuiTextField, MuiSelect, MuiDatePicker (+MuiTimePicker),
+    |   |                                    #   MuiTextField, MuiSelect, MuiDatePicker, MuiTimePicker,
+    |   |                                    #   PickerButtonField (shared slots.field trigger, §46.6),
     |   |                                    #   MuiPagination, MuiDataGrid, MuiConfirmDialog, MuiDialog,
     |   |                                    #   MuiEmptyState, MuiAppbar, MuiPageHeader, MuiStatusBadge, MuiAudioPlayer,
     |   |                                    #   MuiRecorder, MuiFileInput, MuiStatCard, MuiStepper,
     |   |                                    #   MuiRegistrationValue, MuiToast, AppToastContainer,
     |   |                                    #   GlobalSearchDialog, LoadingSpinner, TableSkeleton,
     |   |                                    #   ListSkeleton, FormSkeleton, MessageSkeleton
-    |   |                                    #   (MuiEditor at the editor phase, §66)
-    |   |-- columns/                         # domain column-set files for MuiDataGrid (§50, §56, ADR-034)
+    |   |                                    #   MuiEditor (TipTap + dompurify, §46.16 — installed
+    |   |                                    #   at the §66 P4 editor phase, 2026-08-15;
+    |   |                                    #   round-7: the font-size bucket select + the
+    |   |                                    #   `borderless` prop — §46.16/§13.5)
+    |   |-- columns/                         # domain column-set files for MuiDataGrid (§50, §56, ADR-034):
+    |   |                                    #   reports.jsx (§50), visits.jsx (§52)
     |   |-- landing/                          # e.g. Hero.jsx — example of a domain folder
     |   |-- auth/                             # e.g. LoginForm.jsx — example of a domain folder
-    |   |-- report/                           # e.g. ReportCard.jsx — example of a domain folder
+    |   |-- report/                           # ReportCard.jsx — the §50 list/grid card (§15.6);
+    |   |                                    #   wizard steps — StepBasicInfo, StepAudio, StepTranscription,
+    |   |                                    #   TranscriptionTakeRow, AudioCard, TranscriptionCard,
+    |   |                                    #   CorrectionDialog, StepNavBar, RecordOrb,
+    |   |                                    #   TakeCard, SummaryRibbon, VisitedBranchesDialog (§52;
+    |   |                                    #   round-7: StorySection.jsx and the whole
+    |   |                                    #   components/reports/ folder are DELETED — the
+    |   |                                    #   transcription step composes the two cards and
+    |   |                                    #   the correction dialog);
+    |   |                                    #   round-report-step (2026-08-17): StepReport,
+    |   |                                    #   GenerateCard, ReportBodyCard, CorrectionOpener,
+    |   |                                    #   EditorFooter (the shared §53.5 footer), ExportMenu,
+    |   |                                    #   useEditorHost.js (the §53.6 host #2: draft/dirty/
+    |   |                                    #   error/saving/reverting + Mode-1 handleSave +
+    |   |                                    #   revert + applyCandidate) and useCorrection.js
+    |   |                                    #   (the §54.3 candidate rule) — the transcription
+    |   |                                    #   card is REFACTORED onto the same host/candidate
+    |   |                                    #   rules (ADR-033; one correction implementation);
+    |   |-- reports/                          # DELETED at round 7 (§54, §15.6): the correction
+    |   |                                    #   surface folders correct-instruction/,
+    |   |                                    #   correct-voice/, unassigned-panel/ dissolved — the
+    |   |                                    #   transcription step's Mode-2/3 surface is the
+    |   |                                    #   CorrectionDialog host-composed on the story card
+    |   |                                    #   (§54.2); the persistent editor + footer remain
+    |   |                                    #   host-composed (§53.5/§54.2)
+    |   |-- branches/                         # branch domain components — Create/Edit dialog,
+    |   |                                    #   Branch Details composition (§56, §56.5)
+    |   |-- print/                            # ReportPrint.jsx — the §58.3 print surface
     |   `-- <domain>/                        # every other component lives at
     |-- pages/                                # one <Name>.jsx per routed view; the page set is
     |                                         # decided by the page sections (§48–§59); pages so far:
@@ -4554,12 +4642,14 @@ is persisted.
 
 **Open items (per the §69 open-question rule).**
 
-- **OQ-007 (open, registered here — `TODO(open)`).** The storage
-  format of `raw`/`latest` is open: plain text vs rich-text HTML.
-  Sanitize-on-store and the HTML contract are owned by the editor
-  phase — the ADR-038 owner sections (§46/§51/§54/§61) — and §21 does
-  not pre-decide them; both slots stay plain `String` until that
-  decision lands.
+- **OQ-007 (closed at the §66 P4 editor phase, 2026-08-15 — recorded
+  here).** The storage format of `raw`/`latest` is decided: **`raw` is
+  plain text, `latest` is rich-text HTML** (the de-facto convention of
+  the §40 fixtures and the §66.10 mock generation — `RAW_R*` plain
+  with `±` leads, `latestFromRaw` HTML — now the normative rule).
+  Both slots stay plain `String` (§21.2); sanitize-on-store and the
+  HTML contract are owned by the ADR-038 owner sections
+  (§46.16/§53/§54/§61); §21 does not re-open the format.
 - **OQ-001 (closed by amendment, recorded here).** The version-history
   question was closed by the ADR-005 retirement amendment
   (2026-08-09, §14.3/§14.5): no version chain — the `raw`/`latest`
@@ -5092,6 +5182,16 @@ domain (§16.1).
   paths — direct edit (Mode 1), typed instruction (Mode 2), voice
   instruction (Mode 3), re-transcription — all persist through the
   same review write path (§12.4 stage 4).
+- **Wizard transcription step (round-4 amendment, §52.7).** The
+  transcription step's story is the report's `latest` slot: before
+  the first correction it is the client-joined take texts (the
+  merged story, §5.1 of the report contract); a Mode-1 save writes it
+  through `PATCH /reports/:reportId/content` (report-level, §31.6),
+  `raw` per take stays untouched, and "Revert to original" restores
+  the untouched merged transcription (single undo — `latest` returns
+  to the joined state). Generation honors a corrected story (the
+  report contract CR-081: corrections made at the transcription step
+  are already reflected in the body).
 - **Re-transcription (ADR-030).** Re-transcription replaces the
   row: delete the old transcription and insert the new one (fresh
   `raw` = new STT result, `latest` = same) atomically in one session,
@@ -6154,14 +6254,19 @@ section (§32–§39) hangs on this section.
 The five creation steps are the server side of the wizard (§52);
 the step list replicates the creation order of §6.3's field list
 (reportDate, supervisorName) and the steps below — no separate
-client registry exists.
+client registry exists. (Round-report-step amendment, C1: the
+§52 wizard merges Visits into step 1, so §31.2-1 is the only
+step-1 endpoint; §31.2-2 … §31.2-5 remain the act order.)
 
 **§31.2-1** `POST /reports` (access): `{ supervisorName,
 reportDate }` (reportDate optional Date ISO) → 201 CREATED,
 ReportDto at `draft`, `raw`/`latest` null, `visits: []`,
 `branches: []`. The report row exists before visits/audio;
-wizard step 1 maps here. No `lng`/`lat` exists anywhere (§21.2)
-— no coordinate endpoint exists, and none is planned.
+wizard step 1 maps here (round-report-step: the payload now
+carries the editable `supervisorName` from the step-1 field,
+seeded from the user's display name when absent). No `lng`/`lat`
+exists anywhere (§21.2) — no coordinate endpoint exists, and
+none is planned.
 Validation: `supervisorName` 1..100.
 
 **§31.2-2** `PATCH /reports/:reportId/visits` (access): replaces
@@ -6280,17 +6385,36 @@ The gesture exists for BR-08's review-then-accept flow (§5.3,
 - **Correction endpoints** (wired to §35 service); every content
   write in this list **clears `branchDigest`** in the same session
   (the stale marker of §6.11/§21.2):
-  - `PATCH /reports/:reportId/content` — Mode-1 save: replaces
-    `latest` with the client's corrected content (sanitized
-    §61); allowed at every status including `completed`
-    (BR-10); never touches `raw` (BR-11); no model call (§35.8).
+  - `PATCH /reports/:reportId/content` — the transcription step's
+    Save (round-6 amendment — Mode-1 and the correction candidate
+    both persist here): replaces `latest` with the client's
+    corrected content (sanitized §61); allowed at every status
+    including `completed` (BR-10); never touches `raw` (BR-11); no
+    model call (§35.8).
   - `POST /reports/:reportId/correct` — Mode-2/3: typed
     instruction OR voice-correction clip (multipart) → the §35
-    service rewrites only the relevant part (BR-09) and writes
-    the result to `latest` on Accept (the §35 accept→save
-    flow); returns the corrected content snapshot.
+    service rewrites only the relevant part (BR-09) and RETURNS
+    the corrected content snapshot (the candidate — round-6
+    amendment: nothing is staged, there is no accept step; the
+    client fills the live editor with the candidate and the user
+    saves it through the content PATCH above). Provider id rides
+    the request (unknown provider → 422).
+  - `POST /reports/:reportId/correct/transcribe` — the
+    round-7 **STT-only** endpoint of the correction dialog: a
+    multipart `clip` (+ `durationSec`) is transcribed (§33
+    pipeline) and the endpoint returns the transcribed instruction
+    TEXT (`200 { text }`) — it never runs the correction engine,
+    never mutates the report, and stores nothing (the dialog fills
+    its field with the text; **Apply** then sends it as the typed
+    instruction through the `/correct` endpoint above). Guards:
+    404 on an unknown/foreign report, 403 on an archived report,
+    422 on a missing clip ("Record a voice instruction first"),
+    on a disallowed MIME type ("Only audio files are accepted"),
+    and on the §32 size cap.
   - `POST /reports/:reportId/content/revert` — single undo:
-    copies `raw` → `latest` while they differ (BR-11); 200 con
+    copies `raw` → `latest` while they differ (BR-11); before
+    generation (no `raw`) restores `latest → null` so the
+    client-joined transcription returns; 200 con
     `data: { content: latest }`; clears `branchDigest` because
     the content changed (the accept re-derives, §6.11).
 
@@ -6343,7 +6467,7 @@ The gesture exists for BR-08's review-then-accept flow (§5.3,
 | `POST /reports/:reportId/digest` | access (ai tier §27.3) | — | 200 fresh digest | 404, 409 (already fresh), 502 |
 | `POST /reports/:reportId/generate` | access (ai tier §27.3) | — | 200 generated content | 404, 403 (regen gate), 502 (providers) |
 | `PATCH /reports/:reportId/content` | access | content replaced | 200 `{ content }` | 404, 422 |
-| `POST /reports/:reportId/correct` | access | instruction or multipart clip | 200 corrected snapshot | 404, 502 (providers) |
+| `POST /reports/:reportId/correct` | access | instruction or multipart clip (optional provider, §35.2) | 200 corrected snapshot | 404, 502 (providers) |
 | `POST /reports/:reportId/content/revert` | access | — | 200 `{ content }` | 404 |
 | `POST /reports/:reportId/archive` / `restore` | access | — | 200 | 404, 409 |
 | `DELETE /reports/:reportId` | access | — | 200 (archived→retention) | 404, 409 |
@@ -6621,6 +6745,7 @@ TranscriptionDto.
 | `POST /reports/:reportId/transcribe` | access | ai | `{}` | 200 `{ data: { completed, failed } }` — status advanced per §31.4 | 401, 404, 403 (archived/`completed`), 422 (no audios or all already transcribed), 502, 429 |
 | `POST /reports/:reportId/transcriptions/:transcriptionId/re-transcribe` | access | ai | — | 200 TranscriptionDto | 401, 404, 403 (`completed`), 422, 502, 429 |
 | `GET /reports/:reportId/transcriptions` | access | global | — | 200 list of TranscriptionDtos (`audio` ref, `language`, `raw`, `latest`, `stt.*`) | 401, 404 |
+| `POST /reports/:reportId/correct/transcribe` | access | ai | multipart `clip` + `durationSec` (the round-7 correction-dialog STT, §31.6) | 200 `{ text }` — the transcribed instruction text; the clip is ephemeral, nothing persisted | 401, 404, 403 (archived), 422 (missing clip / MIME / size cap), 502, 429 |
 
 ### 33.9 Verification usage
 
@@ -6808,15 +6933,15 @@ via correction, not regeneration).
 
 §35 owns the correction engine (G3, BR-09, BR-10, BR-11): the
 three modes (Mode-1 typed Save, Mode-2 typed instruction +
-Accept/Revert, Mode-3 voice-transcribed instruction) exposed by
-§31.6's endpoints, and the **surgical partial-edit contract** —
-only the relevant part changes, unrelated correct sections stay
-identical (§2.2 G3, §2.4 SC-3). It is the machine behind the §54
-components and the §51.5 actions.
+generated candidate, Mode-3 voice-transcribed instruction)
+exposed by §31.6's endpoints, and the **surgical partial-edit
+contract** — only the relevant part changes, unrelated correct
+sections stay identical (§2.2 G3, §2.4 SC-3). It is the machine
+behind the §54 components and the §51.5 actions.
 
 - **Owned here (normative).** Mode contracts (§35.2); the
   partial-edit rule (BR-09) and the `±`-token protocol (§35.3);
-  provider call & temperature (§35.4); accept → save flow
+  provider call & temperature (§35.4); candidate → save flow
   (BR-11) (§35.5); voice-correction instructions (Mode 3)
   (§35.6); failure handling (§35.7); verification (§35.8).
 - **Owned elsewhere — deliberately not repeated here.** Endpoints
@@ -6833,8 +6958,8 @@ components and the §51.5 actions.
 | Mode | Endpoint (§31.6) | Input | Engine behavior |
 |---|---|---|---|
 | Mode-1 | `PATCH /reports/:reportId/content` | edited full content | no AI — the client's corrected text replaces `latest` directly (sanitized §61), allowed at every status incl. `completed` (BR-10) |
-| Mode-2 | `POST /reports/:reportId/correct` | typed instruction (registry-guided; may name the exact §6.3 field/§6.7 content class) | prompts for a **partial edit**: returns only the changed `branchSections[]` slots with the reason (server vocabulary), to be merged on Accept |
-| Mode-3 | `POST /reports/:reportId/correct` (multipart) | voice-correction clip → §33 STT → instruction text | same engine as Mode-2 fed from the transcription; the STT step is shared code with §33 (no second pipeline) |
+| Mode-2 | `POST /reports/:reportId/correct` | typed instruction (registry-guided; may name the exact §6.3 field/§6.7 content class) + **optional `provider`** (one of `AI_PROVIDERS`, §11.4 — the chosen §16 provider drives the call; defaults to `addis`) | prompts for a **partial edit**: returns only the changed `branchSections[]` slots with the reason (server vocabulary), to be merged on Accept |
+| Mode-3 | the correction dialog records the instruction (round-7: the dialog owns the recorder; the clip rides the STT-only endpoint `POST /reports/:reportId/correct/transcribe` (§31.6), the transcribed TEXT fills the dialog's instruction field for review, then Apply sends it as a typed instruction — `POST /reports/:reportId/correct` may still carry a `mode` field for the direct-voice path) | voice-correction clip → §33 STT → instruction text; the multipart may carry the same optional `provider` field | same engine as Mode-2 fed from the transcription; the STT step is shared code with §33 (no second pipeline) |
 
 ### 35.3 Partial-edit rule (BR-09) & `±`-token protocol
 
@@ -6869,31 +6994,38 @@ Reason vocab: the server-returned `reason` sentences of the
 paragraph") — never invented client-side (§54.3). `reasoning`
 params follow the model's capability flag (§16.4).
 
-### 35.5 Accept → save flow (BR-11)
+### 35.5 Candidate → save flow (BR-11)
 
 The corrected partial is **not written on generation**: the
-service returns the staged corrected content (the "corrected-copy
-strip" of §54 stages it client-side) and `latest` is persisted
-**only when the user Accepts** — the Accept action of §31.6
-writes the merged content to `latest` and completes the
+service RETURNS the corrected content snapshot — the candidate
+(round-6 amendment — nothing is staged, no accept step; the
+client fills the live transcription editor with the candidate as
+an editable draft) — and `latest` is persisted **only when the
+user Saves** — the Save action of §31.6 writes the content
+(`PATCH /reports/:reportId/content`) and completes the
 correction turn. **Revert** (`POST /reports/:reportId/content/
 revert`) restores `raw` → `latest` (single undo, BR-11) or
-discards the staged copy. `raw` is never rewritten via
-correction. `completed` reports accept corrections the same way
-(BR-10). Staging is client-owned (the endpoints accept the full
-target content to write); the server never keeps an unaccepted
-edit beyond the request — no server-side pending-edit store
-(ADR-033). Every content write of the accept→save flow clears the
-stored `branchDigest` in the same session (the §6.11 stale marker —
-this section's correction writes never call the provider for the
-digest; it is re-derived at the next report accept or via the
-manual retry `POST /reports/:reportId/digest`, §31.6).
+discards the unpersisted draft/candidate. `raw` is never
+rewritten via correction. `completed` reports accept corrections
+the same way (BR-10). The endpoints accept the full target
+content to write (the server never keeps an unaccepted edit
+beyond the request — no server-side pending-edit store,
+ADR-033). Every content write of the candidate→save flow clears
+the stored `branchDigest` in the same session (the §6.11 stale
+marker — this section's correction writes never call the
+provider for the digest; it is re-derived at the next report
+accept or via the manual retry `POST /reports/:reportId/digest`,
+§31.6).
 
 ### 35.6 Voice-correction instructions (Mode 3)
 
-The mode-3 multipart upload reuses §32's multer/file rules and
-§33's STT pipeline (`POST /reports/:reportId/correct` with a
-`clip` part when a `mode` field equals `voice`): the clip is
+The mode-3 voice clip is transcribed through the STT-only endpoint
+`POST /reports/:reportId/correct/transcribe` (§31.6, round-7
+amendment — the endpoint returns the instruction text so the
+correction dialog fills its field and the user reviews it before
+Apply; the older direct-voice multipart path — `POST
+/reports/:reportId/correct` with a `clip` part when a `mode` field
+equals `voice` — remains the §31.6 fallback). The clip is
 transcribed (chunked per §33.3), the instruction text is the
 transcription result, and Mode-2's engine runs against it. The
 mode-3 clip is ephemeral — never stored as an Audio row, never
@@ -6904,8 +7036,8 @@ user's correction turn for the audit trail.
 ### 35.7 Failure handling
 
 - Provider exhaustion → 502 with "Correction failed — please
-  try again"; the staged copy survives (client-side) and retry
-  re-runs from the same instruction.
+  try again"; the unpersisted candidate draft survives
+  (client-side) and retry re-runs from the same instruction.
 - Schema-invalid correction output → provider failure per §16.5
   (retry → fallback); SC-3 diff failure retries once, then
   422 with the diff reason.
@@ -6920,7 +7052,7 @@ user's correction turn for the audit trail.
   retry endpoint — never inside a correction write; the
   correction service shares the §33 STT entry (no second
   pipeline); `±` unchanged across every service output; no
-  server-side staging store; `AI_CORRECTION_*` constants used;
+  server-side pending-edit store; `AI_CORRECTION_*` constants used;
   the mode-3 clip never creates an Audio doc.
 - Cross-section checks: mirrors §31.6 (endpoints/guards), §33
   (STT), §34.5 (chain), §54 (UI modes), §22 (copy vocabulary),
@@ -7269,9 +7401,12 @@ derivation and no model call ever runs inside this endpoint.
 ### 38.6 States & edge cases
 
 - Empty account (no reports): kpis all zero, charts = five
-  zero-slices + empty series — the §49 dashboard renders its
-  empty-state copy from this shape (no special "no data" 200
-  variant; the client derives the empty state from zeros).
+  zero-slices + empty series — the §49 dashboard renders no
+  account-level empty band (owner decision, R3-fix): each chart
+  degrades to its own §60 empty state and the Latest-reports
+  band renders its own (no special "no data" 200 variant; the
+  client derives nothing from zeros beyond those per-surface
+  states).
 - Archive state: archived reports/`archivedAt` windows never
   feed the dashboard (consistent with §50's filters).
 - A tombstoned branch's reports still count in
@@ -7632,6 +7767,7 @@ The route set is decided here and detailed by the page sections:
 | `/dashboard` | Dashboard page | Protected | §49 |
 | `/reports` | Reports page (list/grid toggle) | Protected | §50 |
 | `/reports/new` | Report Creation Wizard | Protected | §52 |
+| `/reports/:reportId/wizard` | Report Creation Wizard (Edit mode, round-report-step C2) | Protected | §52.3 |
 | `/reports/:reportId` | Report Details page | Protected | §51 |
 | `/branches` | Branches page | Protected | §56 |
 | `/branches/:branchId` | Branch Details page | Protected | §56.5 |
@@ -7817,8 +7953,11 @@ The chain is the single owner of session expiry on the client
    retry succeeds, return its result; if the retry 401s again, fail
    through as expiration.
 5. If refresh fails, the session is expired: clear auth state
-   (`authSlice`), redirect to `/login` (§41.5), and fail the
-   original request without a toast. The expiry redirect applies
+   (`authSlice`), landing on `/login` — the **§41.5 guard
+   redirect** (clearing the slice makes `ProtectedRoute` navigate;
+   no full-page reload, so the dev adapter's auto-auth never
+   double-hops) — and fail the original request without a toast.
+   The expiry landing applies
    to an **authenticated** session whose credentials just died
    (authenticated → request → 401 → one retry → on failure,
    session cleared, landing on `/login`); anonymous and
@@ -7975,8 +8114,7 @@ import primitives directly). Semantic roles (normative):
 shadow, §44.6), hairline dividers, a single-document content spine
 on md+ (details, wizard, report views) and stacked cards on xs–sm;
 the app-bar and sidebar are the only fixed chrome (§47). The
-"header strip" motif — a hairline rule above a small-caps eyebrow
-and a title — is the standard page-header treatment (§46.12) and
+"header strip" motif — a hairline rule above a title — is the standard page-header treatment (§46.12) and
 mirrors the report's own line structure without imitating its
 Amharic labels (§7.6 — chrome copy is English).
 
@@ -8362,7 +8500,10 @@ The page matrices state which controls hide labels when.
 ### 45.6 Dialog & popover modes
 
 - `MuiDialog` renders fullscreen when `down('sm')` **or**
-  (`down('md')` + landscape) — the §46.3 responsive contract.
+  (`down('md')` + landscape) — the §46.3 responsive contract. The
+  fullscreen paper carries **no border radius** (the theme's
+  `MuiDialog-paperFullScreen` sets `borderRadius: 0`, overriding the
+  dialog's 10px on the centered paper).
 - Menu/popovers (`MuiSelect` dropdown, avatar menu, export menu)
   render as anchored popovers above 600px and as bottom sheets or
   full-width lists below 600px per the §46 contracts.
@@ -8519,26 +8660,66 @@ in bold), states, and responsive behavior. Forms bind through the
 ### 46.6 MuiDatePicker & `ethiopianDate.js`
 
 - **Files:** `components/reusable/MuiDatePicker.jsx`,
-  `utils/ethiopianDate.js` and `utils/ethiopianDateAdapter.js`
-  (§15.5).
+  `components/reusable/MuiTimePicker.jsx`,
+  `components/reusable/PickerButtonField.jsx` (the shared
+  `slots.field` button trigger), `utils/ethiopianDate.js` and
+  `utils/ethiopianDateAdapter.js` (§15.5, amended 2026-08-14).
 - **Purpose:** the Ethiopian-calendar date picker with English
   day/month names (§43.6, ADR-011/ADR-032) — built on
   `@mui/x-date-pickers` community (no Pro features). When the
-  section needs a time value, the same component file renders the
-  matching `MuiTimePicker` behavior — a 12h AM/PM input surface
-  (`h:mm A`): selecting 12:00 keeps 12:00 with an explicit meridiem
-  on the dial; the stored dayjs value stays absolute, so domain
-  rendering keeps the 24h `HH:mm` convention (§43.6).
+  section needs a time value, the separate `MuiTimePicker.jsx`
+  renders the matching behavior — a **24h `HH:mm` input
+  surface** (amended 2026-08-14: `format="HH:mm"`; the clock runs
+  the **24h hour view** (`ampm={false}` — the v9 default is the
+  12h `h:mm A` dial, where tapping "12" with the AM meridiem
+  yields `00:00`), so tapping "12" yields `12:00`, never `00:00`;
+  the stored dayjs value stays absolute, so domain
+  rendering keeps the 24h `HH:mm` convention (§43.6)).
 - **Field display** (`utils/ethiopianDateAdapter.js`, §15.5): the
-  picker runs its own `LocalizationProvider` with
-  `EthiopianDateAdapter extends AdapterDayjs`, which re-maps the
+  app runs a **single** `LocalizationProvider` at the entry
+  (`main.jsx`, §41.4) with `EthiopianDateAdapter extends
+  AdapterDayjs` — the pickers render no provider of their own
+  (amended 2026-08-14). The adapter re-maps the
   `DD`/`MM`/`YY`/`YYYY` section tokens to the Ethiopian parts
   (v9 formats each field section per token —
-  `buildSectionsFromFormat`). The field therefore shows the
+  `buildSectionsFromFormat`); every other token (time,
+  separators, placeholders) behaves like the base adapter. The
+  field therefore shows the
   Ethiopian `DD-MM-YY` (e.g. `12-05-18`), never the Gregorian
   equivalent; the internal value and the day grid keep the
   proleptic-Gregorian-equivalent model, and typed section edits
   operate on that internal model (§43.6).
+- **Button field (amended 2026-08-14, step-1 contract).** Both
+  pickers render a **button-style field** through the v9
+  custom-field seam **`slots.field`**, following MUI's official
+  dashboard template pattern (`CustomDatePicker.js`, v9.3.1): the
+  shared field component (`PickerButtonField`, `component="div"` +
+  `role="button"`) splits its props with
+  `useSplitFieldProps(props, valueType)` ('date'/'time'), reads
+  `value`, `fieldFormat`, `disabled`/`readOnly`, `triggerStatus`,
+  the `triggerRef`/`rootRef` pair and the actions (`setOpen`,
+  `clearValue`) from `usePickerContext()`, and shows the
+  empty-state text from `useParsedFormat()`. The field hooks
+  (`useField`) never mount — no section list and no adornment
+  wiring — so the desktop/mobile pickers forward only root
+  `data-*`/`aria-*` props plus the merged `slots`/`slotProps`
+  (internal `ownerState` stripping happens inside the pickers).
+  The open-picker icon sits at the **start**
+  (`CalendarTodayRounded` for date, `AccessTimeRounded` for
+  time), the clear icon (`CloseRounded`) at the end and **only
+  while a value exists** — clearing calls
+  `pickerContext.clearValue()` which emits `onChange(null)` (the
+  Controller contract); the end-icon wrapper is pushed flush to
+  the button's right edge (`marginLeft: auto`, `marginRight: 0`)
+  instead of hugging the label (amended 2026-08-14);
+  Enter/Space on the button open the picker like a native button;
+  the trigger ref forks `triggerRef` + `rootRef` for popper
+  anchoring and outside-click detection. Both icons are the §43.6
+  chrome of §11.1's toolbar set. Stable
+  `DateButtonField`/`TimeButtonField` wrappers pin the `valueType`
+  (no inline slot arrows). (Amended 2026-08-14: replaces the
+  retired `slots.textField` seam and the invisible
+  `PickersSectionList` hack.)
 - **Conversion contract** (`ethiopianDate.js`):
   `ethiopianToGregorian(ethDate) → JS Date` and
   `gregorianToEthiopian(jsDate) → { day, month, year }` — a
@@ -8547,17 +8728,26 @@ in bold), states, and responsive behavior. Forms bind through the
   chrome headers (§43.6); input/display value `DD-MM-YY` numeric.
 - **Props:** `value`, `onChange` (value arrives via the picker's
   custom onChange — **`Controller` is required**, with a
-  justification comment, §46.2), `label`, `size` (**small**, into
-  the TextField slot), `views` (day/month/year
-  per the owning form, §52.3/§50.3), `startAdornment`/
-  `endAdornment` (merged into the TextField's input slot),
+  justification comment, §46.2), `label`, `size` (**small** —
+  accepted for consumer parity; the button trigger is always
+  small), `views` (day/month/year if the owning form
+  narrows modes — §52.3; the §50 filter date range waits on
+  OQ-009),
   `slotProps` (user values merge under the picker's own —
   contract fields win; the picker forces
   `desktopTrapFocus.disableEnforceFocus` and `dialog.disableEnforceFocus`
-  — the focus-trap fight fix, §46.6), `slots` (the Ethiopian
-  `CalendarHeader` mounts via `slots.calendarHeader` — the v9
-  API; user `slots` win), `disabled`, `error`/
-  `helperText`; `forwardRef` on both pickers.
+  — the focus-trap fight fix, §46.6; `slotProps.field` reaches
+  the button field — placeholder, error), `slots` (the Ethiopian
+  `CalendarHeader` mounts via `slots.calendarHeader` and the
+  `DateButtonField`/`TimeButtonField` via `slots.field` — the v9
+  API; user `slots` win), `disabled`, `error` (reaches the field
+  via `slotProps.field` — the picker's validation extraction does
+  not forward it; `helperText` is dropped — no room on a button);
+  `forwardRef` on both pickers. The retired
+  `openPickerButtonPosition`/`clearable`/`slotProps.textField`
+  props and the `startAdornment`/`endAdornment` wrapper props are
+  gone — the open/clear icons are picker-owned (amended
+  2026-08-14).
 - **CalendarHeader interaction:** the Ethiopic chrome label shows
   the Ethiopian month name + year and behaves exactly like v9's
   `handleToggleView` — 2 views → the other view, 3+ views →
@@ -8571,7 +8761,8 @@ in bold), states, and responsive behavior. Forms bind through the
   (popper mode); below 900px renders `MobileDatePicker` (dialog
   mode, fullscreen below 600px per §45.6).
 - **States:** empty (placeholder `DD-MM-YY`), invalid input
-  (error + helperText), focused, disabled; the §29 validators
+  (error — the `error.main` border tint of §46.1), focused,
+  disabled; the §29 validators
   remain the server-side authority (this component is the client
   input surface only).
 
@@ -8585,12 +8776,17 @@ in bold), states, and responsive behavior. Forms bind through the
 - **Contract:** page size comes from the owning list
   (`PAGINATION_DEFAULT_LIMIT` 10 / `PAGINATION_MAX_LIMIT` 100,
   §11.5); the grid's `MuiDataGrid` owns its own footer (§46.8).
-- **Responsive:** compact page buttons below 600px (§44.5).
+- **Responsive:** compact page buttons below 600px (§44.5) —
+  `size="small"` with `boundaryCount={0}`; the button row wraps
+  (the v9 `.MuiPagination-ul` already sets `flexWrap: wrap`) and is
+  centered via the `.MuiPagination-ul` class — **`slotProps` is not
+  used** (v9 Pagination has no `slots`/`slotProps` support and would
+  forward it to the root `<nav>` DOM element).
 
 ### 46.8 MuiDataGrid
 
 - **File:** `components/reusable/MuiDataGrid.jsx`; domain columns
-  live in `components/columns/*.js` — `reports.js` (§50),
+  live in `components/columns/*.jsx` — `reports.jsx` (§50),
   `branches.js` (§56).
 - **Purpose:** every data table (the Reports list §50, the
   Branches list §56 — the dashboard charts of §49 are not a
@@ -8600,7 +8796,11 @@ in bold), states, and responsive behavior. Forms bind through the
   `getRowId={(row) => row._id}` (key doctrine §9.3 — never an
   `id` field),
   `paginationMode="server"`, `page`, `pageSize`, `onPaginationModelChange`, `onRowClick`, `checkboxSelection` (**true**),
-  `disableRowSelectionOnClick` (**true**), `onSelectionModelChange`,
+  `disableRowSelectionOnClick` (**true**), `rowSelectionModel`,
+  `onSelectionModelChange` (the wrapper boundary keeps the **array
+  form** and internally translates to the v9 `{ type, ids }`
+  model, which is the only shape v9.11 accepts — amended
+  2026-08-14),
   `slots`, `slotProps` (the v9 built-in toolbar's options —
   `csvOptions`, `printOptions.disableToolbarButton`), `sx`
   (default height 400, overridable); `pageSizeOptions={[10, 25, 50,
@@ -8672,11 +8872,17 @@ in bold), states, and responsive behavior. Forms bind through the
 
 - **File:** `components/reusable/MuiPageHeader.jsx`.
 - **Purpose:** the standard page header — the §43.2 header-strip
-  motif: eyebrow (small-caps, `text.secondary`) + title (h4) +
-  optional subtitle; right-side `actions` slot; `mb: 2`; bottom
-  border 1px solid divider.
-- **Props:** `eyebrow`, `title`, `subtitle`, `actions`,
-  `hideSubtitle` (auto: subtitle hidden below 600px portrait).
+  motif: title (h4) + optional subtitle on one line with the
+  right-side `actions` slot (inline, vertically centered); `mb: 2`;
+  bottom border 1px solid divider. No eyebrow exists (removed in the
+  R3-fix follow-up).
+- **One-line rule:** the header is always a single row — the title
+  is `noWrap` with an ellipsis (`maxWidth: 100%`) so a long title
+  truncates instead of wrapping or crowding the actions; the
+  `actions` slot is `flexShrink: 0` at the right end.
+- **Props:** `title`, `subtitle`, `actions`,
+  `hideSubtitle` (auto: subtitle hidden below 600px portrait — the
+  header stays a single line on xs).
 - **States:** default only — loading/empty/error belong to the
   page sections.
 
@@ -8725,7 +8931,8 @@ in bold), states, and responsive behavior. Forms bind through the
 - **File:** `components/reusable/GlobalSearchDialog.jsx` (UX in
   §59; standalone — does not use MuiDialog's actions slot).
 - **Props:** `open`, `onClose` only — the dialog is fully
-  self-contained (query state, state machine, §39 call at P4).
+  self-contained (query state, state machine, driven by the §39
+  endpoint through the §42 layer).
 - **Behavior contract:** search field (belt `MuiTextField`) with
   start adornment (**`ArrowBackIcon`** — clears the field, resets
   results, closes the dialog) and end adornments: a clear button
@@ -8733,7 +8940,11 @@ in bold), states, and responsive behavior. Forms bind through the
   fires the search); React Hook Form `register('search')` —
   **typing renders nothing**: the field is uncontrolled and the
   clear button's visibility flips natively via the
-  `input:placeholder-shown` pseudo-class (empty input →
+  `input:placeholder-shown` pseudo-class (the dialog's adornments
+  are unwrapped `IconButton`s — no `InputAdornment` element — so
+  the rule targets the clear button itself as the later sibling of
+  the input inside `.MuiInputBase-root`: `input:placeholder-shown ~
+  .search-clear-btn` → empty input →
   `visibility: hidden` on the reserved slot, no re-render, no
   layout shift); search fires on Enter or on click of the action —
   **no debounce** (§9.6); results grouped by entity
@@ -8741,10 +8952,12 @@ in bold), states, and responsive behavior. Forms bind through the
   **full-height** and shows the two `MuiEmptyState` variants
   (§46.17): the search prompt while idle, "No results found" when
   a completed run has no hits; loading state (§46.14 spinner);
-  fullscreen below 600px (and below 768px landscape, no border
-  radius, 100vh); centered at 600–1200px (80vh / 600px) and above
-  1200px (70vh / 720px); closes via back arrow, Escape, or click
-  outside.
+  **fullscreen below md (900px)** — xs and sm are edge-to-edge with
+  no border radius (the app's small-screen convention, §44.4; the
+  centered paper exists only on md+); below 768px landscape stays
+  fullscreen too (radius 0); centered at 900–1200px
+  (80vh / 600px) and above 1200px (70vh / 720px); closes via back
+  arrow, Escape, or click outside.
 - **Data:** the §39 search endpoint via the §42 layer; archived
   entities hidden unless the search contract of §39 includes them.
 
@@ -8758,22 +8971,142 @@ in bold), states, and responsive behavior. Forms bind through the
   content** (§51, §52 Step 5) and **transcription review** (§54);
   also renders read-only content (the details-body viewer writes
   through the same sanitized surface).
-- **Toolbar (fixed scope, ADR-038):** **Bold, Italic, Font size,
-  Text color** — the §44-styled toolbar; no other toolbar actions
-  exist in this scope.
+- **Toolbar (fixed scope, ADR-038, round-6 amendment, round-7
+  amendment):** **Bold, Italic, Underline · Paragraph/Heading
+  select (Paragraph, H1, H2, H3) · Font size select (round-7 —
+  the small bucket select Default/18/22/26 px, selection-level via
+  the TextStyle mark; the round-6 removal is superseded for font
+  size only, §13.5) · bullet & numbered lists · alignment
+  (left/center/right/justify) · Undo/Redo** (with `can()`-guarded
+  buttons) — the §44-styled toolbar; no other toolbar actions exist
+  in this scope (text color stays out). The former font-size select
+  and color swatches were REMOVED (round-6, editor.md §18-1 — no
+  font-size/color controls in scope), taking
+  `@tiptap/extension-color` and `@tiptap/extension-text-style` out
+  of the manifest (§13.5); `@tiptap/extension-underline` and
+  `@tiptap/extension-text-align` were installed for the new actions
+  (editor.md §19); round 7 reinstalled
+  `@tiptap/extension-text-style@^3.30.1` for the font-size ladder
+  (the deprecated `@tiptap/extension-font-size` remains not a
+  package; Underline is registered ONCE — StarterKit v3 ships it,
+  the explicit `@tiptap/extension-underline` was removed in round-8
+  after the duplicate-extension warning). The toolbar **wraps** at
+  sm/md and runs a single row from lg up (round-6 — wrapping is the
+  preferred overflow behavior, editor.md §17; supersedes the
+  round-5 `overflowX` scroll directive; round-8 amendment: BELOW sm
+  the toolbar runs the xs scroll rail — nowrap, overflow-x auto,
+  dividers hidden, compact font-size select — because wrapping
+  produced ragged rows on the smallest screens; the rail scrollbar
+  is hidden via `scrollbarWidth: none` + the `-webkit-scrollbar`
+  display rule; Undo/Redo keep `ml: auto` from md up only). The
+  font-size values (round-8 ladder `[Default, 10, 11, 12, 14, 16]`,
+  §11.5) apply with a `px` suffix — the text-style extension's
+  `renderHTML` emits `font-size: ${value}` without a unit, so a
+  bare number produced invalid CSS. Round-8.1 hardening: the rail's
+  children carry `flexShrink: 0` (a nowrap flex row otherwise
+  COMPRESSES its controls to the viewport instead of overflowing —
+  the reported xs/sm squish); the font-size onChange prefers the
+  text-style commands and falls back to the core `setMark("textStyle",
+  { fontSize })`/`unsetMark("textStyle")` when they are missing (the
+  extension's command is literally the core `setMark` — identical
+  markup, and the select can never crash on a missing command,
+  §54.2/§53.3). Round-8.2 (paragraph scope, §53.3 doctrine): on a
+  COLLAPSED caret the mark lands on the stored marks only — invisible
+  on existing text, and the outer chain's `focus()` transaction then
+  re-dispatches with `storedMarks: null` (captured at chain creation),
+  wiping them before the toolbar re-reads (the select snapped back to
+  Default). The onChange therefore expands to the enclosing paragraph
+  first — `setTextSelection({ from: $from.start(), to: $from.end() })`
+  in the SAME chain — so the size applies to the visible text and the
+  select reflects it while the paragraph stays selected (an empty
+  paragraph collapses back to a caret and harmlessly takes the
+  stored-mark path; the `setMark` fallback keeps the same scope).
+  Round-8.3 (nested-chain defect): the paragraph scope alone was
+  structurally INEFFECTIVE — the extension's `setFontSize`/
+  `unsetFontSize` are themselves nested chains that dispatch
+  immediately against the CURRENT state (collapsed caret →
+  stored-mark-only) BEFORE the outer chain's `setTextSelection`
+  transaction is applied, and the outer dispatch's
+  `storedMarks: null` then wipes them — the reported "font selector
+  still doesn't work" with the select snapping back to Default. The
+  onChange therefore runs the paragraph expansion AND the mark step
+  in the SAME outer chain with the CORE commands
+  `setMark("textStyle", { fontSize })` / `unsetMark("textStyle")`
+  (the extension command is exactly that call — the nested dispatch
+  was the only defect; the fallback branch is gone, the commands are
+  no longer consulted). Round-8.4 (raw dispatch, no selection
+  change): the paragraph expansion itself was the reported defect —
+  picking a size SELECTED the whole paragraph (the editor "focused
+  on the text" instead of changing the font). The size now applies
+  through a RAW transaction that never touches the selection:
+  `tr.addMark($from.start(), $from.end(), schema.mark("textStyle",
+  { fontSize }))` / `removeMark` for Default — the caret stays put,
+  the paragraph text resizes, and the select reads the size at the
+  caret (`$head.marks()` on the collapsed selection). An EMPTY
+  paragraph (start === end) has no text range: the size rides the
+  stored-marks path (`tr.setStoredMarks`), kept alive by the
+  `fontSizeIntent` re-assertion — a `selectionUpdate` listener that
+  re-asserts the stored mark while the caret sits in an empty
+  paragraph (any other selection transaction dispatches with
+  `storedMarks: null` and wipes it — the "always shows Default"
+  snap); foreign text is never touched, Default clears the intent,
+  and `setStoredMarks` never changes the selection so no dispatch
+  loop is possible. Round-8.5 (seed-sync stability): the raw
+  dispatch APPLIED — a churning host `onDirtyChange` identity
+  re-created `applyExternal`, re-running the seed-sync effect and
+  re-seeding the stale `value` (any formatting mark diverged the
+  HTML, so the guard re-seeded and wiped the mark in the same tick
+  — §53.3). The fix stabilized the host callback; **the defect is
+  NOT closed — the user repro after round-8.5 confirms the
+  font-size selector still does not apply a size (OQ-010, §69).**
+  Next investigation (round-8.6) must start from the live flow
+  with a diagnostic and the served-module check, not static
+  analysis alone.
 - **Values:** HTML string in/out (TipTap document → HTML; §14.4);
   `dompurify` sanitizes on **write and on render**; rendering uses
   `dangerouslySetInnerHTML` only on already-sanitized input
   (§61); no JSON-document storage (§14.4).
-- **OQ-007 (open, recorded):** whether the persisted
-  `raw`/`latest` slots carry plain text or rich-text HTML is
-  decided at the editor phase (§21.2 open item, §66); `MuiEditor`
+- **Zero-lag contract (round-5 amendment, §11 perf rule):** the
+  editor owns its document state — `onUpdate` writes only an
+  internal dirty flag (never the HTML), `shouldRerenderOnTransaction`
+  is off and the toolbar actives read through `useEditorState`, so
+  typing costs no React render, no parent state, and no
+  serialization. The host reads the live document at **controlled
+  boundaries** through the imperative `getContent()` (Save, Revert,
+  mode switch, step leave) and learns divergence through
+  `onDirtyChange` (a boolean that fires once on the first keystroke
+  and once on re-seed). The external `value` seed applies only when
+  the editor is unfocused; a seed arriving mid-typing is deferred
+  and applied on blur — the user is never clobbered.
+- **Values:** HTML string in/out (TipTap document → HTML; §14.4);
+  `dompurify` sanitizes on **write and on render**; rendering uses
+  `dangerouslySetInnerHTML` only on already-sanitized input
+  (§61); no JSON-document storage (§14.4).
+- **OQ-007 (closed, recorded here):** whether the persisted
+  `raw`/`latest` slots carry plain text or rich-text HTML was
+  decided at the §66 P4 editor phase (2026-08-15): `raw` = plain
+  text, `latest` = rich HTML (the fixture/mock convention). `MuiEditor`
   emits and consumes HTML either way — the slots stay `String`
-  (§21.2) until that decision lands.
+  (§21.2).
 - **Ethiopic content:** the content stack of §43.5 renders through
-  the editor; the toolbar labels are chrome (English, §7.6).
-- **Props:** `value` (HTML), `onChange`, `readOnly`, `minHeight`,
-  `id` (editor instance id for the form integration).
+  the editor — `'Noto Serif Ethiopic', 'Inter', sans-serif`,
+  line-height 1.75 (round-6 amendment, editor.md §6); the writing
+  size stays at the comfortable 1.0625rem (the editing surface,
+  not the 0.875rem reading size of §43.5 `contentBody`); the
+  toolbar labels are chrome (English, §7.6).
+- **Props:** `value` (HTML seed), `onDirtyChange`, imperative
+  `getContent()` and `applyCandidate()` (forwardRef — round-6:
+  `applyCandidate(next)` fills the live document with the
+  unpersisted correction candidate and marks it dirty),
+  `readOnly`, `minHeight` (a MUI responsive object is accepted —
+  the hosts pass bucket measures, e.g. `{ xs: 200, sm: 220, md:
+  260, lg: 320 }`), `id` (editor instance id for the form
+  integration), `borderless` (round-7: the content box drops its
+  border and focus ring — used by the transcription step's story
+  card, where the Card outline is the surface frame). The content
+  box carries a `maxHeight` with vertical scroll so a long
+  document never pushes the mode selector and actions out of reach
+  (round-5 pass).
 - **States:** empty (placeholder in report voice), focused,
   read-only, error (owning form's `helperText` surface).
 
@@ -8808,6 +9141,17 @@ Justified by their sections; the same contract discipline applies:
   renders the §60 error toast + the MuiFileInput fallback hint);
   icon-only labels below 600px (§45.3). The resulting clip then
   plays through MuiAudioPlayer.
+- **MuiProviderSelect** (`components/reusable/MuiProviderSelect.jsx`) —
+  the AI-provider selector for the Mode-2/3 correction surfaces
+  (§54.7, round-5 amendment; round-7: used inside the
+  CorrectionDialog, §54.2; round-8 amendment: label-less — the
+  caption row is gone, the Select carries `aria-label` from
+  `WIZARD.modes.aiProvider` only, per the round-8 dialog review) —
+  a `Select` fed from the single-source registry (`AI_PROVIDERS` +
+  `AI_PROVIDER_LABELS`, §11.4 — never a hard-coded list). Props:
+  `value`, `onChange`, `disabled`. Width is the host's call —
+  inline beside the correction controls at lg/md, below them at sm,
+  full width at xs; it never disappears at any breakpoint.
 - **MuiFileInput** (`components/reusable/MuiFileInput.jsx`) —
   the multi-file audio upload input: a dashed drop-zone surface
   (`accept` = the §32 `AUDIO_ALLOWED_MIME_TYPES` mirror, never
@@ -9095,8 +9439,7 @@ surfaces via the §60 toast only on the destination.
 **Purpose & composition.** Session entry; also the target of the
 §41.5 guard redirect (`state.from`) and the §42 expiry redirect.
 Composition: centered card (paper surface, §43.2/§44.6) inside
-PublicLayout; page header eyebrow "Welcome back" + title "Log in"
-(§46.12); the `LoginForm`; the OAuth entry; the sign-up link
+PublicLayout; page header title "Log in" (§46.12); the `LoginForm`; the OAuth entry; the sign-up link
 (§48.5).
 
 **`LoginForm` (full specification — the §46.2 form pattern):**
@@ -9156,8 +9499,8 @@ decision anywhere — not added).
 **Purpose & composition.** Self-service registration (F1); the
 form collects **only `email` and `password`** (§3.2.2, §19.2) plus
 a confirm-password field on the client side. Composition: same
-centered card pattern; eyebrow "Create your account" + title
-"Sign up"; `RegisterForm`; OAuth entry; login link (§48.5).
+centered card pattern; header title "Sign up";
+`RegisterForm`; OAuth entry; login link (§48.5).
 
 **`RegisterForm`:**
 
@@ -9256,15 +9599,17 @@ finish", which the Reports list answers only after navigation.
 ### 49.2 Page composition
 
 Order (top to bottom) inside AppShell's Outlet (§47.3), with the
-per-page header first (§46.12): eyebrow "Overview", title
-"Dashboard", subtitle "Your supervision reports at a glance";
+per-page header first (§46.12): title "Dashboard", subtitle "Your supervision reports at a glance";
 `actions` slot hosts the primary action — "New report" (contained,
-§46.3) → `/reports/new` (§52). Then: **KPIs** — Row of four
+success — the §46.3 create color, owner decision) → `/reports/new`
+(§52). Then: **KPIs** — Row of four
 `MuiStatCard`s (§46.17); **Charts** — the §49.4 chart trio in a
 responsive Grid (`size` prop, §46.2); **Latest reports** — a
 compact read-only list (reportDate, branch snapshot names,
 `MuiStatusBadge`, updatedAt) of the five most recent reports,
-each row linking to `/reports/:reportId` (§51); when a row set is
+each row linking to `/reports/:reportId` (§51); the query passes
+`isArchived=false` so the band is always **active-only** (archived
+rows never surface here); when a row set is
 empty the section shows the §60 empty state.
 
 ### 49.3 KPI set (normative — closure of OQ-005)
@@ -9296,14 +9641,18 @@ never from client-side datasets (ADR-034):
   active branch snapshot name (top N per the §38 contract).
 - **Issues trend** — a line of issue-related count over the recent
   days the §38 contract provides (the §6.11 vocabulary when
-  authored — pending contract).
+  authored — pending contract). The line's y-domain is **explicit**
+  (`min: 0`, `max` = the finite payload maximum) — never
+  `"auto"` — and every series value is finite-guarded (non-finite →
+  `null` gap), so a NaN path (`<path> attribute d`) is impossible.
 
 Charts degrade to the §60 empty state when their series is empty,
 and show a compact loading skeleton while pending (§49.6).
 
 ### 49.5 Quick actions
 
-- **"New report"** (header action, §49.2) → `/reports/new`.
+- **"New report"** (header action, §49.2; contained, success) →
+  `/reports/new`.
 - **"Open latest report"** — the Latest-reports section's first
   row: navigates to its details page (§51).
 
@@ -9311,15 +9660,17 @@ and show a compact loading skeleton while pending (§49.6).
 
 - **States (ADR-033).** Loading — KPI skeletons + chart skeletons;
   error — §60 toast on the §38 fetch failure and a compact inline
-  retry on the chart band; empty — first-run account with no
-  reports: the empty-state copy invites the first action
-  ("No reports yet — record your first day") with the New report
-  action inline (§60 voice); success — full render.
+  retry on the chart band; empty — **no account-level empty band**
+  (owner decision, R3-fix): each chart degrades to its own §60
+  empty state when its series is empty (zero-slice donut keeps its
+  slices — §38.4) and the Latest-reports band renders its own
+  empty ("No reports yet — record your first day", §60 voice);
+  success — full render.
 - **Breakpoint matrix:**
 
 | Region | xs | sm | md | lg | lg+ |
 |---|---|---|---|---|---|
-| Page header | eyebrow+title stacked | same | actions inline right | inline right | inline right |
+| Page header | title + actions inline (no subtitle) | title + subtitle + actions inline right | actions inline right | inline right | inline right |
 | KPI cards | 1 column (stacked) | 2 columns | 4 columns | 4 columns | 4 columns |
 | Charts | stacked (1 column each) | 1 column | status donut + bars side by side, trend below full-width | 3 per grid row, equal thirds | equal thirds |
 | Latest reports | list rows (compact) | list rows | list rows | list rows | list rows |
@@ -9363,7 +9714,7 @@ there is no separate list page (§15.8).
   queries and pagination contract = §31/§27 (Part C); transitions
   and guards = §31; retention = §62; status presentation =
   §46.13; grid mechanics = §46.8; columns = `components/columns/
-  reports.js` (§15.6); exports of the selection = §58; toasts and
+  reports.jsx` (§15.6); exports of the selection = §58; toasts and
   empty/error/success = §60; the wizard entry = §52.
 - **Explicitly out of scope §50.** No endpoint shapes (§31), no
   transition rules (§31), no new constant (§11 unchanged — the
@@ -9372,64 +9723,81 @@ there is no separate list page (§15.8).
 
 ### 50.2 Page composition
 
-Inside AppShell (§47.3), with page header first (§46.12): eyebrow
-"Reports", title "Reports", subtitle "Your daily supervision
-reports"; `actions` slot: **"New report"** (contained) →
-`/reports/new` (§52). Then a **toolbar band**: the filter row
-(§50.3), the list/grid toggle (button group, §46.3), the
-`MuiDataGrid` (§50.4) or the card grid (§50.5) beneath.
+Inside AppShell (§47.3), with page header first (§46.12): title
+"Reports", subtitle "Your daily supervision
+reports" — **the header renders on md+ only** (below md the app-bar
+already owns the chrome; the page never repeats it). The **action
+button group** (§46.3) sits **inside the header's `actions` slot on
+md+** — one line: title + **Filter** (start icon with the
+active-filter count badge), **List** / **Cards** (the §50.3 view
+toggle — md+ only), **Create** (contained, success — the §46.3
+create color → `/reports/new`), every button icon + text; **below md
+the group holds Filter + Create only and is right-aligned on its own
+row**. Beneath it
+the `MuiDataGrid` (§50.4, md+) or the card grid (§50.5 — the only
+view below md, 1/2/3 columns).
 
-### 50.3 Filters & the list/grid toggle
+### 50.3 Filter dialog & the list/cards toggle
 
-- **Status filter** — MuiSelect "Status" (options = the five
-  `REPORT_STATUSES` + "All", labels from the §11.5 mirror).
-- **Branch filter** — MuiSelect "Branch", populated from **active
-  branches only** (§20: archived branches appear only when
-  "Show archived" is on); options render the branch snapshot name.
-- **Archived toggle** — a switch/checkbox "Show archived" — the
-  explicit filter that surfaces `isArchived` rows (§17.4, §21.6);
-  when off, archived rows are never listed.
-- **Filters combine** (status + branch + archived) and serialize
-  into the §31 list query via the §42 layer; changing a filter
-  resets to page 1. Filter state lives in the page's component
-  state (ephemeral, §12.2-10) — never in the URL.
-- **Toggle** — MuiToggleButtonGroup "List" / "Cards" (§46.3):
-  List = the MuiDataGrid; Cards = the ReportCard grid (§50.5).
-  No preference is persisted (no localStorage surfaces, §53.4
-  rule — nothing is persisted client-side).
+- **Filter dialog — provisional (OQ-009, OPEN).** The Filter
+  button opens a dialog whose full implementation is **TBD**: what
+  to filter (a status/branch/archived set was the working
+  hypothesis), branch single vs multi-select, server pagination of
+  filtered results, and date vs date-range (or both) are open
+  questions registered in §69 (OQ-009). Until they resolve, the
+  dialog renders the TBD surface (`MuiEmptyState` with the OQ-009
+  note) and the page holds **no filter state at all** — the list
+  query is `page`/`limit` only. The Filter button's badge shows
+  the active-filter count once filters exist (zero, hidden, while
+  none are set).
+- **Toggle** — "List" / "Cards" buttons of the action group
+  (§50.2), **md+ only**: below md the page renders cards only
+  (the data grid never appears on xs/sm). List = the MuiDataGrid;
+  Cards = the ReportCard grid (§50.5) — 1 column xs, 2 columns sm,
+  3 columns md, 4 columns lg. No preference is persisted (no
+  localStorage surfaces, §53.4 rule — nothing is persisted
+  client-side).
 
 ### 50.4 Grid mode (MuiDataGrid)
 
-Contract §46.8 with `components/columns/reports.js` (per-domain
+Contract §46.8 with `components/columns/reports.jsx` (per-domain
 column set, §15.6, ADR-034):
 
 | Column | Content | Notes |
 |---|---|---|
 | Date | `reportDate` as `DD-MM-YY` (§43.6) | falls back to `—` while uncaptured |
 | Branch(es) | `branches[].name` snapshot values, joined, ellipsized (§45.5) | tombstone-safe (§17.4/§20) |
-| Supervisor | `supervisorName` (snapshot, §21.2) | captured value, never live profile |
 | Status | `MuiStatusBadge` (§46.13) | from `status` |
 | Updated | `updatedAt`, `DD-MM-YY` | |
-| Actions | View / Edit / Archive-or-Restore / Delete (§46.8) | per §50.6 |
+| Actions | View / Edit / Archive / Restore / Delete (§46.8) | per §50.6 |
+
+**No owner/supervisor column exists** (per-user model §9 — the
+user only ever sees and acts on their own resources; `supervisorName`
+is report content, shown in the details, never a list column).
 
 Row click (with `disableRowSelectionOnClick`) opens details
 (`/reports/:reportId`, §51); Edit re-enters the wizard at the
 status-matched step (§52.3); checkboxes enable the selection-based
 actions (§50.7).
 
-**Responsive column priority (below 900px):** Supervisor, then
-Updated, then Branch collapse in that order (icons retain their
+**Responsive column priority (below 900px):** Updated, then
+Branch collapse in that order (icons retain their
 tooltips, §45.3/§46.8).
 
 ### 50.5 Card grid mode
 
 `components/report/ReportCard.jsx` (the `report/` domain folder,
 §15.5): the §44.6 card, containing reportDate (title line),
-branch snapshot names (ellipsized), `MuiStatusBadge`, supervisor
-name (caption), Updated caption, and the same action icon row as
-§50.4 (§46.8 icon styling). Grid: responsive Grid (`size` prop,
-§46.2) — 1 column xs, 2 columns sm, 3 columns md, 3–4 columns
-lg+; cards are not selectable (selection is a grid-mode feature,
+branch snapshot names (ellipsized), `MuiStatusBadge`, Updated
+caption, and the same action icon row as
+§50.4 (§46.8 icon styling) — **no owner/supervisor caption**
+(per-user model §9). The Updated caption sits on its own line,
+  and the action icon row renders on the line below it,
+  right-aligned — the two never share a row, so no overlap is
+  possible. Grid: responsive
+Grid (`size` prop,
+§46.2) — 1 column xs, 2 columns sm, 3 columns md, 4 columns
+lg; cards are not selectable (selection is a grid-mode feature,
 §50.7).
 
 ### 50.6 Row actions & confirm dialogs
@@ -9443,9 +9811,21 @@ lg+; cards are not selectable (selection is a grid-mode feature,
   report?" / "Restore this report?"; confirmColor `primary`; the
   §31 guard governs availability (a `completed` report archives
   — §21/§31 — nothing here invents a restriction).
-- **Delete** — the §31 delete → archived → retention path
-  (§17.4, BR-15 — no instantaneous hard-delete ever); the §21.6
-  restore stays possible until the §11.3 window end;
+- **Availability per row state.** Active rows
+  (`isArchived: false`) offer **Archive**; archived rows offer
+  **Restore or Delete** — the row's state decides the offered
+  actions in both views (§50.4 grid column and §50.5 card,
+  identical sets): archived → Restore / Delete; active → Archive.
+  A fresh page (no filters — OQ-009) lists what the list
+  contract returns; the dev adapter lists **all** rows absent
+  `isArchived` (§66.10 clause), so archived rows and their
+  actions are reachable before the filter dialog exists.
+- **Delete** — the §31 delete path: on the **archived** row it
+  is the final-removal intent (retention-window semantics §17.4,
+  BR-15; the dev adapter simulates by permanent removal with
+  retention copy, §66.10); on an **active** row the endpoint
+  itself is the archive step of the two-path lifecycle (§31.7) —
+  the page never offers Delete on active rows;
   MuiConfirmDialog confirmColor `error`, copy "Delete this
   report? It will be permanently removed after the retention
   period."; on success → toast (§60) and the row leaves the
@@ -9468,16 +9848,16 @@ lg+; cards are not selectable (selection is a grid-mode feature,
 
 - **Loading** — the grid overlay loading state (§46.8) / card
   skeletons.
-- **Empty** — the custom `noRowsOverlay` (§46.8): "No reports yet
-  — create your first report" (with the New report action
-  available in the header).
-- **Empty filtered** — "No reports match these filters." and a
-  "Clear filters" text button (chrome copy, §7.6).
+- **Empty** — the custom `noRowsOverlay` (§46.8) / cards empty:
+  "No reports yet — create your first report" with the inline
+  "New report" action; the group's **Create** button stays
+  available in every state.
 - **Error** — §60 toast + inline retry over the grid.
 - **Edge cases (enumerated).** An archived branch name still
-  renders through the snapshot (tombstone rule, §17.4/§20);
-  branch filter selections reset when the branch is archived or
-  deleted (active-only rule, §20); delete on the last page
+  renders through the snapshot (tombstone rule, §17.4/§20); the
+  no-rows overlay fills the grid body height (§46.8 — the overlay
+  is sized viewport minus header/footer, so the empty content
+  never paints a fixed stub); delete on the last page
   re-fetches the current page (tag invalidation covers the cache —
   page index clamps server-side per §31); deep links to a report
   that was deleted land on the §59 404 or a §60 toast per the
@@ -9487,8 +9867,11 @@ lg+; cards are not selectable (selection is a grid-mode feature,
 
 - Grep gates: no client-side paging math (ADR-034 — `totalDocs`/
   `totalPages` only); action icons colored via `sx` (§44.2); the
-  toggle button group labels "List"/"Cards"; no archived branch in
-  the active filter options; no `reportId` document field (only the
+  action-group buttons hold icon + text and the view toggle
+  labels "List"/"Cards" (md+ only — below md no List/Cards
+  buttons exist and the data grid never renders); no
+  owner/supervisor column or caption in the §50.4/§50.5 surfaces
+  (per-user model §9); no `reportId` document field (only the
   route params and cache keys, §9.3).
 - Cross-section checks: mirrors §15.8 (the list/grid forward gate),
   §31 (guard reuse and delete), §17.4/§21.6 (archive visibility),
@@ -9533,9 +9916,9 @@ conversation.
 
 ### 51.2 Composition & header
 
-Inside AppShell (§47.3), page header first (§46.12): eyebrow
-"Report", title "Daily Report — {`reportDate` as `DD-MM-YY`}"
-(falls back to "New report" while uncaptured), subtitle =
+Inside AppShell (§47.3), page header first (§46.12): title
+"Daily Report — {`reportDate` as `DD-MM-YY`}" (falls back to "New
+report" while uncaptured), subtitle =
 `supervisorName` snapshot (§21.2, the `ስም` value — called by its
 chrome label "Supervisor"); `actions` slot per §51.5. Below the
 header, a **status band**: `MuiStatusBadge` (§46.13) + the
@@ -9558,12 +9941,14 @@ report `status` in English chrome copy. Then the body sections
 - **Corrections entry (report body):** a "Correct" action (toolbar)
   opens the correction panel beside/below the body — the Modes
   1–3 surface of §54 applied to the **report content**
-  (Mode-1 Save = the §35 PATCH endpoint; Mode 2/3 Accept/Revert =
-  the §35 correction flow; the raw/latest single-undo contract of
-  §21.5 applies identically at report level). The panel reuses the
-  §54 components verbatim — no second implementation (§12.4).
-  After a successful Mode-1 save or Mode-2/3 accept, the page
-  refreshes the body via tag invalidation (§42.6).
+  (Mode-1 Save = the §35 PATCH endpoint; Mode 2/3 candidate→save =
+  the §35 correction flow — the generated candidate fills the
+  live editor and persists only on Save, round-6; the
+  raw/latest single-undo contract of §21.5 applies identically at
+  report level). The panel reuses the §54 components verbatim —
+  no second implementation (§12.4).
+  After a successful Mode-1 save or Mode-2/3 save of a candidate,
+  the page refreshes the body via tag invalidation (§42.6).
 - **Sanitized render rule:** any HTML the head renders (`latest`,
   conversation messages) passes the §61 sanitize-on-render pipeline
   of `MuiEditor`/mission display components — `dangerouslySetInnerHTML`
@@ -9686,38 +10071,52 @@ duplicate flows (ADR-033).
 
 ### 52.2 Step model & navigation
 
-Steps in order (labels are chrome copy, §7.6): **1. Basic info →
-2. Visits → 3. Audio → 4. Transcription → 5. Report**. The
-**step list replicates the creation order of §31.2-1 through
-§31.2-5** (fields per §6.3) — the wizard is the correct
-client side of that order; one ListItem per step (lead +
-trailing) leading to the section index (`data` from the form
-values when valid, `Sequential` stepper §46.5).
+Steps in order (labels are chrome copy, §7.6): **1. Basic info &
+Visits → 2. Audio → 3. Transcription → 4. Report** — the
+**four-step merged model (round-report-step amendment, C1)**: the
+Visits step of the original five-step list is merged into step 1
+(the visit pair UI lives in `VisitedBranchesDialog` on the same
+form); §52.3/§52.8/§31.2-1 and the entry indexes below use the
+merged numbering. The step list replicates the creation order of
+§31.2-1 (§31.2-2 … §31.2-5 remain server-side act order) —
+fields per §6.3 — the wizard is the correct client side of that
+order; one ListItem per step (lead + trailing) leading to the
+section index (`data` from the form values when valid,
+`Sequential` stepper §46.5).
 
 - **Nav rules:** Prev/Next buttons (text buttons with start/
   end icons); Next is blocked when the current step is
   invalid (completion strategy §46.5); the stepper shows which
   steps are complete; the **leave guard** of §52.11.
 - **Final CTA (Add mode):** last button = "Create" (contained;
-  loading state on submit, §46.3).
+  loading state on submit, §46.3) — the report step's Next label
+  is "Create" (Add) / "Finish" (Edit), C9.
 
 ### 52.3 Add vs Edit entry modes
 
-- **Add** (`/reports/new`): steps 1–3 draft → next creates the
-  report through §31.2-1; then step 4/5 appear (post-creation,
-  BR-05). After create → navigate to §51 with the new `reportId`
-  (no autosave on the client — §31.2-1 owns creation; each
-  completed step saves through its endpoint, §52.10).
+- **Add** (`/reports/new`): **step 1's Next creates the report
+  through §31.2-1 (metadata + visits only) → `draft` (round-4
+  amendment — two-payload creation: the §4.10 one-payload submission
+  is superseded; a failed create keeps the user on step 1 with the
+  server's message applied to the fields, §52.11); step 2's Next
+  attaches the day's takes → `audio_attached` (round-4 amendment —
+  the attach act; a failed attach preserves the takes and keeps the
+  user on step 2); then steps 4/5 appear (post-creation, BR-05).**
+  After create → navigate to §51 with the new `reportId` (no autosave
+  on the client — §31.2-1 owns creation; each completed step saves
+  through its endpoint, §52.10).
 - **Edit** (`/reports/:reportId/wizard`, §50.4/§51.5 Edit):
-  enters the wizard at the **status-matched step** — draft →
-  step 1; audio_attached → step 2 (the visits step of an
-  untouched report); transcribed → step 4; reviewed → step 3
-  (audio can still be added/removed and re-transcription and all
-  three correction modes are open, §23.4/§34.7); completed →
-  step 5 (the final-report surface — the three correction modes
-  stay available via §35/§54; audio and transcription are frozen,
+  enters the wizard at the **status-matched step** (merged
+  numbering, C1) — draft / audio_attached → step 1;
+  transcribed → step 3; reviewed → step 2 (audio can still be
+  added/removed and re-transcription and all three correction
+  modes are open, §23.4/§34.7); completed → step 4 (the
+  final-report surface — the three correction modes stay
+  available via §35/§54; audio and transcription are frozen,
   BR-12 end) — computed from the §31 status index. The current
-  report's `latest` content (§21.2) fills the step forms. Editing
+  report's `latest` content (§21.2) fills the step forms
+  (the RHF prefill resolves the visits DTO's branch names back
+  to ids through the active-branches list). Editing
   posts through the §35 PATCH (Mode-1 Save) on each completed
   step.
 
@@ -9740,7 +10139,7 @@ copy of the fields).
 ### 52.5 Step 2 — Visits
 
 The MuiDataGrid of §46.8 with the domain columns from
-`components/columns/visits.js` (§15.6): **#**, **Branch** (select
+`components/columns/visits.jsx` (§15.6): **#**, **Branch** (select
 from **active branches only**, §20), **In** / **Out**
 (`HH:mm` time inputs with the §43.6 dual binding), **Actions**
 (remove row). Inline add row via the row icon button
@@ -9774,25 +10173,88 @@ reject copy of §32's MIME gate — the step accepts only
 
 ### 52.7 Step 4 — Transcription
 
-The step hosts the §54 Modes 1–3 surface (audios list / accept
-selected / instructions on selected) **within step mode** —
-reused verbatim components, same services (§33/§35), same copy
-conventions (§7.6/§60) — no second implementation (§12.4,
-ADR-033). The Modes-2/3 accept/reject reading views replace the
-wizard's generic step UI — the wizard step is the §54 handler's
-host.
+Round-7 amendment: the step is a **two-card composition** — the
+§54 modes are GONE from the step (no mode group, no panels, no
+segmented selector); the surface is one persistent §53 MuiEditor
+with the persistent footer (§53.5) plus the §54 CorrectionDialog
+as the single Mode-2/3 entry. The two cards:
 
-### 52.8 Step 5 — Report
+- **AudioCard** — the ledger head ("The day's takes" + the
+  tabular heard-count `x of y`), the take rows in a scroll box
+  (max-height buckets xs 240 / sm 280 / md+ 320), and the single
+  **Transcribe** act (covers only the not-yet-transcribed takes;
+  the card pulses while not ready). The header hides when the step
+  holds no clips.
+- **TranscriptionCard** — "The day's story": the borderless
+  MuiEditor (round-7 `borderless` prop — the Card outline is the
+  frame) with its toolbar, the circular **correction opener**
+  (AutoFix, disabled until the step is ready) at the header's top
+  right, the §53.5 persistent footer (save-state line + Revert /
+  Save with the round-7 color states: Save error-colored while
+  dirty, success-colored after a save), and the step's empty state
+  (MuiEmptyState) until every take is transcribed — nothing is
+  fabricated where nothing is known.
+- **CorrectionDialog** (composed on the story card, §54) — the
+  Mode-2/3 surface: instruction field, provider select and the
+  mic (record → stop → `POST .../correct/transcribe` → the
+  transcribed text fills the field; Apply → `POST .../correct` →
+  success: fill the live editor with the candidate + close; error:
+  toast + stays open).
+
+Reused services stay the same (§33/§35); the step holds no second
+implementation (§12.4, ADR-033). The ledger-head bullets below
+(round-4 follow-up) and the seed discipline (round-6) remain in
+force:
+
+- **Ledger-head layout (round-4 follow-up).** The transcription
+  step opens directly on the ledger head — "The day's takes" with
+  a tabular heard-count (`x of y`) — and the take rows run the
+  full width of the surface; there is no intro line above the
+  head. The **single Transcribe act covers only the
+  not-yet-transcribed takes**: heard takes stay marked Transcribed
+  through the batch and are never re-heard by the act, and the
+  merged story always includes every take's transcription. The
+  step-2 attach act's success is confirmed by a §60 toast
+  ("Takes attached to the report"). The step's readiness is
+  **data-derived** (every current clip has a transcription), never
+  the report status: a newly attached take at `transcribed`
+  (adding never rewinds, BR-10) keeps the step not-ready — the
+  Transcribe act reappears and the story stays hidden until every
+  take is heard.
+- **Seed discipline (round-6).** The editor seed is
+  `storyDraft || storyHtml` and never changes while typing
+  (§53.3); external refreshes clear the draft so the fresh story
+  re-seeds. The correction candidate lands through the imperative
+  `applyCandidate()` and the draft follows — boundary reads
+  (`getContent()` on Save) always agree with the live document.
+
+### 52.8 Step 4 — Report
 
 The step hosts the **§54 report-mode** surface (Mode-1 Save =
 §35 PATCH on completion; the finished report view; navigation to
-§51 on finish). Read-only until the §21.4 generation exists. At
-`completed` the step stays editable through the §54 Modes 1–3
-(corrections only, BR-10) and becomes the **final-report
-surface**: the finished-report view with the §58 print/export
-actions; audio and transcription changes are frozen (BR-12 end,
-§31.4). "Create" (Add) / "Finish" (Edit) completes the flow →
-§51.
+§51 on finish) as a **posture machine** (round-report-step, F65):
+`transcribed` → the **generation desk** (`GenerateCard`: the step's
+empty state + the generate act, §34.2 — server-guarded; success →
+`generation.ready` toast + the query refetch seeds the body card);
+`reviewed` → the **report body card** (`ReportBodyCard`: the §53.6
+editor host #2 — the borderless MuiEditor `id="report-editor"`,
+the ± official-token guidance strip with its toggle (§54.8,
+presence computed at the seed/candidate/save boundaries), the
+stale-`latest` notice when the persisted story moved while mounted,
+the §53.5 footer, the circular correction opener); `completed`
+(Edit re-entry) → the same body card + the §58 export menu;
+any other status → the step's empty state (nothing is fabricated
+where nothing is known, §52.7). Read-only until the §21.4
+generation exists = **no editor pre-generation**, never a
+`readOnly` editor (C5). At `completed` the step stays editable
+through the §54 Modes 1–3 (corrections only) and becomes the
+**final-report surface**: the finished-report view with the §58
+print/export actions; audio and transcription changes are frozen
+(BR-12 end, §31.4). "Create" (Add) / "Finish" (Edit) completes
+the flow → §51 (C9): the Mode-1 leave-guard — save-if-dirty
+(the `?? ""` boundary read, §53.5), empty body blocks with the
+highlighted field + helper, a `transcribed` report refuses finish
+with the generate-first toast.
 
 ### 52.9 Field contract application (normative)
 
@@ -9816,7 +10278,12 @@ has issues, review them below" — the error summary rule).
   client posts through the §31.2/§35 call of the completed step;
   on success → next step; on a validation failure → step stays,
   toast (§60) shows the server's message, fields focus
-  (§46.4). This is the **Bespoke-by-default** check of §43.7 —
+  (§46.4). Round-8.2 amendment (the highlighted-field contract):
+  the step-1 422 mapping reads the **§42.4 normalized
+  `error.fieldErrors`** — the old read of `error.data.details`
+  never survived the normalization, so "check the highlighted
+  fields" highlighted nothing (same dead-read fixed in
+  §53.5/§54.2). This is the **Bespoke-by-default** check of §43.7 —
   the client holds no validation-config copy; the only client-side
   mirrors of server rules are the §46.4 required-field protocol
   and the visits day-clock pair rule (§6.3 field 4/§21.2), needed
@@ -9913,17 +10380,55 @@ review segment (the Mode-1 hosts, §54), renders in this order:
 - **Single implementation:** the only rich-text editor is
   `MuiEditor` (§46.16, `components/reusable/MuiEditor.jsx`).
   Usage contract:
-  - Props per §46.16 (`value` HTML, `onChange`, `readOnly`,
-    `minHeight`, `id`); `value` is always the current `latest`
-    (§21.2) — never `raw`.
+  - Props per §46.16 (`value` HTML seed, `onDirtyChange`,
+    imperative `getContent()` via ref, `readOnly`, `minHeight`,
+    `id`); `value` is always the current `latest` (§21.2) — never
+    `raw`; there is no `onChange` — divergence arrives as the
+    dirty boolean and the live document is read at boundaries.
+  - **Zero-lag host rule (round-5, §11):** hosts keep their draft
+    state written only at controlled boundaries (Save, Revert,
+    mode switch, step leave via `getContent()`); the seed never
+    changes while typing; external story refreshes clear the
+    draft so the fresh story re-seeds. Hosts pass a bucket-based
+    `minHeight` (e.g. `{ xs: 200, sm: 220, md: 260, lg: 320 }`).
+  - **Text-empty boundary read (round-8.4):** `getContent()`
+    returns the live HTML — or the EMPTY STRING when the document
+    has no text. An empty TipTap document serializes as `<p></p>`
+    (truthy), which used to sail past every `.trim()` guard and
+    persist empty saves with a success toast; hosts can therefore
+    treat `""` as ground truth for local empty checks (§53.5)
+    while the nullish `undefined` read still means the editor is
+    not mounted.
+  - **Seed-sync stability (round-8.5):** MuiEditor's seed-sync
+    effect (deps `value`, `editor`, `applyExternal`) re-seeds
+    `value` whenever it re-runs and the live HTML diverges — so
+    the effect must NEVER re-run on mere host re-renders.
+    `applyExternal` is a `useCallback` over `[editor,
+    onDirtyChange]`, which makes the host's `onDirtyChange`
+    identity the churn valve: a recreated callback (a plain arrow
+    in the host body) recreated `applyExternal` on EVERY host
+    render, re-running the seed effect and re-seeding the stale
+    `value` — the font-size mark died in the same tick it applied
+    (round-8.4's raw dispatch applied, then the re-seed undid it;
+    rounds 8.2/8.3 merely left the visible paragraph highlight
+    behind), and deleting all text then blurring REFILLED the
+    deleted text (the `value !== getHTML()` guard saw the empty
+    doc diverge).     Rule: hosts must pass a STABLE
+    `onDirtyChange` (`useCallback`); formatting marks survive and
+    emptied documents stay emptied while the editor is live.
+    NOTE (round-8.5 close-out): this mechanism fix did NOT close
+    the font-size defect — the selector still does not apply a
+    size in the user's repro; the defect is OPEN (OQ-010, §69;
+    round-8.6).
   - Toolbar = exactly the §46.16 ADR-038 scope (**Bold, Italic,
     Font size, Text color**) — no other toolbar actions exist.
   - HTML in/out (TipTap → HTML, §14.4); `DOMPurify` sanitizes on
     **write and on render** (§61); no JSON-document storage
     (§14.4).
-  - The OQ-007 storage format (plain text vs rich-text HTML in
-    `raw`/`latest`) is decided at the editor phase (§46.16,
-    §21.2, §66) — MuiEditor emits and consumes HTML either way.
+  - The OQ-007 storage format was decided at the editor phase
+    (2026-08-15, §46.16, §21.2, §69): `raw` stays plain text,
+    `latest` is rich-text HTML — MuiEditor emits and consumes HTML
+    either way.
 - **`±`-token display rule (normative):** the `±` prefix marks
   official/entitled text the user must not freely alias (§35.3).
   The client renders `±` strings **as-is** — never strips,
@@ -9946,16 +10451,79 @@ review segment (the Mode-1 hosts, §54), renders in this order:
 - Empty content renders the §60 empty-state convention, never a
   placeholder fabricated client-side (BR-19).
 
-### 53.5 Editor chrome & Save/Accept strip
+### 53.5 Editor chrome & Save/Revert footer
 
 - The toolbar is the §46.16 fixed scope; the editor chrome also
-  carries: the content-state label (staged vs saved, from the
-  §54 surface state), the `±`-guidance toggle, and the
+  carries: the content-state label (candidate/unsaved vs saved,
+  from the §54 surface state), the `±`-guidance toggle, and the
   read-only indicator.
-- **Save** (Mode 1) — triggers the §35 PATCH; loading state on
-  the button (§46.3); success → toast (§60) + the report's
-  `latest` refresh (§21.2); failure → §46.4 error + §60 toast.
-- **Accept / Revert** strips (the review surfaces, §54) — the
+- **Persistent footer (round-5 pass, round-6 amendment, round-7
+  amendment):** the host shows a status line under the editor —
+  "Saved HH:mm" (the
+  last persisted content write, dayjs-formatted §43.6; the mock
+  keeps no per-field timestamp so it is derived from
+  `updatedAt`, §66.10), "Unsaved changes" while the dirty flag is
+  set, "Saving…" while a save is in flight, "✓ Saved just now"
+  for a few seconds after it lands (the success check icon), and
+  "No changes yet" before the first save (editor.md §16). Copy
+  from `WIZARD.modes.*` (§11.4). The footer — status line +
+  Revert/Save — renders on the transcription step's story card
+  (TranscriptionCard, §52.7) and the review surfaces, and reflows
+  from a single row (≥sm) to a stacked column at xs — the
+  contained Save stays full width and primary (round-7: the
+  status line sits left, the icon actions right — Revert disabled
+  until `latest` exists or the document is dirty; Save carries the
+  round-7 color states: error while dirty, success just after a
+  save).
+- **Save** — triggers the §35 PATCH; loading state on the button
+  (§46.3); success → toast (§60) + the report's `latest` refresh
+  (§21.2); failure → §46.4 error + §60 toast. Round-8.2 (the
+  highlighted-field contract): an empty story read is rejected
+  LOCALLY before any request — the story field highlights with
+  "Write the story before saving" (a broken boundary read can never
+  turn into an empty write); genuine 422s map the §42.4 normalized
+  `error.fieldErrors.content` onto the editor's `fieldError` prop
+  (error.main border + caption line, §46.16 — "check the highlighted
+  fields" becomes true), cleared on any edit, save, revert,
+  transcribe, or candidate apply. Round-8.3 (boundary-read
+   wiring): the step's `surfaceRef` must reach the editor — it
+   passes through TranscriptionCard as a plain `ref` prop to
+   MuiEditor (React 19); the card owns NO ref of its own. Before
+   the fix the step's ref was never attached, so every boundary
+   read returned `undefined` (pre-8.2: an eternal 422 with
+   "Check the highlighted fields" and nothing highlighted — the
+   ORIGINAL reported defect; post-8.2: the eternal local "Write
+   the story before saving" despite visible text). Round-8.4
+   (text-based emptiness): an empty TipTap document serializes as
+   `<p></p>` — a TRUTHY string that sailed past every `.trim()`
+   guard, so empty saves persisted with a success toast. The
+   boundary read now TEXT-empties (§53.3) — `getContent()` returns
+   `""` when the document has no text — and the save read is `??`
+   (the round-8 `||` amendment is superseded: `||` would silently
+   resurrect the stale draft after a full delete; the nullish
+   fallback exists only for the never-mounted editor). Round-8.5
+   (the draft-resurrection fix): the save read is `?? ""` — even
+   the nullish fallback is gone from the save path, because
+   `storyDraft` is SET on every successful save and an undefined
+   read (never-mounted editor) must not resurrect it either;
+   "remove the text → save → the removed text comes back" (the
+   reported defect) was that resurrection plus the refetch
+   re-seeding the old `latest`. The draft remains the edit seed
+   only, never a save source. The mock's
+   content guard mirrors the P6 validator the same way (§66.10:
+   stripped-text emptiness). Success
+   toasts use the §11.5 `TOAST_CATALOGUE.transcription.saved`/
+   `reverted` constants — never `result?.message`, because the
+   §42.4 normalization unwraps the envelope and drops its
+   `message` (a `?.message` read fell back to the generic error
+   copy on a SUCCESS toast — the reported "success icon with
+   'Something went wrong'" pair).
+- **Revert to original** — enabled while `latest` exists (single
+  undo, BR-11) OR the document is dirty (discarding the
+  unpersisted draft/candidate); restores `raw` through the
+  §31.6 content revert (or re-seeds the client-joined
+  transcription before any save).
+- **Accept** strips (the review surfaces, §54) — the
   affordances only; the wiring is §54's.
 
 ### 53.6 State sharing
@@ -9988,21 +10556,29 @@ is session-scoped memory (ADR-034, §12.2-10) — never persisted
 
 ### 54.1 Purpose & scope
 
-§54 owns the **correction-modes components** — the shared
+§54 owns the **correction-surface components** — the shared
 components behind the three correction modes (§35.2, BR-08/BR-09)
 that both the report body (§51.3) and the wizard transcription
 step (§52.7) reuse: Mode 1 (typed save over `latest`), Mode 2
-(typed instruction → staged partial edit), and Mode 3 (voice
-instruction → staged partial edit). The machinery is **driven by
-the §35 service through the §31.6 endpoints** — the client stages
-and renders; the server decides and persists (ADR-034).
+(typed instruction → generated candidate), and Mode 3 (voice
+instruction → generated candidate). The machinery is **driven by
+the §35 service through the §31.6 endpoints** — the client
+renders and saves; the server decides and persists (ADR-034).
+The correction result is a CANDIDATE: it fills the live editor as
+an editable draft and persists only on Save (round-6 amendment —
+no staging, no accept step). Round-7 amendment: there is **no
+mode group and no segmented mode selector anywhere** — Mode 1 is
+the always-present writing surface (the persistent editor +
+footer, §53.5), and Modes 2/3 live in the **CorrectionDialog**
+(§54.2), a single dialog opened from the story card's circular
+correction action (§52.7).
 
-- **Owned here (normative).** The mode components and their reuse
-  map (§54.2); the common hooks — the `±` token display, the
-  reason vocabulary, the staging rule (§54.3); Mode 1 — typed
+- **Owned here (normative).** The surface components and their
+  reuse map (§54.2); the common hooks — the `±` token display, the
+  reason vocabulary, the candidate rule (§54.3); Mode 1 — typed
   save (§54.4); Mode 2 — typed instruction (§54.5); Mode 3 —
-  voice instruction (§54.6); the mode state machine (§54.7);
-  states & edge cases (§54.8); verification (§54.9).
+  voice instruction (§54.6); the correction surface state machine
+  (§54.7); states & edge cases (§54.8); verification (§54.9).
 - **Owned elsewhere — deliberately not repeated here.** The
   correction engine and its contracts = §35; endpoints and guards
   = §31.6; transcriptions = §23; the editor = §53; the
@@ -10013,14 +10589,13 @@ and renders; the server decides and persists (ADR-034).
   engine behavior (§35), no new constant (§11 unchanged), no new
   path, no package.
 
-### 54.2 Mode components & reuse map
+### 54.2 Surface components & reuse map
 
 | Component | Purpose | Reused by |
 |---|---|---|
-| **Mode-1 surface** | `reports/edit-content/` — the §53 writing surface over `latest` (save = §35 PATCH) | §51.3 (report body), §52.7 (transcription step), §52.8 (final-report step) |
-| **Instruction panel** | `reports/correct-instruction/` — the Mode-2 typed instruction input (textarea, §46.4) | §51.3, §52.7 |
-| **Voice-correction panel** | `reports/correct-voice/` — the Mode-3 MuiRecorder strip (§46.17) | Mode-2/3 hosts |
-| **Corrected-strip** | `reports/corrected-strip/` — the staged `changed[]` slots rendered read-only with server reasons + Accept / Revert | Modes 2/3 surfaces |
+| **Persistent editor + footer (round-6)** | composed by the host — the §53 MuiEditor as ONE persistent instance across every correction, plus the §53.5 persistent footer (save-state line + Revert/Save). The round-5 `reports/edit-content/` surface dissolved into its hosts (round-6 amendment); round 7 deleted the whole `reports/` folder | §52.7 (transcription step — TranscriptionCard), §51.3 (report body), §52.8 (final-report step) |
+| **CorrectionDialog (round-7, round-8 amendment)** | `components/report/CorrectionDialog.jsx` — the single Mode-2/3 surface: a dialog (fullscreen below sm) holding the instruction field as the EDITOR-LIKE BORDERLESS surface (§46.4; round-8: standard variant with the underline removed, the §43.5 content font stack/size, a paper-tinted rounded input, the placeholder kept), the §46.17 provider select right-aligned below the field (round-8: label-less, width buckets xs 100% / sm+ 180px, min 140px), and the mic act (idle Mic → recording Stop + red pulse → STT spinner; round-8: 36px compact). Stop → `POST .../correct/transcribe` (round-7 §31.6) → the transcribed text fills the field; **Apply** → `POST .../correct` with the provider → success: `onApply` resolves true, the candidate lands in the live editor, the dialog closes; error: toast + the dialog stays open. Apply is disabled while the field is empty or a call is in flight; Cancel closes. Round-8: the dialog is `memo`-ized and its recorder callback stable (parent churn never re-renders it; the recorder `start` identity never changes mid-session); the STT/apply reads target the envelope-unwrapped result (`result.text`, `result.content` — the §42.4 normalization returns the payload directly; the old `.data.` reads silently no-oped the field fill and the candidate). Round-8.1 (the zero-lag field): the instruction input is the `InstructionField` local component — it owns its value INSIDE itself, so typing re-renders only that subtree (the dialog/provider/mic/actions never see a keystroke; the §53.3 doctrine); the dialog learns only emptiness flips (the Apply disabled state) and reads the live text at Apply through the imperative `getValue()`; the STT transcription lands through `seed(text)`; closing the dialog discards the field draft (a FAILED apply keeps the dialog open — the text is never lost mid-attempt). Round-8.2 (the highlighted field): the apply contract RETHROWS on failure — the step toasts, then the dialog catches and maps the §42.4 normalized `error.fieldErrors.instruction` onto the field (error.main 1px frame + helper text, cleared on typing/seeding/close) — "check the highlighted fields" is no longer a toast-only ghost | §52.7 (story card), §51.3, §52.8 |
+| **Provider selector** | `reusable/MuiProviderSelect` (§46.17) — the `AI_PROVIDERS` select for Modes 2/3; rides inside the CorrectionDialog (round-7) | Modes 2/3 surfaces |
 | **Accept/reject strips** | the §31.6 accept actions — per-clip transcription accept; the report Accept (`reviewed → completed`) | §51/§52 surfaces |
 | **Unassigned panel** | `reports/unassigned-panel/` — the §6.11 rule-4 surface: digest items with `attributionBasis: "unassigned"` (the `unassignedItems[]`) rendered for one-tap branch assignment (moves the item into the branch's list with `user-assigned`) | §51.3, §52.8 (accept-gate routing) |
 
@@ -10033,19 +10608,26 @@ service pair serves every host (the §51.3/§52.7/§52.8 hosts).
 - **`±` token display** — every rendered content keeps `±`
   strings as-is (§35.3): never stripped, never resolved, never
   translated (resolution is server-side at export: §37/§64). The
-  writing surface shows the §53.3 guidance; staged results keep
+  writing surface shows the §53.3 guidance; candidate results keep
   the tokens verbatim (the §35.3 diff verification guarantees
   it).
-- **Reason vocabulary** — staged slots carry server-returned
-  reasons (the §35.4 reason vocabulary); the client renders them
-  verbatim in English chrome copy (§7.6) — never invented, never
-  translated client-side.
-- **Staging rule** — a Mode-2/3 correction is **staged, not
-  written**: the engine returns the partial content, the
-  client stages it (the Corrected-strip), `latest` is persisted
-  only on Accept (§35.5). **Revert** discards the staged copy or
-  restores `raw` → `latest` while they differ; staging never
-  persists client-side (ADR-034).
+- **Reason vocabulary** — candidate/response slots carry
+  server-returned reasons (the §35.4 reason vocabulary); the
+  client renders them verbatim in English chrome copy (§7.6) —
+  never invented, never translated client-side.
+- **Candidate rule (round-6 amendment, round-8.3 amendment)** — a
+  Mode-2/3 correction is **generated, not written**: the engine
+  returns the candidate — the FULL corrected content snapshot
+  (the addressed partial edit on the report's story, §35.2/§35.3;
+  the round-8.3 amendment states it must never be a snippet of
+  the instruction — the reported defect where Apply REPLACED the
+  editor content with the instruction's first line was a mock
+  fidelity break, §66.10), the client fills the LIVE editor with
+  it as an editable draft (dirty — there is no Accept step, no
+  Corrected-strip), and `latest` is persisted only on Save
+  (§35.5/§31.6 content PATCH). **Revert** discards the
+  unpersisted draft or restores `raw` → `latest` while they
+  differ; nothing persists client-side (ADR-034).
 - **Item status editing (the §6.11 vocabulary)** — activities
   and issues render editable `status` chips (`reported` /
   `in_progress` / `completed`, §6.10) and comments an optional
@@ -10070,81 +10652,140 @@ service pair serves every host (the §51.3/§52.7/§52.8 hosts).
   (§31.6); sanitized on the server (§61); `latest` replaced,
   `raw` untouched (BR-11).
 - Validation through the §46.4 protocol in the writing surface;
-  re-validated server-side (§29). Success → the §53 strip +
-  toast (§60); the report status never changes (BR-06, BR-10).
+  re-validated server-side (§29). Success → the §53.5 save-state
+  line ("✓ Saved just now", then the saved time) + toast (§60);
+  the report status never changes (BR-06, BR-10).
 - Allowed at every status **including `completed`** (BR-10;
   §31.6).
 
 ### 54.5 Mode 2 — Typed instruction
 
-- The instruction panel holds the typed instruction (textarea);
-  it may name the exact §6.3 field/§6.7 content class (§35.2).
-  Submit → `POST /reports/:reportId/correct` (§31.6).
-- The engine returns the staged partial (`changed[].{ section,
-  field, content, reason }`, §35.4) → rendered read-only in the
-  Corrected-strip.
-- **Accept** — the Accept action of §31.6 persists the merged
-  content to `latest` and completes the correction turn (§35.5);
-  **Revert** discards the staged copy or restores `raw`
-  (single-undo, BR-11). The instruction may be quoted into the
-  §36 conversation as the user's correction turn (audit trail,
-  §35.6).
+Round-7 amendment: Mode 2 lives in the **CorrectionDialog**
+(§54.2), not in a panel on the page.
+
+- The dialog holds the typed instruction — a SMALL,
+  subordinate one-to-three-row field (round-6, editor.md §7: a
+  brief note telling what to fix, never a form); it may name the
+  exact §6.3 field/§6.7 content class (§35.2). The provider
+  selector (§46.17) sits right-aligned BELOW the field (round-7:
+  one row with the mic act — width buckets xs 100% / sm+ 200px,
+  min 140px; the row wraps at xs). Apply → `POST /reports/:reportId/correct`
+  (§31.6) with the chosen provider (§35.2).
+- The engine returns the candidate → Apply resolves true, the host
+  applies it to the LIVE editor through the imperative
+  `applyCandidate()` (§46.16, round-6 amendment): an EDITABLE
+  draft in the same persistent editor — never read-only, never a
+  second viewer, never a Candidate chip. There is no Accept step
+  and no strip; **Save** (the persistent footer) persists the
+  candidate to `latest` through the §31.6 content PATCH;
+  **Revert** discards it or restores `raw` (single-undo, BR-11).
+  The instruction may be quoted into the §36 conversation as the
+  user's correction turn (audit trail, §35.6).
+- **Apply contract (round-7):** Apply carries the busy state while
+  the request is in flight (disabled + spinner); on success the
+  dialog closes (the candidate is visibly in the live editor
+  under it); on error a §60 toast shows the server message and
+  the dialog STAYS OPEN with the typed text retained — the
+  instruction is never lost on a failed apply.
 
 ### 54.6 Mode 3 — Voice instruction
 
-- The voice-correction panel records the instruction with the
-  §46.17 recorder and submits `POST /reports/:reportId/correct`
-  (multipart, `mode` = `voice`); the clip is transcribed through
-  the §33 pipeline (§35.6) — **the Mode-3 clip is ephemeral**,
-  never stored as an Audio row (§32 DTO gate).
-- Result: the Mode-2 engine runs against the transcribed
-  instruction; the staged flow (Corrected-strip, Accept/Revert)
-  is identical to Mode 2's (§54.5).
+Round-7 amendment: Mode 3 is the CorrectionDialog's **mic act**
+— there is no separate voice panel, no heading, no labeled disc
+row on the page.
 
-### 54.7 Mode state machine
+- The dialog's mic button records the instruction (idle Mic icon
+  → recording: red Stop icon with the §46.17 recording pulse →
+  stop: the STT spinner on the mic). Stop submits the clip to the
+  **STT-only endpoint** `POST /reports/:reportId/correct/transcribe`
+  (round-7, §31.6 — multipart `clip` + `durationSec`); the
+  response's transcribed text fills the instruction field and the
+  mic returns to idle. The clip is transcribed through the §33
+  pipeline (§35.6) — **the Mode-3 clip is ephemeral**, never
+  stored as an Audio row (§32 DTO gate).
+- The user may review and edit the transcribed text before
+  **Apply**; Apply then runs the Mode-2 engine against it — the
+  candidate flow (candidate in the live editor, Save/Revert in
+  the persistent footer) is identical to Mode 2's (§54.5). An
+  STT error shows the §60 toast and the dialog stays open with
+  the mic restored (nothing is lost).
 
-`mode` ∈ {`mode1`, `mode2`, `mode3`}; a single lifted state per
-surface (§53.6 `currentEdit`); entering the surface → the host's
-initial mode (report body and wizard transcription step start in
-Mode 1; Modes 2/3 chosen by the user); leaving/saving →
-accept/revert per the strip; the surface shows its mode chip
-(chrome: "Edit", "Instruction", "Voice"). The machine is §53.6's
-host state — no persisted mode (ADR-034).
+### 54.7 Correction surface state machine
+
+Round-7 amendment: there is **no `mode` state** — no mode group,
+no segmented selector, no mode chips. The surface states are the
+host's (`currentEdit`, §53.6) plus the dialog's own open/closed
+state: the persistent editor + footer are ALWAYS present (Mode 1
+is not a mode, it is the surface), and Modes 2/3 are entered by
+opening the CorrectionDialog (the story card's circular
+correction action, §52.7). Leaving/saving → save/revert in the
+persistent footer (round-6 — no accept step). The machine is
+§53.6's host state — nothing persisted (ADR-034).
+
+- **Single-surface rule (round-6 amendment, editor.md §2/§14):**
+  the editor is ONE persistent instance — always visible, always
+  EDITABLE, never destroyed or recreated; the persistent footer
+  (save-state line + Revert/Save, §53.5) renders below it at all
+  times. When a correction is generated (any mode), the candidate
+  fills the same live editor as an editable draft via the
+  imperative `applyCandidate()`; Save persists it; Revert
+  discards it or restores `raw` — the server decides content
+  (§54.3), the draft is never silently clobbered while typing
+  (§53.3 blur deferral).
+- **Provider state (round-5, round-6, round-7):** the chosen
+  provider is the dialog's state (ADR-034 — session memory, never
+  persisted client-side), defaults to `AI_PROVIDERS[0]` (`addis`,
+  §16.2), rides every Mode-2/3 request (§35.2) and returns in the
+  candidate response (the request/response trail).
 
 ### 54.8 States & edge cases
 
-- Loading (server call pending) — the strip's spinner (§46.14) +
-  disabled accept; error — §60 toast, the typed text/instruction
-  retained; offline-save — server reject, the strip shows the
-  error and re-validates on retry.
-- **Stale `latest` while a mode is open** (e.g., a regeneration
-  or a concurrent correction changed the content) → the
-  Corrected-strip renders a "Content changed — please review"
-  inline notice and returns the surface to Mode 1; the staged
-  copy never silently overwrites a newer `latest` (conflict
-  toast, §27.5).
-- A mode surface edits one segment at a time (the §53.6
+- Loading (server call pending) — the dialog's busy state
+  (Apply disabled + spinner / mic STT spinner, §46.14); the
+  persistent footer's Save stays live. Error — §60 toast, the
+  typed text/instruction retained in the open dialog; offline-save
+  — server reject, the footer shows the error and re-validates on
+  retry. The dialog's **Apply/mic failures never lose input**:
+  the dialog stays open with the field and provider intact.
+- **STT cap & permission (round-7):** a clip over the §32 size
+  cap (or a disallowed MIME) is rejected with the §32 messages
+  (the mic returns to idle — nothing is recorded, nothing is
+  sent); a denied microphone permission shows the §60 warning
+  toast and the dialog keeps the typed path open.
+- **Stale `latest` while a correction is open** (e.g., a
+  regeneration
+  or a concurrent correction changed the content) → the story
+  notice ("Content changed — please review") reappears and the
+  editor re-seeds from the fresh story at the next boundary; a
+  dirty draft is never silently clobbered while typing (the
+  §53.3 blur deferral + the seed-never-changes-while-typing
+  rule, §52.7).
+- A correction surface edits one segment at a time (the §53.6
   `currentEdit`); concurrent writes are the server's concern
   (§27).
 - **Accept-gate routing (§31.6/§6.11)** — when report Accept
   returns the unassigned-gate 422 (with the unassigned item
   texts), the surface routes to the Unassigned panel: the
   supervisor assigns each item to a branch (rule 4, one tap) or
-  edits the content via Modes 1–3, then Accept is retried; the
-  panel never drops an item silently.
+  edits the content via the writing surface + the CorrectionDialog,
+  then Accept is retried; the panel never drops an item silently.
 
 ### 54.9 Verification usage
 
 - Grep gates: no HTML generation in the client components (the
   server transforms, ADR-034); no `±`-resolution client-side;
-  the components are exactly the four of §54.2 (no second
-  implementation anywhere); the mode chip labels fixed ("Edit"/
-  "Instruction"/"Voice"); no second `currentEdit` store; no
-  validator copied into the components (§29 owns validation).
+  **no mode group / mode selector / mode chips anywhere**
+  (round-7 gate — `modes.edit|instruction|voice` absent from the
+  client source); the correction surface is exactly the
+  CorrectionDialog + the host-composed persistent editor/footer
+  (no second implementation anywhere); no second `currentEdit`
+  store; no validator copied into the components (§29 owns
+  validation); no `onChange` on `MuiEditor` and no editor draft
+  state written per keystroke (the §46.16 zero-lag contract).
 - Cross-section checks: mirrors §35 (engine), §31.6 (endpoints,
-  accept/revert), §51.3/§52.7/§52.8 (hosts), §53 (editor), §55
+  candidate→save, STT), §51.3/§52.7/§52.8 (hosts), §53 (editor), §55
   (conversation), §42 (server-call protocol), §21.2/§23.4
-  (accept/revert single undo), §46.17 (recorder), §60 (errors).
+  (single undo), §46.17 (recorder), §60 (errors).
 - §54 introduces no constant (§11 unchanged), no path beyond §15.5,
   and no package; it is standalone — it references only
   specification sections.
@@ -10273,8 +10914,8 @@ and F2 names branch management as a first-class capability.
 
 ### 56.2 Page composition
 
-Inside AppShell (§47.3), page header first (§46.12): eyebrow
-"Branches", title "Branches", subtitle "Your supervision
+Inside AppShell (§47.3), page header first (§46.12): title
+"Branches", subtitle "Your supervision
 branches"; `actions` slot: **"New branch"** (contained, §46.3)
 which opens the branch create dialog (§56.4). Below: the filter
 band and the `MuiDataGrid` (§56.3).
@@ -10327,7 +10968,7 @@ branch's identity, its reports, and its analytics — reached from
 the Branches grid (Name link, §56.3) and from global search
 results (§59.3). Inside AppShell (§47.3):
 
-1. **Page header** (§46.12): eyebrow "Branches", title = the
+1. **Page header** (§46.12): title = the
    branch `name`, subtitle = `location` with the `MuiStatusBadge`
    (`branchActive` — "Active" / "Archived", §46.13); no actions
    slot (edit/archive/delete stay on the grid rows of `/branches`,
@@ -10437,8 +11078,8 @@ control part of the register-model (§3.2.2, §19).
 
 ### 57.2 Page composition
 
-Inside AppShell (§47.3), page header first (§46.12): eyebrow
-"Profile", title "Profile", subtitle "Your account details";
+Inside AppShell (§47.3), page header first (§46.12): title
+"Profile", subtitle "Your account details";
 `actions` slot: **"Logout"** (outlined, §46.3) — §57.5. Body:
 a profile card (§44.6) with the avatar and identity, the profile
 form (§57.3), and the sessions card (§57.4).
@@ -10553,6 +11194,14 @@ report in paper/digital form (export is §3.1.2 F7's surface).
   `latest` into the target file; BR-18/SC-5), and "Export
   selected table as CSV" when the current report has a
   table/section view.
+- **Wizard final-report surface (round-report-step, provisional —
+  §58 lands the full suite):** the completed report's body card
+  shows the Export menu (Print / Save as PDF + Download TXT live;
+  the XLSX and CSV affordances render DISABLED with their
+  coming-soon titles until this section's round). The TXT sink
+  serializes the §58.3 export payload (`content`, `reportDate`,
+  `supervisorName`, `branchNames`) fetched on demand — the printed
+  page and the downloaded file always describe the same report.
 - TXT/XLSX honor the same rules as print: they serialize the
   `latest` content the §37.5 surface returned, `±` tokens
   verbatim (the resolution stays §35.3/§64's), and the §43.6
@@ -10591,7 +11240,7 @@ sanitized (§61) `latest` content of the report with print styling:
 
 - The grid's export serializes the **visible/selected rows** from
   the current grid state (columns per `components/columns/
-  reports.js`, English headers), with `\r\n` line endings and the
+  reports.jsx`, English headers), with `\r\n` line endings and the
   standard RFC 4180 quoting for the branch text (the ellipsized
   branch is **not** exported truncated — the full snapshot string
   is). Download is a client-side Blob; filename `reports.csv`
@@ -10791,7 +11440,10 @@ surface.
   so a default toast icon never renders.
 - **`MuiToast` feedback components** (success/error/info/
   warning/loading variants) live in the §46.17 belt, themed
-  §44.5/§44.4.
+  §44.5/§44.4. **Wrapping rule:** both the title and the message
+  lines break long strings (`overflowWrap: anywhere`) — a long
+  server message passed as the title (e.g. `showToast("error",
+  result.error.message)`) never overflows on one line.
 
 ### 60.4 Variant model
 
@@ -10835,6 +11487,8 @@ file's content, verified by greps):
 | `toast.branch.deleted` | "Branch deleted — it will be removed after the retention period" |
 | `toast.clip.deleted` | "Clip deleted" (+ the rewind sentence when the last clip, §51.4) |
 | `toast.transcription.ready` | "Transcription ready" |
+| `toast.transcription.saved` | "Transcription saved" |
+| `toast.transcription.reverted` | "Reverted to the original" |
 | `toast.generation.ready` | "Report generated — please review" |
 | `toast.correction.accepted` | "Correction accepted" / "Correction reverted" |
 | `toast.export.ready` | "Export ready" |
@@ -10963,12 +11617,10 @@ gates**; no surface may rely on only one:
 - **The §37.5 content surface returns raw text, not HTML** (§37.5),
   sanitized server-side; the client formats of §58 serialize that
   text verbatim.
-- **Degradation under both OQ-007 branches** (§21.2, §69): if the
-  `raw`/`latest` slots stay plain text at the editor phase, the
-  gates remain as defense in depth (a format no-op); if the slots
-  become rich-text HTML, the gates are the enforcement. Neither
-  branch changes this policy; the decision lands at the §66 editor
-  phase.
+- **OQ-007 decided (§21.2, §69):** `raw` is plain text and `latest`
+  is rich-text HTML (closed at the §66 P4 editor phase, 2026-08-15) —
+  the render gate is the enforcement on the HTML slot, and the plain
+  slot is a format no-op; the policy is unchanged by the decision.
 - **No runtime is assumed before installation:** sections never
   rely on the sanitizer's runtime behavior until `dompurify` is
   installed by the §66 editor phase (§13.5); until then, the only
@@ -11061,7 +11713,7 @@ gates**; no surface may rely on only one:
   §14.4 (ADR-038 standing), §27 (chain, tiers, error shape),
   §28 (session), §29 (validators), §32 (uploads), §34/§35
   (provider paths), §46.16/§53 (editor), §55.3 (chat render),
-  §58 (print), §62 (retention), §69 (OQ-007 branch).
+  §58 (print), §62 (retention), §69 (OQ-007 closed).
 - §61 introduces no constant (§11 unchanged), no path beyond
   §15.4/§15.5, and no package (dompurify is the approved planned
   dependency of §13.5); it references only specification
@@ -11853,12 +12505,18 @@ against the adapter with §40 fixtures.
 | Branches, profile, exports, search | §56, §57, §58 (print/TXT/XLSX/CSV), §59 | §56–§59 |
 | Editor install | `MuiEditor` (TipTap + dompurify) + toolbar per ADR-038 | §46.16, §53, §14.4 |
 
-Decision point: **OQ-007** lands here (editor phase, §69): the
-`raw`/`latest` storage format (plain text vs rich-text HTML) is
-decided and the §21.2 slots, §61.3 policy and §46.16 contract
-are finalized in the same change. Install & amend:
-`@tiptap/react` + `dompurify` (§13.5 editor phase); amend §13.4,
-§15.5, and the OQ-007 row in §69 in the same commit. Exit gate:
+Decision point: **OQ-007 landed** here (editor phase, §69):
+the `raw`/`latest` storage format was decided on 2026-08-15
+(`raw` plain text, `latest` rich HTML — recorded in §21.2, §61.3,
+§46.16 and the §69 row in the same change). Installed & amended in
+that change: `@tiptap/react`, `@tiptap/starter-kit`,
+`@tiptap/extension-text-style`, `@tiptap/extension-color` +
+`dompurify` (§13.5 editor phase); amended §13.4, §15.5, and the
+OQ-007 row in §69. **Round-6 amendment (editor.md pass,
+2026-08-16):** the toolbar scope changed — installed
+`@tiptap/extension-underline` + `@tiptap/extension-text-align`,
+uninstalled `@tiptap/extension-text-style` +
+`@tiptap/extension-color` (§13.5/§46.16/§14.4 mirrors). Exit gate:
 every page enumerates the four §60 states; §63.4 grep gates;
 SC-5 partial (client formats vs fixtures; Google Docs stays
 stub, §37.3).
@@ -11934,8 +12592,65 @@ end-to-end through a **client-side development mock adapter**:
   transcription and chat resolve with canned fixture responses
   per §40/§25 — the pages and their §60 states are exercised,
   while accuracy claims are explicitly deferred to P7 (SC-1).
+  Round-7: the STT-only endpoint (`POST
+  /reports/:reportId/correct/transcribe`, §31.6) resolves with the
+  deterministic canned Amharic instruction text (the same string
+  the direct-voice correction branch transcribes to) — the dialog
+  exercises its real fill-the-field/Apply flow; the canned text is
+  a documented mock limitation, never a runtime feature (§66.10
+  gating).
 - **Gating:** the adapter is wired at the §42 boundary under a
   dev-only condition; it never exists in a production build.
+- **Dev conveniences (owner-approved, die with the adapter at
+  P7):** (1) **auto-auth on boot** — when no live stored session
+  exists at module load the adapter signs in the seeded supervisor
+  user, so a page refresh never drops development out of
+  authentication; a valid stored session (any seed user) always
+  wins; registered accounts are in-memory only, so their sessions
+  live for the page-load and are replaced by the seeded auto-auth
+  on the next reload; real login/register flows stay reachable
+  after an explicit logout. The adapter's session TTL knobs mirror
+  the §28 constants (`ACCESS_TOKEN_TTL_MIN` = 15 min,
+  `REFRESH_TOKEN_TTL_DAYS` = 7 days) so daily development stays
+  continuously authenticated — page-to-page navigation never
+  churns the reauth chain and the refresh never dies mid-session
+  (the older 30s access knob existed to demo the chain; the §63
+  walk is still exercisable by temporarily lowering
+  `accessTokenTtlMs`). Round-8.3: the **correction candidate**
+  (`POST /reports/:reportId/correct`, §35) resolves with the
+  DETERMINISTIC full-content snapshot of `buildCorrectionCandidate`
+  (§66.10 mirror of §35.2/§35.3/§35.4) — the report's story with
+  the addressed partial edit (verb-dedup / case-FE move, reason
+  vocabulary); it never returns a snippet of the instruction (the
+  pre-fix behavior REPLACED the editor content with the
+  instruction's first line — a fidelity break this amendment
+  fixes); when the addressed pattern is absent the story is
+  returned unchanged with the reason (the §35.3 diff gate
+  accepts the unchanged section). Round-8.4: the **content
+  write guard** (`PATCH /reports/:reportId/content`, §31.6)
+  checks STRIPPED-TEXT emptiness (the shared `stripTags` helper)
+  — the P6 validator checks document text, not markup, and an
+  empty TipTap doc serializes as `<p></p>` (truthy); the same
+  422 + `content` fieldError covers both the empty string and
+  markup-only payloads. (2) **Report list default** — `GET
+  /reports` returns **all** rows of the user when `isArchived` is
+  absent (explicit `"true"`/`"false"` still filter), so archived
+  rows and their Restore/Delete actions are exercisable before the
+  §50 filter dialog exists (OQ-009); the §31.3 "default hidden"
+  contract stays the real-backend rule, and surfaces that must be
+  active-only (e.g. §49.2 Latest reports) pass `isArchived=false`
+  explicitly. Restore/Delete on an archived row work against the
+  two-path lifecycle; the adapter simulates the retention window
+  (archive retention message; delete of an archived row removes it
+  outright per §50.6's simulated path).
+- **Round-report-step fix:** `POST /reports` (`createReportHandler`)
+  previously minted `_id: r-${counters.digest}` **without
+  incrementing** — every create before a digest operation reused the
+  same id, duplicating report rows and letting `reportOwnerOrNull`
+  resolve later writes against the FIRST (stale) row; the handler
+  now increments the shared counter (`counters.digest++`), keeping
+  create ids strictly unique for the adapter's lifetime (fixture
+  rows stay r-0001..r-0012; created rows start at r-0100+).
 - **Deletion gate (P7):** the adapter is removed when the real
   transport lands; a grep gate (its module absent from the
   client tree) closes the record. The adapter is a phase
@@ -12127,7 +12842,7 @@ once and cites it uniformly.
 | Wizard steps 1–5 | The creation flow steps | §52 |
 | Modes 1–3 | Content-save / typed-instruction / voice-instruction correction | §54 |
 | Surgical correction | Only addressed sections change (diff-verified) | BR-09, SC-3, §35.3 |
-| Accept → save flow | Staged corrections persist only on Accept | §35.5 |
+| Candidate → save flow | Corrected candidates persist only on Save (round-6) | §35.5 |
 | Mock adapter | Client-side dev module implementing §42 contracts over §40 fixtures | §66.10 |
 | SPA fallback | Production static fallback that never shadows the API | §65.3 |
 | Health endpoint | `GET /api/v1/health`, unauthenticated, no DB touch | §26.6 |
@@ -12206,8 +12921,10 @@ content rules: no prose invention outside this registry).
 | OQ-004 | **OPEN** | Google OAuth: real integration vs stub | §28, §37 | Google Docs export; SC-5 partial (§37.3) |
 | OQ-005 | **CLOSED** (2026-08-10) | Exact dashboard KPI set & charts | §49 | — |
 | OQ-006 | **CLOSED** (2026-08-11) | Export file naming convention | §58 | — |
-| OQ-007 | **OPEN** | `raw`/`latest` storage format: plain text vs rich-text HTML | §21.2, §46.16, §53, §61 | The §66 P4 (editor) decision point |
+| OQ-007 | **CLOSED** (2026-08-15) | `raw`/`latest` storage format: plain text vs rich-text HTML | §21.2, §46.16, §53, §61 | — |
 | OQ-008 | **OPEN** | Landing page: further work wanted by the owner — the round-9 review is not final; polish/concept revision deferred until after all eight phases | §48.2, §66 | Post-P8 owner window (§66.9 P8 / §2.6); non-blocking |
+| OQ-009 | **OPEN** | The Reports filter feature is provisional: the dialog renders a TBD surface — what to filter (status/branch/archived were working guesses), branch single vs multi-select, server pagination of filtered results, and date vs date-range (or both) are unresolved; until closure the page holds no filter state and lists what `GET /reports` returns | §50.3, §66 | The §50 filter dialog (full implementation; the mock list-all convenience persists until then) |
+| OQ-010 | **OPEN** | The font-size selector in the MuiEditor toolbar does not apply a size — reported through rounds 8.2, 8.3, 8.4, and 8.5 (hard-reload confirmed each time). Three mechanisms were found and fixed statically (nested-chain stored-mark wipe §46.16 r8.3, paragraph-selection UX r8.4, churning seed-sync re-seed §53.3 r8.5), yet the user repro still fails; the remaining cause is UNKNOWN and the fix is NOT fixed — deferred to round-8.6 | §46.16, §53.3, §53.5 | The §46.16 toolbar font-size contract (round-8.6 investigation must start from the live flow: a `[MuiEditor] fontSize dispatch`-style diagnostic + the served-module check, not static analysis alone) |
 
 Records (closed):
 
@@ -12228,6 +12945,43 @@ Records (closed):
   (`reports-YYYY-MM-DD.*`); the PDF path inherits the print
   document title (set to the report date during print, §58.3).
   No other section changes; the §58.6 cross-check mirrors here.
+- **Round-report-step resolutions (C1–C10), CLOSED 2026-08-17.**
+  The §52 report-step round resolved ten design conflicts by
+  owner decision; each cites its deciding amendment:
+  - **C1** — keep the four merged steps (1. Basic info & Visits,
+    2. Audio, 3. Transcription, 4. Report); no five-step split.
+    Amended: §52.2/§52.3/§52.8/§31.2-1 (merged numbering).
+  - **C2** — Edit mode included in the round: the
+    `/reports/:reportId/wizard` route + status-matched entry
+    (§52.3). Amended: §41.3 route row.
+  - **C3** — the report step's transient surfaces: GenerateCard /
+    ReportBodyCard postures (§52.8).
+  - **C4** — no per-keystroke editor visits; the §35 PATCH stays
+    the save gate (§53.5 unchanged; the round's content boundary
+    is `?? ""`).
+  - **C5** — pre-generation = no editor, never a `readOnly`
+    editor (§52.8).
+  - **C6** — "generated + generation.ready + save → §51" with the
+    Mode-1 save-if-dirty guard; the §49 latest list and the §50
+    grid keep their surfaces (§52.8).
+  - **C7** — the step's generated-desk UI ships live (the §54.8
+    ± strip guidance lives on the body card) and the §49.2
+    generated-desk card is NOT backfilled this round (deferred
+    to §49's round; provisional under OQ-008's pattern).
+  - **C8** — the empty body blocks finish with the highlighted
+    field + helper (the §46.4 None→error protocol in the §53.5
+    footer; supervisorName validated client-side at 1..100 per
+    §46.4 mirrors).
+  - **C9** — report-step CTA label = "Create" (Add) / "Finish"
+    (Edit) (§52.2/§52.8; the stale step-5 "Finish is not this
+    bar's job" note is amended in the same change).
+  - **C10** — the export trio renders as an ExportMenu (Print +
+    TXT live, XLSX/CSV disabled with coming-soon titles) — §58
+    provisional (§58.2).
+  - **F65 (finding, not a decision):** the mock's
+    `createReportHandler` minted report ids without incrementing
+    its shared counter, duplicating rows across creates — fixed
+    and recorded at §66.10.
 
 Records (open):
 
@@ -12244,13 +12998,12 @@ Records (open):
   (§37.3/§37.6). Closure path: ADR-024 amendment + §28/§37
   rewrites in the same change (§14.5), then `EXPORT_DOCS_ENABLED`
   flips.
-- **OQ-007 — OPEN.** Storage format of `raw`/`latest` (plain
-  text vs rich-text HTML). Both slots stay plain `String`
-  (§21.2) until the decision lands; the decision point is the
-  §66 P4 editor phase, owned by the ADR-038 cohort
-  (§46.16/§53/§54/§61); the §61.3 sanitization policy holds on
-  both branches. Closure: recorded here with the §21.2 slots and
-  §46.16 contract finalized in the same change.
+- **OQ-007 — CLOSED 2026-08-15.** Decided at the §66 P4 editor phase
+  (the wizard steps 1–3 round): `raw` = plain text, `latest` =
+  rich-text HTML — the convention the §40 fixtures and the §66.10
+  mock already followed (`RAW_R*` plain with `±` leads, `latestFromRaw`
+  HTML, `generateContent` writing both). Recorded in §21.2, §46.16,
+  §53, §61.3 in the same change; the §61.3 policy holds unchanged.
 - **OQ-008 — OPEN.** The owner wants further Landing-page work:
   the round-9 composition (cardless ruled-desk hero with the
   persisting §43.2 waveform, branches strip, Record → Verify →
@@ -12261,6 +13014,33 @@ Records (open):
   depends on it (*non-blocking* row). Closure: an owner
   decision recorded here with the §48.2 composition amended in
   the same change (§66.6).
+- **OQ-009 — OPEN.** Registered at the R3-fix round (owner
+  review): the Reports Filter button opens a dialog whose full
+  implementation waits on: what to filter (a status/branch/
+  archived set was the working hypothesis), branch single vs
+  multi-select, server pagination of filtered results, and date
+  vs date-range (or both). Until closure: the dialog renders the
+  TBD surface (§50.3), the page holds no filter state, and —
+  dev only — the mock lists all rows absent `isArchived` so the
+  archived walk (Restore/Delete, §50.6) stays reachable (§66.10
+  convenience, dies at P7 when the §31.3 "default hidden"
+  contract fully applies). Closure: an owner decision on the
+  filter dimensions recorded here with §50.3/§50.8 and the §31
+  query contract amended in the same change (§66.6).
+- **OQ-010 — OPEN.** Registered at the round-8.5 close-out (owner
+  directive: "setting a font from the editor is NOT fixed and is
+  to be fixed later"): the MuiEditor toolbar font-size selector
+  does not apply a size. Three mechanisms were found and fixed
+  statically across rounds 8.3–8.5 — the nested-chain stored-mark
+  wipe, the paragraph-selection UX, and the churning seed-sync
+  re-seed (§46.16/§53.3) — yet the user repro (hard-reload
+  confirmed) still fails. Until closure: the round-8.6
+  investigation starts from the LIVE flow with a diagnostic
+  (`[MuiEditor] fontSize dispatch`-style line) and a served-
+  module check of `MuiEditor.jsx` on the dev server; the
+  toolbar/select contract of §46.16/§53.3 stands otherwise.
+  Closure: root cause recorded here with the §46.16/§53.3
+  amendments in the same change (§66.6).
 
 ### 69.3 Assumptions register
 

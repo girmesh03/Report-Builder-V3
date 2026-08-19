@@ -5,11 +5,15 @@
  * self-contained: the shell passes only `open` and `onClose`. The
  * dialog owns the query (React Hook Form on MuiTextField — search
  * fires on Enter or the search action only, §9.6 no debounce) and
- * the idle → loading → done state machine. Results group by entity
- * (Reports, Branches) in accordion sections (§46.15); the content
- * area shows the two MuiEmptyState variants, centered full-height:
- * the search prompt while idle, "No results found" when a done run
- * has no hits.
+ * the idle → loading → done state machine. It drives the §39
+ * endpoint lazily (useLazySearchAllQuery); results group by entity
+ * (Reports, Branches) in accordion sections (§46.15), clicking a
+ * result navigates to its detail page (§59.3); the content area
+ * shows the two MuiEmptyState variants, centered full-height: the
+ * search prompt while idle, "No results for {query}" when a done
+ * run has no hits (§59.5, copy via the §60.6 catalogue). A server
+ * error raises the §60 toast and the dialog keeps the last results
+ * (§59.5) — when no results existed yet it falls back to idle.
  *
  * While typing, **nothing renders in React**: the field is
  * uncontrolled, and the clear button's visibility flips natively
@@ -18,15 +22,17 @@
  * re-render, no layout shift. Submit reads the live value with
  * `getValues`; clear/close use RHF `reset`, which writes the empty
  * value into the DOM input through the field's ref (the
- * MuiTextField ref lands on the real `<input>`). The §39 search
- * endpoint is injected at the P4 network phase (§59); until then
- * the buckets stay empty. Fullscreen below 600px (and below 768px
- * landscape); centered paper 600px × 80vh at 600–1200px, 720px ×
- * 70vh above 1200px (§46.15). Closes via the back arrow (clears +
+ * MuiTextField ref lands on the real `<input>`). Fullscreen below
+ * 900px — xs and sm are edge-to-edge with no border radius (the
+ * app's small-screen convention; the centered paper only exists on
+ * md+); below 768px landscape stays fullscreen too. Centered paper
+ * 600px × 80vh at 900–1200px, 720px × 70vh above 1200px (§46.15).
+ * Closes via the back arrow (clears +
  * resets + closes), Escape, or outside click.
  */
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { useNavigate } from "react-router";
 import PropTypes from "prop-types";
 import Box from "@mui/material/Box";
 import Dialog from "@mui/material/Dialog";
@@ -50,6 +56,9 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import MuiTextField from "./MuiTextField";
 import LoadingSpinner from "./LoadingSpinner";
 import MuiEmptyState from "./MuiEmptyState";
+import { useLazySearchAllQuery } from "../../redux/features/searchEndpoints";
+import { showToast } from "../../utils/toast.jsx";
+import { TOAST_CATALOGUE } from "../../utils/constants";
 
 const EMPTY_BUCKETS = Object.freeze({ reports: [], branches: [] });
 
@@ -60,12 +69,14 @@ const EMPTY_BUCKETS = Object.freeze({ reports: [], branches: [] });
  */
 export default function GlobalSearchDialog({ open, onClose }) {
   const theme = useTheme();
-  const isBelowSm = useMediaQuery(theme.breakpoints.down("sm"));
+  const navigate = useNavigate();
+  const isBelowMd = useMediaQuery(theme.breakpoints.down("md"));
   const isLandscapeSmall = useMediaQuery(
     "(orientation: landscape) and (max-width: 767px)",
   );
   const isLgUp = useMediaQuery(theme.breakpoints.up("lg"));
-  const fullscreen = isBelowSm || isLandscapeSmall;
+  const fullscreen = isBelowMd || isLandscapeSmall;
+  const [triggerSearch] = useLazySearchAllQuery();
 
   const { register, getValues, reset } = useForm({
     defaultValues: { search: "" },
@@ -74,28 +85,56 @@ export default function GlobalSearchDialog({ open, onClose }) {
 
   const [phase, setPhase] = useState("idle");
   const [resultBuckets, setResultBuckets] = useState(EMPTY_BUCKETS);
+  const [lastQuery, setLastQuery] = useState("");
 
-  const runSearch = () => {
+  const runSearch = async () => {
     const query = getValues("search").trim();
     if (!query) {
       return;
     }
+    const previousBuckets = resultBuckets;
+    const previousPhase = phase;
     setPhase("loading");
-    // Data seam (§46.15): the §39 search endpoint via the §42 layer
-    // replaces this no-op bucket at the P4 network phase.
-    setResultBuckets(EMPTY_BUCKETS);
+    const result = await triggerSearch({ q: query }, true);
+    if (result.error) {
+      showToast("error", result.error.message);
+      setResultBuckets(previousBuckets);
+      setPhase(previousPhase === "loading" ? "idle" : previousPhase);
+      return;
+    }
+    const buckets = { reports: [], branches: [] };
+    for (const doc of result.data?.docs ?? []) {
+      if (doc.type === "branch") {
+        buckets.branches.push(doc);
+      } else {
+        buckets.reports.push(doc);
+      }
+    }
+    setResultBuckets(buckets);
+    setLastQuery(query);
     setPhase("done");
   };
 
   const clearSearch = () => {
     reset({ search: "" });
     setResultBuckets(EMPTY_BUCKETS);
+    setLastQuery("");
     setPhase("idle");
   };
 
   const closeAndReset = () => {
     clearSearch();
     onClose();
+  };
+
+  const goTo = (item) => {
+    clearSearch();
+    onClose();
+    if (item.type === "branch") {
+      navigate(`/branches/${item.entityId}`);
+    } else {
+      navigate(`/reports/${item.entityId}`);
+    }
   };
 
   const totalHits =
@@ -113,8 +152,15 @@ export default function GlobalSearchDialog({ open, onClose }) {
         <AccordionDetails sx={{ p: 0 }}>
           <List>
             {items.map((item) => (
-              <ListItemButton key={item._id}>
-                <ListItemText primary={item.title} secondary={item.subtitle} />
+              <ListItemButton key={item.entityId} onClick={() => goTo(item)}>
+                <ListItemText
+                  primary={item.title}
+                  secondary={
+                    item.type === "report" && item.status
+                      ? `${item.subtitle} · ${item.status}`
+                      : item.subtitle
+                  }
+                />
               </ListItemButton>
             ))}
           </List>
@@ -167,7 +213,7 @@ export default function GlobalSearchDialog({ open, onClose }) {
             }
           }}
           sx={{
-            "& input:placeholder-shown ~ .MuiInputAdornment-root .search-clear-btn":
+            "& .MuiInputBase-root input:placeholder-shown ~ .search-clear-btn":
               { visibility: "hidden" },
           }}
           startAdornment={
@@ -242,7 +288,9 @@ export default function GlobalSearchDialog({ open, onClose }) {
           >
             <MuiEmptyState
               title={
-                phase === "done" ? "No results found" : "Search reports and branches"
+                phase === "done"
+                  ? TOAST_CATALOGUE.search.noResults.replace("{query}", lastQuery)
+                  : "Search reports and branches"
               }
               description={
                 phase === "done"

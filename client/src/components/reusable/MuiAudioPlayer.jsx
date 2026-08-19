@@ -4,6 +4,12 @@
  * Clip playback (§46.17 — §53 recording review, §54 clip playback).
  * Consumes the metadata-only DTO of §22.7 — no `filePath` ever
  * reaches the client; the URL comes from the §32 audio endpoint.
+ * The play control is a filled audio-orange disc (§43.2 — the
+ * deeper tone marks the active playing state).
+ *
+ * `compact` (round-4 amendment): the ledger row's player —
+ * disc + duration only, no progress bar, no caption row; the owning
+ * surface draws its own status line.
  */
 import { useRef, useState, useCallback } from "react";
 import PropTypes from "prop-types";
@@ -15,12 +21,16 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Tooltip from "@mui/material/Tooltip";
+import { orange } from "../../theme/themePrimitives";
 
 /**
  * @param {Object} props
  * @param {Object} props.audio - The metadata-only DTO of §22.7.
  * @param {string} [props.audioUrl] - Playback URL from the §32 audio endpoint.
  * @param {string} [props.duration] - Display duration (e.g. "MM:SS").
+ * @param {boolean} [props.compact] - Ledger-row mode: disc + duration, no progress bar.
+ * @param {Function} [props.onPlay] - Fires when playback starts (e.g. the take card's equalizer).
+ * @param {Function} [props.onPause] - Fires when playback pauses.
  * @param {Function} [props.onEnded] - Fires when playback completes.
  * @param {string} [props.errorMessage] - Playback error text.
  */
@@ -28,6 +38,9 @@ export default function MuiAudioPlayer({
   audio,
   audioUrl,
   duration,
+  compact = false,
+  onPlay,
+  onPause,
   onEnded,
   errorMessage,
 }) {
@@ -52,9 +65,17 @@ export default function MuiAudioPlayer({
     }
   };
 
-  const onPlay = () => setIsPlaying(true);
-  const onPause = () => setIsPlaying(false);
-  const onEndedInternal = () => {
+  const handlePlay = () => {
+    setIsPlaying(true);
+    if (onPlay) onPlay();
+  };
+
+  const handlePause = () => {
+    setIsPlaying(false);
+    if (onPause) onPause();
+  };
+
+  const handleEnded = () => {
     setIsPlaying(false);
     setHasEnded(true);
     setCurrentTime(0);
@@ -68,6 +89,13 @@ export default function MuiAudioPlayer({
     return `${String(m).padStart(2, "0")}:${String(rem).padStart(2, "0")}`;
   };
 
+  // Clamped: a recorder's encoded stream can outlast its reported
+  // duration by a hair (encoder padding), so currentTime may reach
+  // slightly past 100% — MUI's LinearProgress must never see that.
+  const progressValue = audio?.duration
+    ? Math.min(100, Math.max(0, (currentTime / audio.duration) * 100))
+    : 0;
+
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
       {audioUrl ? (
@@ -76,9 +104,9 @@ export default function MuiAudioPlayer({
           ref={audioRef}
           src={audioUrl}
           onTimeUpdate={onTimeUpdate}
-          onPlay={onPlay}
-          onPause={onPause}
-          onEnded={onEndedInternal}
+          onPlay={handlePlay}
+          onPause={handlePause}
+          onEnded={handleEnded}
           preload="metadata"
         />
       ) : null}
@@ -88,7 +116,22 @@ export default function MuiAudioPlayer({
             aria-label={isPlaying ? "Pause" : "Play"}
             onClick={togglePlay}
             disabled={!audioUrl}
-            size="small"
+            sx={{
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              color: "#fff",
+              backgroundColor: isPlaying ? orange[700] : orange[400],
+              "&:hover": { backgroundColor: isPlaying ? orange[800] : orange[500] },
+              "&:focus-visible": {
+                outline: `2px solid ${orange[800]}`,
+                outlineOffset: 2,
+              },
+              "&.Mui-disabled": {
+                backgroundColor: "action.disabledBackground",
+                color: "action.disabled",
+              },
+            }}
           >
             {hasEnded && !isPlaying ? (
               <RefreshIcon fontSize="small" />
@@ -101,16 +144,28 @@ export default function MuiAudioPlayer({
         </span>
       </Tooltip>
       {audioUrl ? (
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <LinearProgress
-            variant="determinate"
-            value={audio?.duration ? (currentTime / audio.duration) * 100 : 0}
-            sx={{ height: 4, borderRadius: 2 }}
-          />
-          <Typography variant="caption" color="text.secondary">
-            {formatTime(currentTime)} / {duration || formatTime(audio?.duration ?? 0)}
-          </Typography>
-        </Box>
+        compact ? (
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {duration || formatTime(audio?.duration ?? 0)}
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <LinearProgress
+              variant="determinate"
+              value={progressValue}
+              sx={{ height: 4, borderRadius: 2 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {formatTime(currentTime)} / {duration || formatTime(audio?.duration ?? 0)}
+            </Typography>
+          </Box>
+        )
       ) : null}
       {errorMessage ? (
         <Typography variant="caption" color="error.main">
@@ -128,6 +183,9 @@ MuiAudioPlayer.propTypes = {
   }),
   audioUrl: PropTypes.string,
   duration: PropTypes.string,
+  compact: PropTypes.bool,
+  onPlay: PropTypes.func,
+  onPause: PropTypes.func,
   onEnded: PropTypes.func,
   errorMessage: PropTypes.string,
 };

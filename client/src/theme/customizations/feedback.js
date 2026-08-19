@@ -31,6 +31,9 @@ const feedbackCustomizations = {
           backgroundImage: "none",
           borderColor: (theme.vars || theme).palette.divider,
         },
+        "& .MuiDialog-paperFullScreen": {
+          borderRadius: 0,
+        },
       }),
     },
   },

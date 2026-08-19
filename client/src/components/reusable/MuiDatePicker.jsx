@@ -8,16 +8,34 @@
  * Ethiopian date object via `utils/ethiopianDate.js` — the only
  * conversion surface (§43.6).
  *
+ * Button trigger (§46.6, step-1 contract): the field renders as a
+ * button through the v9 custom-field seam `slots.field`, using the
+ * shared `PickerButtonField` (the official v9 dashboard template
+ * pattern — `useSplitFieldProps`/`usePickerContext`/
+ * `useParsedFormat`, §46.6). The field hooks (`useField`) never
+ * mount; the open-picker icon sits at the start, the clear icon at
+ * the end and only while a value exists; the trigger ref forks
+ * `triggerRef` + `rootRef` for popper anchoring and outside-click
+ * detection.
+ *
+ * The app runs a single `LocalizationProvider` at the entry
+ * (`main.jsx`, §41.4) with `EthiopianDateAdapter` — this component
+ * renders no provider of its own (§46.6).
+ *
+ * `helperText` is intentionally dropped — there is no room on a
+ * button (§46.6). The error state tints the button border red:
+ * `error` reaches the field via `slotProps.field` (the picker's
+ * validation extraction does not forward it).
+ *
  * NOTE: this picker is used with react-hook-form `Controller` — its
  * value arrives through a custom `onChange` (the required justification
- * for `Controller`, §46.2).
+ * for `Controller`, §46.2). The owning form supplies the default
+ * (Ethiopian today); the picker itself shows its placeholder when the
+ * value is null.
  */
 import { forwardRef } from "react";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DesktopDatePicker } from "@mui/x-date-pickers/DesktopDatePicker";
 import { MobileDatePicker } from "@mui/x-date-pickers/MobileDatePicker";
-import { TimePicker } from "@mui/x-date-pickers/TimePicker";
 import dayjs from "dayjs";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
@@ -27,39 +45,19 @@ import IconButton from "@mui/material/IconButton";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import PickerButtonField from "./PickerButtonField";
 import {
   ethiopianToGregorian,
   gregorianToEthiopian,
 } from "../../utils/ethiopianDate";
-import { EthiopianDateAdapter } from "../../utils/ethiopianDateAdapter";
-
-/**
- * English chrome label of an Ethiopian month (§43.6, ADR-011): the
- * Ethiopian 13 months map to English month names; Pagume renders as
- * "Pagume" and never as a Gregorian equivalent.
- * @type {readonly string[]}
- */
-const MONTH_LABELS = Object.freeze([
-  "September",
-  "October",
-  "November",
-  "December",
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "Pagume",
-]);
+import { ETHIOPIAN_MONTH_LABELS, PICKER_DATE_FORMAT } from "../../utils/constants";
 
 /**
  * Interactive Ethiopic chrome header (§43.6, ADR-011/032): the label
- * shows the Ethiopian month name and year and toggles views exactly
- * like v9's `PickersCalendarHeader.handleToggleView` (2 views →
- * the other; 3+ views → alternate between the first two), with the
+ * shows the Ethiopian month name and year (from
+ * `ETHIOPIAN_MONTH_LABELS`, §11.5) and toggles views exactly like
+ * v9's `PickersCalendarHeader.handleToggleView` (2 views → the
+ * other; 3+ views → alternate between the first two), with the
  * slot's own dayjs ±1-month arrows wired to `onMonthChange` (the
  * default arrows live inside the header component we replace).
  * @param {Object} props - Props handed by the DateCalendar slot.
@@ -70,8 +68,17 @@ const MONTH_LABELS = Object.freeze([
  * @param {Function} [props.onMonthChange] - Month navigation setter.
  * @param {boolean} [props.disabled] - Picker disabled state.
  */
-function CalendarHeader({ currentMonth, view, views, onViewChange, onMonthChange, disabled }) {
-  const ethiopian = gregorianToEthiopian(currentMonth.startOf("month").toDate());
+function CalendarHeader({
+  currentMonth,
+  view,
+  views,
+  onViewChange,
+  onMonthChange,
+  disabled,
+}) {
+  const ethiopian = gregorianToEthiopian(
+    currentMonth.startOf("month").toDate(),
+  );
   const canToggle = views.length > 1 && !!onViewChange && !disabled;
 
   const handleToggleView = () => {
@@ -117,42 +124,45 @@ function CalendarHeader({ currentMonth, view, views, onViewChange, onMonthChange
           userSelect: "none",
         }}
       >
-        {MONTH_LABELS[ethiopian.month - 1]} {ethiopian.year}
+        {ETHIOPIAN_MONTH_LABELS[ethiopian.month - 1]} {ethiopian.year}
         {canToggle && <ArrowDropDownIcon fontSize="small" />}
       </Typography>
-      <IconButton size="small" onClick={() => handleMonthChange("next")} aria-label="Next month">
+      <IconButton
+        size="small"
+        onClick={() => handleMonthChange("next")}
+        aria-label="Next month"
+      >
         <ChevronRightIcon />
       </IconButton>
     </Box>
   );
 }
 
+/** Date variant of the shared button field (§46.6). */
+function DateButtonField(props) {
+  return <PickerButtonField {...props} valueType="date" />;
+}
+
 /**
  * @param {Object} props
  * @param {({ day, month, year }|null)} [props.value] - Ethiopian date value.
  * @param {Function} props.onChange - Emits the Ethiopian date (custom onChange; Controller §46.2).
- * @param {string} [props.label] - Field label.
- * @param {('small'|'medium')} [props.size] - Density (default small).
+ * @param {string} [props.placeholder] - Trigger text when empty (default: the parsed format).
+ * @param {('small'|'medium')} [props.size] - Accepted for consumer parity; the button is always small (§46.6).
  * @param {Array<('day'|'month'|'year')>} [props.views] - Rendered views per the owning form (§52.3/§50.3).
- * @param {boolean} [props.disabled] - Disables the field.
- * @param {boolean} [props.error] - Validation error state.
- * @param {string} [props.helperText] - Manual-resolver message (§46.6).
- * @param {ReactNode} [props.startAdornment] - Leading adornment (icon).
- * @param {ReactNode} [props.endAdornment] - Trailing adornment.
+ * @param {boolean} [props.disabled] - Disables the trigger.
+ * @param {boolean} [props.error] - Validation error state (red tint).
  * @param {Object} [props.slotProps] - User slot props merged under the picker's own (picker wins).
+ * @param {Object} [props.slots] - User slots merged under the picker's own (picker wins).
  */
 const MuiDatePicker = forwardRef(function MuiDatePicker(props, ref) {
   const {
     value,
     onChange,
-    label,
-    size = "small",
     views = ["day"],
     disabled = false,
     error = false,
-    helperText,
-    startAdornment,
-    endAdornment,
+    placeholder,
     slotProps,
     slots,
     ...rest
@@ -173,26 +183,18 @@ const MuiDatePicker = forwardRef(function MuiDatePicker(props, ref) {
   };
 
   const commonProps = {
-    label,
     views,
     value: internalValue,
     onChange: handleChange,
     disabled,
+    format: PICKER_DATE_FORMAT,
     slotProps: {
       ...slotProps,
-      textField: {
-        ...(slotProps?.textField ?? {}),
+      field: {
+        placeholder,
         error,
-        helperText,
-        size,
-        slotProps: {
-          ...(slotProps?.textField?.slotProps ?? {}),
-          input: {
-            startAdornment,
-            endAdornment,
-            ...(slotProps?.textField?.slotProps?.input ?? {}),
-          },
-        },
+        fullWidth: true,
+        ...(slotProps?.field ?? {}),
       },
       calendarHeader: {
         ...(slotProps?.calendarHeader ?? {}),
@@ -208,94 +210,17 @@ const MuiDatePicker = forwardRef(function MuiDatePicker(props, ref) {
     },
     slots: {
       calendarHeader: CalendarHeader,
+      field: DateButtonField,
       ...slots,
     },
-    format: "DD-MM-YY",
     ...rest,
   };
 
   const Picker = isDesktop ? DesktopDatePicker : MobileDatePicker;
 
-  return (
-    <LocalizationProvider dateAdapter={EthiopianDateAdapter}>
-      <Picker {...commonProps} ref={ref} />
-    </LocalizationProvider>
-  );
-});
-
-/**
- * The matching time picker surface (§46.6): 12h AM/PM `h:mm A` input
- * format (selecting 12:00 keeps 12:00, with a meridiem on the dial);
- * the stored dayjs value stays absolute 24h — domain rendering keeps
- * the 24h `HH:mm` convention (§43.6).
- * @param {Object} props
- * @param {Object|null} [props.value] - dayjs time value.
- * @param {Function} props.onChange - Emits the time (custom onChange; Controller §46.2).
- * @param {string} [props.label] - Field label.
- * @param {('small'|'medium')} [props.size] - Density (default small).
- * @param {boolean} [props.disabled] - Disables the field.
- * @param {boolean} [props.error] - Validation error state.
- * @param {string} [props.helperText] - Manual-resolver message.
- * @param {ReactNode} [props.startAdornment] - Leading adornment (icon).
- * @param {ReactNode} [props.endAdornment] - Trailing adornment.
- * @param {Object} [props.slotProps] - User slot props merged under the picker's own (picker wins).
- */
-export const MuiTimePicker = forwardRef(function MuiTimePicker(props, ref) {
-  const {
-    value,
-    onChange,
-    label,
-    size = "small",
-    disabled = false,
-    error = false,
-    helperText,
-    startAdornment,
-    endAdornment,
-    slotProps,
-    ...rest
-  } = props;
-
-  return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <TimePicker
-        ref={ref}
-        label={label}
-        value={value ? dayjs(value) : null}
-        onChange={onChange}
-        disabled={disabled}
-        format="h:mm A"
-        slotProps={{
-          ...slotProps,
-          textField: {
-            ...(slotProps?.textField ?? {}),
-            error,
-            helperText,
-            size,
-            slotProps: {
-              ...(slotProps?.textField?.slotProps ?? {}),
-              input: {
-                startAdornment,
-                endAdornment,
-                ...(slotProps?.textField?.slotProps?.input ?? {}),
-              },
-            },
-          },
-          desktopTrapFocus: {
-            ...(slotProps?.desktopTrapFocus ?? {}),
-            disableEnforceFocus: true,
-          },
-          dialog: {
-            ...(slotProps?.dialog ?? {}),
-            disableEnforceFocus: true,
-          },
-        }}
-        {...rest}
-      />
-    </LocalizationProvider>
-  );
+  return <Picker {...commonProps} ref={ref} />;
 });
 
 export default MuiDatePicker;
 
 MuiDatePicker.displayName = "MuiDatePicker";
-MuiTimePicker.displayName = "MuiTimePicker";

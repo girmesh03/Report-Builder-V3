@@ -26,7 +26,7 @@ export default function LoadingSpinner({ message, minHeight = "100vh" }) {
         minHeight,
       }}
     >
-      <CircularProgress size={40} thickness={4.5} />
+      <CircularProgress size={40} thickness={4.5} disableShrink />
       {message ? (
         <Typography variant="body2" color="text.secondary">
           {message}

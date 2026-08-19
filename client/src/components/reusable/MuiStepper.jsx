@@ -11,6 +11,7 @@ import Step from "@mui/material/Step";
 import StepButton from "@mui/material/StepButton";
 import Stepper from "@mui/material/Stepper";
 import StepLabel from "@mui/material/StepLabel";
+import Typography from "@mui/material/Typography";
 import CheckIcon from "@mui/icons-material/Check";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -51,7 +52,16 @@ export default function MuiStepper({
           <Step key={label} completed={visited}>
             {clickable ? (
               <StepButton onClick={() => onStepClick(index)}>
-                {isMobile ? null : label}
+                {isMobile ? null : (
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    color={isCurrent ? "primary.main" : "text.secondary"}
+                    fontWeight={isCurrent ? 600 : 400}
+                  >
+                    {label}
+                  </Typography>
+                )}
               </StepButton>
             ) : (
               <StepLabel
@@ -61,17 +71,25 @@ export default function MuiStepper({
                   ) : (
                     <Box
                       sx={{
-                        width: 10,
-                        height: 10,
+                        width: isCurrent ? 12 : 10,
+                        height: isCurrent ? 12 : 10,
                         borderRadius: "50%",
                         backgroundColor: isCurrent ? "primary.main" : "divider",
                       }}
                     />
                   )
                 }
-                sx={{ fontWeight: isCurrent ? 600 : 400 }}
               >
-                {isMobile ? null : label}
+                {isMobile ? null : (
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    color={isCurrent ? "primary.main" : "text.secondary"}
+                    fontWeight={isCurrent ? 600 : 400}
+                  >
+                    {label}
+                  </Typography>
+                )}
               </StepLabel>
             )}
           </Step>
