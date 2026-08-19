@@ -226,3 +226,11 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - **Changes applied (same change set, no spec edits):** AGENTS.md — repository status + protocol section replaced (implementation & re-implementation protocol, chain, role with Design Lead, per-phase flow, hard gate, branch lifecycle); prompt.md — full rewrite (correction content kept as the closed record; §1 role + chain, §2.2 closure record, §3 corrected-spec-as-sole-input method, §4 objectives with the gate, §6 Stages 1–3 CLOSED / Stage 4 ACTIVE / Stage 5 gated, §7 Postman until all green, §8–§14 implementation terms); task_plan.md — title/goal/Next Step reoriented (Stage 4 NEXT), stages list updated (Stage 2/3 closed, Stage 4 NEXT with the flow, Stage 5 strictly gated), standing rules = chain + gate + flow; findings.md — F83; this log.
 - **Verification:** canonical-chain tokens + directive-3 gate present in all 5 files; no stale "freeze until spec fully corrected" wording remains; working tree = 5 controlled files only.
 - **NEXT:** close-out report + commit request (explicit owner approval required) → §9.8 branch lifecycle (new implementation branch, `spec-correction` deleted — gated) → Stage 4: backend implementation per §15.4, sub-phase flow = implement → Postman-like tests until all green (backend only) → step 5 (owner runs the test script to test and verify) → document → step 6 → ready for the next.
+
+## 2026-08-19 — Stage 4 prep: branch + plan (NOT started)
+
+- **Owner directive:** "commit, checkout and prepare for stage 4 but don't start".
+- **Committed:** `b58082e chore: reorient controlled files to implementation & re-implementation` on `spec-correction` (5 controlled files).
+- **Checkout:** `stage-4-backend` created from `spec-correction` (implementation branch per §9.8; `spec-correction` retained — deletion gated).
+- **Prep:** backend state audited (P1 foundation only; full §13.3/§13.5 deps installed → no installs planned; `server.js`/`app.js` absent → `npm run dev` fails until sub-phase 1); §15.4 tree + §66.9 P6 read as the Stage-4 contract; six sub-phases + exit gates + per-phase flow written to task_plan.md (F84); no backend/client files touched.
+- **State:** 3 controlled files modified (task_plan, findings, progress), uncommitted — next commit gated. **Stage 4 NOT started** — waiting for the owner's go.
