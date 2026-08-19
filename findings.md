@@ -767,3 +767,30 @@ Owner directive: the step-5 verification run must show every request/response JS
 5. **Deferrals recorded (not bugs):** sub-phase-1 inventory's "pagination helper, session middleware" are over-inclusive — the §15.4 tree has no such files; pagination arrives with read endpoints (sub-phase 4), sessions with identity (sub-phase 3); CastError mapping deferred to sub-phase 2 (models); the §61.3 hand-rolled allowlist sanitizer (owner decision) is a separate concern from the mongoSanitize Express-5 shim — lands at sub-phase 4. env.js "pre-defined .env" slot = backend/.env (no root .env exists) — accepted derivation.
 
 **Long-running-command rule (owner directive, strictly stated in AGENTS.md, findings, progress, task_plan, prompt.md, spec §63.10):** commands must return promptly — never burn a timeout; prohibited: `nohup … & disown` backgrounding (holds the capture pipe), `Start-Process -RedirectStandardOutput/-RedirectStandardError` (blocks until child exit), recursive `grep -r` over node_modules, `sleep` > 3 s chains; detached dev servers start via a single redirect-free `Start-Process -WindowStyle Hidden`; readiness verified separately; a timed-out command is a failed command.
+
+## F89 — 2026-08-19 — Sub-phase 2 (models §19–§24A) implementation findings
+
+**Suite:** `node scripts/test-02-models.mjs` — **PASS=39 FAIL=0, exit 0**, DB-free (in-memory: document construction, `validate()`, `toJSON`, bcrypt). Groups: user / branch / report / audio / transcription / conversation / item / cross-model gates; `--only=<group>` verified (user → 6/6, item → 5/5). No server required for the step-5 run (non-HTTP checks, §63.10).
+
+**Mongoose 9 introspection facts (assertion-relevant, verified in installed 9.9.1):**
+1. `SchemaType.instance` returns **`'ObjectId'`** (capital D) — the historical `'ObjectID'` form is gone; the suite's first run failed 12 checks on this alone.
+2. `schema.paths` includes the Mongoose-managed **`__v`** bookkeeping path — path-set assertions filter it (it is not a §N.2 registry field; transforms strip it from output).
+3. Pre-save hooks live in a **Kareem instance** at `schema.s.hooks` (v9 `Schema.prototype.pre` delegates to `this.s.hooks.pre(...)`); `schema._pres` no longer exists. Hook-presence check: `schema.s?.hooks?._pres?.get('save')` (internal but stable; no public hook-enumeration API exists).
+4. A plain String path without enum reports `enumValues === []` (not `undefined`).
+5. Object-form enums work (`enum: LANGUAGE_CODES` → values `['am','en']`); frozen constant arrays work (`enum: REPORT_STATUSES`).
+6. TTL/unique/sparse/partial declarations all read back exactly via `schema.indexes()` — the cross-model TTL-singleton and unique-edge assertions are direct.
+
+**Model-layer decisions (flagged per the §69 rule — derived, not invented):**
+1. `messages[]` message subdocs carry `_id: false` — §24.7's exposed surface is exactly `role, content, provider, model, reasoning, createdAt`; `_id:false` keeps serialized messages to exactly those six.
+2. Transcription `raw`/`latest` are `required: true` with no default — §23.4 creates the row only at STT completion with both set; the registry's "(null until transcription completes)" describes the pre-row state, never a live null row.
+3. Item `status`/`rating` carry custom shape-only validators (per-type set via `ITEM_STATUSES_BY_TYPE`; rating integer 0–5 + comment-only) with plain `enum`/`min`/`max` as the second net (§24A.3); status has **no schema default** (generation writes `completed`/`reported`, §24A.2).
+4. No custom write statics in the model files — Mongoose's native `{ session }` options satisfy §18.5; the §28/§31/§34 flows (sub-phases 3–4) invoke them from caller-owned sessions.
+5. The one TTL index is declared bare on `archivedAt` (no partial) — null-`archivedAt` docs are exempt by TTL semantics; matches the §18.3 declaration literally.
+6. mongoose-paginate-v2 application deferred to sub-phase 4 with the pagination helper (F88).
+
+**Real defects caught by the suite (fixed in the same change set):**
+1. `status` default was the literal `'draft'` and `language` default the literal `'am'` — §17.7 gate (no literal status/domain strings in schema files) → now `REPORT_STATUSES[0]` / `LANGUAGE_CODES.am`.
+2. `ChatConversation.messages` was missing `required: true` (§24.2 registry "yes (default [])").
+3. User `toJSON`/`toObject` serialized an in-memory `password` value despite `select: false` (select only affects DB projections) — the transform now also deletes `password` (§19.5 "excluded from every transform" hardening).
+
+**No spec/§11/§15.4 changes needed** — the §15.4 tree already names `models/`, every referenced constant already exists in `utils/constants.js`, and §13.3 deps (mongoose, mongoose-paginate-v2, bcryptjs) were already installed. Same-change discipline: working files only (this findings row, progress log, task_plan status block).
