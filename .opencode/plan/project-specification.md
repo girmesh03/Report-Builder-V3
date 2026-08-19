@@ -3164,7 +3164,7 @@ client/
     |   `-- features/                    (all implemented)  # apiSlice.js: RTK Query createApi; fetchBaseQuery +
     |       |                                #   baseQueryWithReauth; network & error layer (§41–§42)
     |       |-- authSlice.js                  # session/identity UI state (§41.5, §42)
-    |       |-- authEndpoints.js              # getCurrentUser/login/logout/refresh (§28, §42)
+    |       |-- authEndpoints.js              # register/login/refresh/logout/google-stub/avatar (§28, §42)
     |       |-- reportsEndpoints.js           # report CRUD + visits + content + lifecycle (§30, §31, §34, §35)
     |       |-- branchesEndpoints.js          # branch CRUD + lifecycle (§30, §56)
     |       |-- audioEndpoints.js             # clips CRUD, audio stream URL (§32)
@@ -3172,7 +3172,7 @@ client/
     |       |-- conversationEndpoints.js      # chat get/send (§35, §55)
     |       |-- analyticsEndpoints.js         # dashboard + items analytics (§38, §49, §56)
     |       |-- searchEndpoints.js            # global search (§39, §59)
-    |       |-- profileEndpoints.js           # profile + sessions (§28, §57)
+    |       |-- profileEndpoints.js           # profile (§28, §57)
     |       `-- <domain>Slice.js             # one slice per domain (e.g. reports, branches) (§41)
     |                                       #   — placeholder: unmarked (planned)
     |-- components/
@@ -5575,7 +5575,7 @@ the captured values can never go stale).
 |---|---|---|---|
 | `_id` | ObjectId | auto | the only key; never `id` (§12.11-3) |
 | `user` | ObjectId | yes | owner-scoping (BR-13, §3.2.3, §18.7) |
-| `report` | ObjectId | yes | the owning report — plain-model-name reference field (§9.3); set at generation, never moved (§34.4) |
+| `report` | ObjectId | yes | the owning report — plain-model-name reference field (§9.3); set at generation, never moved (§34.6) |
 | `branch` | ObjectId (ref Branch) | yes | the report's branch, **captured at generation** (§21.7) — the item-level branch key of the §38 filtering contract; branch removal is refused while items reference it (§20/§30/§62) |
 | `date` | Date | yes | the report's `date`, **captured at generation** — UTC midnight (§21.2/§29); the item-level date key of the §38 rollups |
 | `type` | String | yes | member of `ITEM_TYPES` (§11.4) — `activity`, `issue`, or `comment`; written at generation, never changed |
@@ -5628,7 +5628,7 @@ this table is persisted.
 
 ### 24A.4 Lifecycle & cascades
 
-- **Creation.** Item rows are created by **generation only** (§34.4):
+- **Creation.** Item rows are created by **generation only** (§34):
   the structured-output items are persisted in the same session as
   the transcription content write; the report's `branch` and `date`
   are captured onto each row at that moment (§24A.2).
@@ -5642,7 +5642,7 @@ this table is persisted.
 - **Presence.** `generated` requires the report's item rows to exist
   (§17.6/§21.4); the rows are written atomically with the content —
   a generation that fails to persist the items rolls back the whole
-  session (§34.4).
+  session (§34.6).
 
 ### 24A.5 Transforms & exposure
 
@@ -5893,9 +5893,10 @@ then the not-found handler and the global error handler (both
 §27.5). CORS per §12.3: origin `CLIENT_ORIGIN`
 (`http://localhost:3000`), `credentials: true` — httpOnly cookies
 travel with requests. `app.js` also mounts nothing else: no
-static asset serving (uploads are service-internal, §32; avatar
-serving is not an Express route — §28 owns the avatar files and
-its access bookkeeping), no provider proxy routes (backend-only
+public static mount (uploads are service-internal, §32; the
+avatar is served only through the authenticated §28.5 route
+`GET /auth/avatar` — never via a static mount), no provider
+proxy routes (backend-only
 proxy = service layer, §16).
 
 ### 26.5 Route registry (`routes/index.js`)
@@ -6156,7 +6157,10 @@ BR-13 require one authoritative identity contract.
   and its endpoints were removed; rotation is purely cookie
   mechanics). Forced logout (§28.3) clears cookies; there is no
   server-side blacklist for access tokens within their 15-minute
-  window (documented acceptance).
+  window (documented acceptance), and a stolen refresh token
+  likewise remains usable until its 7-day expiry — reuse is not
+  detected without a store (documented acceptance, mirroring the
+  access-token window).
 - **No delegation:** `req.user` is always the authenticated
   owner; BR-13 ownership queries never trust client-supplied
   user ids.
@@ -6169,7 +6173,7 @@ BR-13 require one authoritative identity contract.
 | `POST /auth/login` | none | `{ email, password }` | 200 `{ data: { user: UserDto } }` + cookies | 401 invalid credentials (identical message for unknown email/ wrong password — no user enumeration) |
 | `POST /auth/refresh` | refresh cookie | — | 200 `{ data: { user: UserDto } }` + rotated refresh cookie | 401 expired/absent/unusable refresh token |
 | `POST /auth/logout` | optional | — | 200 `{ success: true, message, data: null }`; clears both cookies | — |
-| `PATCH /auth/profile` | access | `{ position }` or multipart (`avatar`) | 200 `{ data: { user: UserDto } }` (fresh DTO) | 422 validation; 401 |
+| `PATCH /auth/profile` | access | `{ position?, firstName?, lastName? }` or multipart (`avatar`) | 200 `{ data: { user: UserDto } }` (fresh DTO) | 422 validation; 401 |
 | `GET /auth/avatar` | access | — | 200 — the avatar image stream (`Content-Type` from `AVATAR_ALLOWED_MIME_TYPES`) | 401; 404 no avatar |
 
 No `GET /auth/me` (client hydration comes from redux-persist —
@@ -6304,8 +6308,8 @@ integration is planned.
   (§28.2); a rejected/expired refresh cookie → 401 and a
   client-side redirect to the login page.
 - Duplicate registration email → 409 `CONFLICT` via the dup-key
-  11000 detection (§27.5), message "This email is already
-  registered".
+  11000 detection (§27.5), message "An account with this email
+  already exists" (§28.3's contract copy).
 - Cookie domain/path mismatches (refresh sent without access) →
   the client's §42 reauth loop re-issues through `/auth/refresh`;
   a wholly invalid refresh cookie → 401 and a client-side
@@ -6318,7 +6322,8 @@ integration is planned.
 
 - Grep gates: `role` absent from any backend file; `GOOGLE_*`
   env reads absent (§10.4); the only `/auth/*` routes are the
-  §28.3 table's; token secrets never logged (ADR-019); no
+  §28.3 table's plus the §28.6 stub (`GET /auth/google`); token
+  secrets never logged (ADR-019); no
   `password` key in any response DTO; no user-delete endpoint.
 - Cross-section checks: mirrors §19 (schema/hash), §11.3 (TTL
   constants), §27 (envelope/tiers), §29 (validators), §42
@@ -6523,10 +6528,9 @@ found for this user).
 
 ### 30.3 Create
 
-`POST /branches` (access): `{ name, location }` (both required
-strings, trimmed, `location` optional? no — required per §20:
-`location` is a required field; but the branch picker's usage:
-the creation form in §41.5 requires both). 201 CREATED with
+`POST /branches` (access): `{ name, location }` — both required
+strings, trimmed (`location` is a required field per §20; the
+§41.5 creation form requires both). 201 CREATED with
 BranchDto. Validation: non-empty `name` (1..100 chars),
 `location` (1..200), no duplicate-name constraint (no unique
 index, §20). Transaction: single-doc session write (§27.7).
@@ -6770,7 +6774,7 @@ transition authority** — §51/§52 UI actions reuse it identically
 |---|---|---|---|
 | `draft` | `audio_attached` | first clip uploaded (§32) | §32 |
 | `audio_attached` | `transcribed` | the report's Transcription row exists with `raw` set (§33) | §33 |
-| `transcribed` | `generated` | generation completed: transcription `latest` written, Item rows persisted (§34.4) — **terminal**; regeneration keeps the status | §34 |
+| `transcribed` | `generated` | generation completed: transcription `latest` written, Item rows persisted (§34.6) — **terminal**; regeneration keeps the status | §34 |
 | `generated` | *(none)* | forward-locked; content stays editable via §35/§31.6 (BR-10); re-transcription, audio add/remove, and capture edits are frozen at `generated` (BR-12 end, §21.7, §31.8) — corrections are the §35/§54 Modes 1–3 path | §31/§35 |
 | `audio_attached` | `draft` | **last audio deleted** (single explicit backward transition, ADR-003) | §32/§31 |
 | `transcribed` | `audio_attached` | **any audio deleted** — the merged transcription row cascades and the report's `transcription` ref clears (§22.4/§23.4); draft if it was the last audio | §32/§31 |
@@ -7028,7 +7032,8 @@ the main lock (§31.5).
 `PATCH /reports/:reportId/content` — request `{ "content":
 "<html>…corrected full content…</html>" }`; 200: `{ "success":
 true, "message": "Content saved", "data": { "content": "<html>…
-</html>" } }`; 403 at `generated`; 422 empty/over cap.
+</html>" } }` (allowed at every status incl. `generated`, §31.6
+BR-10); 422 empty/over cap.
 
 `PUT /reports/:reportId/content` — no body; 200: `{ "success":
 true, "message": "Content reverted", "data": { "content":
@@ -7116,8 +7121,11 @@ member). Rules:
   (50 MB); duration ≤ `AUDIO_MAX_DURATION_SEC` (900 s) verified
   via ffprobe (informational `durationSec`; the §29 chain enforces
   the file, the multer `limits` enforce size, ffprobe enforces
-  duration). Video MIME (`video/*`, `.mp4`) is rejected with the
-  §19.1 placeholder message (deferred D1) — 422.
+  duration). Video MIME (`video/*`, `.mp4`) is rejected — 422 —
+  with the message "Only audio recordings are supported": the
+  product records voice only (BR-02, the §53 recorder is audio-
+  only) and no video path exists anywhere (not a deferred
+  feature; the rejection is a plain MIME rule).
 - Store under `backend/uploads/audio/` (gitignored, multer
   destination; filename = `{$reportId}-{$timestamp}` +
   sanitized extension, no user input in names). The binding
@@ -7139,9 +7147,10 @@ member). Rules:
 ### 32.3 Listing & playback
 
 - `GET /reports/:reportId/clips` (access):
-  200 list of AudioDtos, ordered by `createdAt` asc (§22 —
-  within a report, chronological by creation, never array
-  position). Empty list → `docs: []` (no 404).
+  200 paginated list (§27.6) of AudioDtos, ordered by
+  `createdAt` asc (§22 — within a report, chronological by
+  creation, never array position). Empty list → `docs: []`
+  (no 404).
 - `GET /audios/:audioId` (access): metadata AudioDto; 404 for
   not-owned.
 - `GET /audios/:audioId/play` (access): streams the physical
@@ -7244,10 +7253,10 @@ file), `language` (default `am`), informational `durationSec`
   gate, §4.1 D2); video MIME rejection present; rewind logic
   only here + §31.4 (single place); `fs.unlink` only after
   commit.
-- Cross-section checks: mirrors §22 (model, DTO), §11.3
-  (limits), §29 (validators), §31.4 (status), §33 (pipeline),
-  §53 (client limits — the same constants), §19.1 (video out),
-  §62 (orphan sweep), §27 (envelope/session template).
+- Cross-section checks: mirrors §22 (model, DTO), §11.3 (limits),
+  §29 (validators), §31.4 (status), §33 (pipeline), §53 (client
+  limits — the same constants), §62 (orphan sweep), §27
+  (envelope/session template).
 - §32 introduces no constant (§11 unchanged), no path beyond
   §15.4, and no package; it references only specification
   sections.
@@ -7368,6 +7377,11 @@ fresh TranscriptionDto.
   [{ audioId, reason }] }`; the client's §51.4/§54 surface
   shows the retry affordance (the endpoint can be re-called —
   only failed/pending audios re-run; spans are idempotent).
+- **Granularity is per-audio:** `completed` counts the audios
+  whose chunks all succeeded in this call; `failed` lists the
+  audios with at least one failed or pending chunk — a re-call
+  re-runs only those audios (their already-succeeded chunks are
+  skipped; per-chunk spans are idempotent, §33.5).
 - Provider-level exhaustion: 502 `BAD_GATEWAY` via the §27
   handler with user-facing message ("Transcription failed —
   please retry"); logs = provider, model, status, timing only
@@ -7574,9 +7588,12 @@ per-type `status` defaults `completed`/`reported`, comment rating),
 then set the report status
 `transcribed → generated` (§31.4 gateway). The session is atomic:
 a failure to persist either the content or the items rolls back
-everything (§24A.4). Response: 200 with
-the ReportDto (`withContent` semantics — content included) and
-`data.content`. Neither `acceptedAt` nor `exportedAt` is ever
+everything (§24A.4). Response: 200 with the report-detail
+aggregate (`{ report: ReportDto, transcription: { latest,
+items } }` — the §31.6 single round-trip; the generated content
+reaches the client as `transcription.latest`, never as a
+separate `data.content` key). Neither `acceptedAt` nor
+`exportedAt` is ever
 stored (§21.2).
 
 ### 34.7 Regeneration rules
@@ -7857,7 +7874,10 @@ write; no in-place updates, no array reordering (§24.2 caveats).
   (a selection is a selection — one standing value governing every
   TTT request of the conversation, §16.2/§16.6). The appended
   message records the effort actually used (`messages[].reasoning`
-  — the audit record, ADR-014).
+  — the audit record, ADR-014); every message — user and assistant
+  — carries that recorded string, never `null` (§24.2 registry:
+  String required; the user turn's record is the effort governing
+  it, i.e. the standing default or the accepted override).
 - The AI answer is generated by the §35 correction engine (or
   the §34 generation note) with the same standing reasoning; a
   second message is appended by the service, never by this
@@ -7884,9 +7904,9 @@ to the client in prompt form.
 - Message-length violations → 422 with field error.
 - Concurrent appends to the same report (two tabs): each append
   is transactional; the unique `report` index + session make
-  row creation race-safe (second creator receives 409 on the
-  index conflict — mapped to 422 retry semantics by §29, or a
-  natural re-read by the client).
+  row creation race-safe — the second creator receives a raw
+  409 `CONFLICT` (§29 never remaps it; the client re-reads and
+  retries naturally, per the matrix's 409 row).
 - A deleted report's conversation: cascade removes it (§62);
   the client's §51 would already be gone.
 
@@ -7900,7 +7920,12 @@ to the client in prompt form.
 **Contract JSON** (folded from the route-contract review,
 2026-08-19): the message surface is exactly `role, content,
 provider, model, reasoning, createdAt` (§24.2); empty
-conversation → `messages: []`, no 404 (§36.2).
+conversation → `messages: []`, no 404 (§36.2). Example values
+are §11.4 register members only (`gemini` /
+`gemini-3.1-flash-lite` with the effort actually used);
+`reasoning` is always a recorded `AI_REASONING_EFFORTS` string —
+never `null`, never a boolean (§24.2; the user turn records the
+effort governing it, §36.4).
 
 `GET /reports/:reportId/chat` — 200:
 
@@ -7916,17 +7941,17 @@ conversation → `messages: []`, no 404 (§36.2).
       {
         "role": "user",
         "content": "Summarize the issues found today",
-        "provider": "anthropic",
-        "model": "claude-3-5-sonnet-20241022",
-        "reasoning": null,
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
+        "reasoning": "medium",
         "createdAt": "2026-08-19T14:30:00.000Z"
       },
       {
         "role": "assistant",
         "content": "The branch reported one open issue: the water pump on floor 2…",
-        "provider": "anthropic",
-        "model": "claude-3-5-sonnet-20241022",
-        "reasoning": null,
+        "provider": "gemini",
+        "model": "gemini-3.1-flash-lite",
+        "reasoning": "medium",
         "createdAt": "2026-08-19T14:30:05.000Z"
       }
     ],
@@ -7941,9 +7966,9 @@ conversation → `messages: []`, no 404 (§36.2).
 ```json
 {
   "content": "Summarize the issues found today",
-  "provider": "anthropic",
-  "model": "claude-3-5-sonnet-20241022",
-  "reasoning": false
+  "provider": "gemini",
+  "model": "gemini-3.1-flash-lite",
+  "reasoning": "medium"
 }
 ```
 
@@ -8047,7 +8072,9 @@ visits } }` — the exact current content the browser-side
 PDF/TXT/CSV/XLSX flows format (§58). `±` tokens are returned
 **as-is** for the client formats (§58 prints them verbatim;
 resolution happens only in the backend Google Docs path §37.3).
-Content is returned raw-text (not HTML), sanitized per §61.
+Content is returned as stored — the `latest` HTML — sanitized
+per §61 (the §58 flows use the same content the editor holds:
+PDF formats from the markup; TXT/CSV/XLSX strip it client-side).
 
 **Contract JSON** (folded from the route-contract review,
 2026-08-19):
@@ -8155,9 +8182,11 @@ All counts are **personally scoped** (BR-13: `user:
 req.user._id` only); counts exclude archived reports (unless a
 dimension says otherwise — none does).
 
-**Item filters (the §24A contract).** `GET /analytics/items`
+**Item filters (the §38.2 contract — the filters are first
+defined here).** `GET /analytics/items`
 (access, global tier) returns Item rows across reports with the
-parameters of §24A's filtering table (`branch`, `type`, `status`,
+parameters of the filter contract defined in this section
+(`branch`, `type`, `status`,
 `dateFrom`/`dateTo`, `q`, `page`/`limit`; §27.4 envelope with
 `docs/page/limit`). It reads **only stored Item rows** — no
 derivation and no model call ever runs inside this endpoint.
@@ -8345,8 +8374,9 @@ status?, matchedFields }], page, limit, totalDocs, totalPages }`
 (`DD-MM-YY`) or branch `name`; `subtitle` = the report's branch
 name (the matched one, or the report's own `branch` when the
 match came from a visit) / branch `location`; `matchedFields` =
-which indexed field(s)
-matched (for highlight, chrome copy per §7.6).
+the branch-index field(s) matched (`name` and/or `location` —
+matches resolve through branch rows only, §39.2), used for
+highlighting (chrome copy per §7.6).
 
 **Contract JSON** (folded from the route-contract review,
 2026-08-19): request
@@ -8361,10 +8391,10 @@ matched (for highlight, chrome copy per §7.6).
       {
         "type": "report",
         "entityId": "64f1a2b3c4d5e6f7a8b9c0d1",
-        "title": "19-08-26 — Addis 6 Kilo",
-        "subtitle": "Water pump on floor 2 not working",
+        "title": "19-08-26",
+        "subtitle": "Addis 6 Kilo",
         "status": "generated",
-        "matchedFields": ["latest", "items.text"]
+        "matchedFields": ["name"]
       }
     ],
     "page": 1,
@@ -8449,14 +8479,18 @@ hard-coded into models (§18.8/§25).
 
 - `POST /mock/seed` (access; **development only** §40.5):
   creates a deterministic fixture set:
-  **user fixtures** (D5) — the two §25.3 accounts (the
+  **user fixtures** — the two §25.3 accounts (the
   supervisor persona `ቤዛ አያሌው` and a second user),
   schema-valid per §19 (email + ADR-007 hash), created
   idempotently (upsert on email — no unique-index collision
   on rerun), with **no real email or password material**: the
   hash is a dev-only placeholder and the accounts can never
   authenticate (§28 login always fails for them). They are the
-  **only non-`user`-scoped writes** (BR-13 otherwise applies).
+  **only non-`user`-scoped writes** (BR-13 otherwise applies);
+  both are counted in the seed response (`users: 2` — the
+  persona account is not the current user; ownership scoping
+  (BR-13) is exercisable at data level against the second
+  account's rows).
   Everything else is written for the **current user only**
   (BR-13 — seeding writes only `user`-scoped rows): branches
   (3 active, 1 archived), reports in each of the four
@@ -8486,7 +8520,7 @@ hard-coded into models (§18.8/§25).
   "message": "Mock data seeded",
   "data": {
     "seeded": {
-      "users": 1,
+      "users": 2,
       "branches": 3,
       "reports": 4,
       "audios": 6,
@@ -8533,19 +8567,21 @@ handler (404 `"Route not found"`), §40.5.
 
 Both endpoints wrap the full write/delete set in the §27.7
 template (startSession → ... → commit). The controller never
-commits incrementally; the `mock` routes mount their own
-`ensureMockEnabled` guard (§40.5) before the chain.
+commits incrementally; the `mock` routes are mounted only in
+development (§40.5) — there is no in-route environment guard.
 
 ### 40.5 Environment gating
 
-`ensureMockEnabled`: allowed **only** when `NODE_ENV` is
+**One mechanism only — conditional mount:** the `mock` route
+module is mounted by `routes/index.js` only when `NODE_ENV` is
 `development` (asserted at boot; the constants file exposes it
-as frozen config, §26.2). Any other environment gets 404 with
-the §60 catalog copy ("Mock data is only available in
-development"). Grep gate: no mock route registration in
+as frozen config, §26.2). Outside development the routes do not
+exist: any call falls through to the §27.5 not-found handler
+(404 `"Route not found"` — no guard middleware, no mock-specific
+copy, §40.2). Grep gate: no mock route registration in
 production builds (the route module is conditionally mounted by
 `routes/index.js` per the env flag — not by string env checks
-strewn through code).
+strewn through code, and no `ensureMockEnabled` guard exists).
 
 ### 40.6 States & edge cases
 
@@ -8565,7 +8601,8 @@ strewn through code).
 
 - Grep gates: `mock/` never imported by models (§18.8); no seed
   call outside `mock.routes.js`; `node --expose-gc` not needed;
-  no `isProduction` checks other than the guard; no physical
+  no `isProduction` checks other than the §40.5 conditional
+  mount; no physical
   files written by mock (metadata-only, ADR-037).
 - Cross-section checks: mirrors §25 (content rules), §19–§24
   (models), §18.5 (sessions), §27 (envelope), §62 (sweeper for
@@ -12480,7 +12517,7 @@ errors appear inline (§46.4).
 - Empty states carry chrome English copy + the page's primary
   action (samples used across §49–§57: "No reports yet —
   record your first day", "No branches yet — add your first
-  branch", "No results found", "No other active sessions").
+  branch", "No results found").
 - "This section has issues, review them below" is the fixed
   form-summary line (§52.10/§46.4).
 - Error copy never leaks backend internals (§27.5 — the
@@ -14144,6 +14181,85 @@ review file is resolved as follows:
   file's draft said duplicate branch names → 409; the spec's
   canonical rule (§30.3/§30.7 — no unique index, duplicates
   allowed) governs; the 409 wording was folded away.
+
+### 69.3.2 Pass-2 backend close-out record (2026-08-19, owner-approved)
+
+The exhaustive pass over §25–§40 (owner directive: "Exhaustively
+go through §25 §26 §27 §28 §29 §30 §31 §32 §33 §34 §35 §36 §37
+§38 §39 §40 and plan to complete"; the plan's 18 supervisor
+stories and the Architect WH battery were approved as presented
+on 2026-08-19). Findings F1–F18 of the pass register plus the
+derived answers, all applied:
+
+- **F1 (§31.6)** — folded JSON's "403 at `generated`" for
+  `PATCH /reports/:reportId/content` removed: content is editable
+  at every status (BR-10; matrix errors were already "404, 422").
+- **F2/F3 (§36.7)** — example triples are §11.4 register members
+  (`gemini` / `gemini-3.1-flash-lite`, `"reasoning": "medium"`);
+  `reasoning` is always a recorded `AI_REASONING_EFFORTS` string,
+  never `null` and never a boolean (§24.2 registry String-required;
+  the user turn records the effort governing it, §36.4).
+- **F4 (§39.3)** — search example corrected to branch-index
+  semantics: `matchedFields: ["name"]`, subtitle = the matched
+  branch name; the item-text subtitle and `["latest","items.text"]`
+  are gone (transcription/item text is never indexed, §39.2).
+- **F5 (§40.2)** — seed response `users: 2` (the §25.3 persona
+  account + the second user; the persona is not the current
+  user — BR-13 is exercisable at data level); stray "(D5)"
+  marker removed.
+- **F6 (§34.6)** — generation response aligned to the approved
+  C8 ReportDetailDto single round-trip
+  (`{ report, transcription: { latest, items } }`); the stale
+  "ReportDto … and `data.content`" wording retired.
+- **F7 (§37.5)** — content-retrieval prose corrected: content is
+  returned as stored (the `latest` HTML), sanitized per §61; the
+  PDF path formats from markup, TXT/CSV/XLSX strip client-side.
+- **F8 (§28.7)** — duplicate-email 409 copy unified to §28.3's
+  "An account with this email already exists".
+- **F9 (§26.4)** — wording corrected: no **public static mount**
+  (uploads service-internal, §32; the avatar is served only via
+  the authenticated `GET /auth/avatar`, §28.5).
+- **F10 (§40.4/§40.5)** — one 404 mechanism only: conditional
+  mount (dev-only, §26.2 frozen config); the
+  `ensureMockEnabled` guard and its "Mock data is only available
+  in development" copy are removed — outside development any call
+  falls to the §27.5 not-found handler.
+- **F11 (§31.4/§24A.2/§24A.4)** — stale §34.4 cross-refs corrected
+  to §34.6.
+- **F12 (§32.2/§32.8)** — video rejection is a plain MIME rule
+  (the recorder is audio-only, §53; no video path exists — not a
+  deferred feature): 422 with "Only audio recordings are
+  supported"; the "§19.1 placeholder message (deferred D1)"
+  reference removed (D1 is TTS, and §19.1 has no placeholder).
+- **F13 (§30.3)** — drafting artifact ("location optional? no —
+  required per §20: …") cleaned.
+- **F14 (§33.7)** — failure granularity stated explicitly:
+  per-audio; `completed` = audios fully transcribed in this call,
+  `failed` = audios with failed/pending chunks (re-run skips
+  succeeded chunks; spans idempotent).
+- **F15 (§32.3)** — clips-list prose names the paginated §27.6
+  shape (JSON was already paginated).
+- **F16 (§38.2)** — "§24A's filtering table" removed: the item
+  filter contract is defined first in §38.2 itself.
+- **F17 (§36.6)** — row race is a raw 409 `CONFLICT` (§29 never
+  remaps it; the client re-reads and retries), matching the
+  matrix's "409 (row race)".
+- **F18 (§15.5)** — `authEndpoints.js` tree comment updated to
+  register/login/refresh/logout/google-stub/avatar; the
+  `profileEndpoints.js` "+ sessions" wording removed (§57.4
+  retired).
+- **Also applied:** §28.3 matrix `PATCH /auth/profile` request
+  includes `firstName?`/`lastName?`; §28.8 grep gate includes the
+  §28.6 stub; §28.2 rotation records the documented acceptance
+  that a stolen refresh token stays usable until its 7-day expiry
+  (reuse is undetected without a store — mirror of the 15-minute
+  access-token window); §60.7 sample list drops the retired
+  sessions empty-state ("No other active sessions").
+- **Audited-no-change:** §25 (rules/fixture inventory), §27
+  (tiers/envelope), §29 (validation chains), §35 (correction
+  modes), §38 (KPI/chart rules), §39.2/§39.4–§39.5 (index
+  decision/scoring), §40.6–§40.7 (edge cases/gates, aside from
+  F10's guard removal).
 
 ### 69.3 Assumptions register
 

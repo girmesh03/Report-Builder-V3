@@ -211,13 +211,15 @@ Fix the root cause, then rebuild: re-derive every DERIVED spec section (§11, §
 
 ## Next Step
 
-Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — 14 stories approved (2026-08-18); **all five sections closed + pass consistency sweep COMPLETE + checkpoint commit `4ef26c2` executed (2026-08-18, F73)**; **pass-1a data-model audit re-pass COMPLETE (2026-08-18, F74 — §19.3 two-TTL stale parenthetical fixed, §17.3/§24.1 ChatConversation cardinality 1—N→1—1; A2/A3/A4 verified no-change; per-section grep gates re-run)**; **route-contract review deliverable COMPLETE (2026-08-19 — `.opencode/plan/route-contract-review.md`, 48 endpoints page-grouped with exact request/response JSON, no tables)**: owner directives absorbed — no `/auth/me` (redux persist), no session endpoints (cookies), no users management (solo user), branch-detail aggregate `GET /branches/:branchId/detail`, visits main-branch-locked at visits[0] (kernel §6.4 + §21.2 amendment, C1), `supervisorName` dropped from create payload, `branchId`→`branch` rename, canonical `GET /analytics/items` (§24A.3 wording fix); drift register B1–B7 + decision list C1–C8 appended; NEXT pointer → **pass-1a/pass-1b close-out report + commit request** → **Stage 2 pass 2 (backend §25–§40) Supervisor story gate (route contract = pass input)**. Owner-directed amendments applied 2026-08-18: REST route audit of the reports/AI domain (`PUT /reports/:id/transcription` merges transcribe+re-transcribe, `POST .../corrections`, `POST .../corrections/transcripts`, `POST .../generations`, `PUT .../content` revert, `PUT .../visits`; old literals grep-clean) + S12 SDK adoption (`addisai@^0.2.0` for STT+TTT, paid policy, no-correction-schema carve-out, standing reasoning default per conversation) + §11 S1–S4 derivations (home boundary, deep freeze, whitelist, sweep discipline, status registration gate, mirror parity; `ADDIS_AI_BASE_URL` removed — SDK-internal). (Checkpoint commits `chore: phase 4 owner-corrections` + `chore: spec-correction pass 1b architecture close-out` executed 2026-08-18.) **Route-contract FOLD COMPLETE (2026-08-19, F75/F76 — owner approved "proceed"):** the contract's 48 endpoints folded into the spec (contract JSON blocks in §26.6/§28/§30/§30.2.1/§31/§32/§33/§36/§37/§38/§39/§40; §28 session/`/auth/me`/`optionalAuth` removals; §57.4 retired; §42.3/§57.6 boot-probe notes; §56.5 rewritten to the detail aggregate; §24A.3 items-path fix; §21.7/§6.10/§6.4/§5 BR-03 kernel C1 applied; §69.3.1 fold record with C1–C8 sign-off; review file DELETED per owner directive; fold-time correction — branch duplicate-name 409 folded away per §30.3/§30.7, no unique index) — **close-out sweep + commit request NEXT**; then Stage 2 pass 2 (backend §25–§40) Supervisor story gate (folded contract = pass input).
+**Pass 2 (backend §25–§40) CLOSE-OUT COMPLETE (2026-08-19).** Owner approved the pass plan as presented ("proceed"): 18 supervisor stories + the WH battery (W1–W9) answered and applied. 16/16 sections disposed (12 re-derived incl. fold-touched regions, §25/§27/§29/§35/§38 audited-no-change; §39/§40 dispositions recorded at §69.3.2). Findings F1–F18 of the pass register applied + 4 extra fixes (PATCH-profile request row, §28.8 stub gate, §28.2 refresh-reuse acceptance, §60.7 sessions leftover) — full record at **§69.3.2**. NEXT pointer → **close-out sweep (git status/diff + grep gates) + commit request `chore: spec-correction pass 2 backend close-out` (gated)** → **Stage 2 pass 3 (frontend §41–§60) Supervisor story gate**.
+
+## Stages (status), F75/F76 — owner approved "proceed"):** the contract's 48 endpoints folded into the spec (contract JSON blocks in §26.6/§28/§30/§30.2.1/§31/§32/§33/§36/§37/§38/§39/§40; §28 session/`/auth/me`/`optionalAuth` removals; §57.4 retired; §42.3/§57.6 boot-probe notes; §56.5 rewritten to the detail aggregate; §24A.3 items-path fix; §21.7/§6.10/§6.4/§5 BR-03 kernel C1 applied; §69.3.1 fold record with C1–C8 sign-off; review file DELETED per owner directive; fold-time correction — branch duplicate-name 409 folded away per §30.3/§30.7, no unique index) — **close-out sweep + commit request NEXT**; then Stage 2 pass 2 (backend §25–§40) Supervisor story gate (folded contract = pass input).
 
 ## Stages (status)
 
 - Stage 0 — Boot: branch `spec-correction` created; kernel sections read (§1–§10, §13, §61–§66, §69); working files appended. **complete**
 - Stage 1 — Kernel classification: 18 KERNEL / 51 DERIVED, borderline calls decided by the Architect (F63); owner confirmed. **complete**
-- Stage 2 — Pipeline passes, dependency order: data model (§17–§24A) → architecture & constants (§11/§12/§14/§15/§16) → backend (§25–§40) → frontend (§41–§60) → cross-cutting (§67/§68); step-5 review gate per pass; coverage register (below) is the section inventory. **in progress — pass 1a closed (+ audit re-pass F74), pass 1b closed (F69–F73), pass 2 NEXT**
+- Stage 2 — Pipeline passes, dependency order: data model (§17–§24A) → architecture & constants (§11/§12/§14/§15/§16) → backend (§25–§40) → frontend (§41–§60) → cross-cutting (§67/§68); step-5 review gate per pass; coverage register (below) is the section inventory. **in progress — pass 1a closed (+ audit re-pass F74), pass 1b closed (F69–F73), pass 2 closed (2026-08-19, §69.3.2), pass 3 NEXT**
 - Stage 3 — §63.9 audit C1–C6 green; §69 closure records; zero `TODO(open)` without an OQ row; coverage register reconciled 51/51 dispositions, zero partials. **pending** (hard gate before any code — freeze: no `backend/*`/`client/*` edits until then)
 - Stage 4 — Backend re-implementation per §15.4 (frontend frozen); Postman-style endpoint tests per endpoint (edge-case matrix, result ledger). **pending**
 - Stage 5 — Frontend linking & correction; mock adapter deleted (§66.10 grep gate). **pending**
@@ -261,9 +263,26 @@ Stage 2 pass 1b (architecture: §11, §12, §14, §15, §16) — 14 stories appr
 | §15 Project structure     | **closed** | re-derived  | S11 — closed 2026-08-18 (5 stories + 8-question battery approved "proceed"; 9-point repo-drift table resolved: useMediaRecorder home/name, report/print placement, reusable additions, sanitizeHtml/wizardValidation/auth-validators nodes, §15.3 authoring-workspace, §58.3 path, §15.6 lines; three-class state legend (scaffold/implemented/planned) + markers applied; MuiReasoningSelect = planned §54 round) |
 | §16 AI provider contracts | **closed** | re-derived  | S13 (STT contract) — closed 2026-08-18 (§16.4/§33.4/§33.5/§16.8 corrections); S12 (text generation + addisai SDK + standing reasoning) — closed 2026-08-18 after owner "proceed" (C1–C25: SDK adoption, paid policy, no-correction-schema carve-out, conversation reasoning default, §69 records OQ-011/012/013); REST route audit applied to the reports/AI domain (see Next Step)                                |
 
-### Pass 2 — backend §25–§40 [NEXT] (input: the route contract folded into the spec 2026-08-19 — §26.6/§28–§40 contract JSON blocks; drift register B1–B7 + decision list C1–C8 signed off at §69.3.1)
+### Pass 2 — backend §25–§40 [CLOSED 2026-08-19] (input: the route contract folded into the spec — §26.6/§28–§40 contract JSON blocks; drift register B1–B7 + decision list C1–C8 signed off at §69.3.1; pass plan 18 stories + WH battery W1–W9 owner-approved "proceed"; corrections record at §69.3.2)
 
-§25 §26 §27 §28 §29 §30 §31 §32 §33 §34 §35 §36 §37 §38 §39 §40
+| Section                | Status | Disposition        | Evidence              |
+| ---------------------- | ------ | ------------------ | --------------------- |
+| §25 Mock data rules    | closed | audited-no-change  | F1–F18 register read  |
+| §26 Entry & app        | closed | re-derived (F9)    | §69.3.2               |
+| §27 Envelope/tiers/errors | closed | audited-no-change  | §69.3.2               |
+| §28 Auth & sessions     | closed | re-derived (F8 + profile row, stub gate, refresh-reuse acceptance) | §69.3.2 |
+| §29 Validation chains   | closed | audited-no-change  | §69.3.2               |
+| §30 Branches            | closed | re-derived (F13)   | §69.3.2               |
+| §31 Reports             | closed | re-derived (F1, F11) | §69.3.2               |
+| §32 Audio               | closed | re-derived (F12, F15) | §69.3.2               |
+| §33 Transcription       | closed | re-derived (F14)   | §69.3.2               |
+| §34 Generation          | closed | re-derived (F6, F11) | §69.3.2               |
+| §35 Corrections         | closed | audited-no-change  | §69.3.2               |
+| §36 Chat                | closed | re-derived (F2, F3, F17) | §69.3.2               |
+| §37 Export              | closed | re-derived (F7)    | §69.3.2               |
+| §38 Analytics           | closed | audited-no-change  | §69.3.2               |
+| §39 Search              | closed | re-derived (F4)    | §69.3.2               |
+| §40 Mock endpoints      | closed | re-derived (F5, F10) | §69.3.2               |
 
 ### Pass 3 — frontend §41–§60 [pending]
 
