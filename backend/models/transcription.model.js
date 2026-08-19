@@ -18,16 +18,26 @@
  * business-logic hooks (§18.6, §23.6).
  */
 import mongoose from 'mongoose';
+import mongoosePaginateV2 from 'mongoose-paginate-v2';
 import { LANGUAGE_CODES } from '../utils/constants.js';
 
 const { Schema, model } = mongoose;
 
 /**
- * STT audit metadata (§23.2) — the Addis AI request correlation id
- * (persisted per the §16.4 permission, ADR-019) and the voice model
- * actually used (a free provider-native string — the `AI_MODELS`
- * registry is the text-generation registry only). Both null when
- * unknown; embedded child document, `_id: false`.
+ * STT audit metadata (§23.2, D8) — the Addis AI request correlation
+ * id (persisted per the §16.4 permission, ADR-019; null if unknown),
+ * the voice model actually used (a free provider-native string — the
+ * `AI_MODELS` registry is the text-generation registry only; null if
+ * the provider never echoes it), and the **STT merge ledger**:
+ * `audios` — the `_id`s of the Audio rows whose clips the current
+ * `raw` merge covers (D8, §33.6). The ledger is the cross-call
+ * per-audio skip source: an audio already in the ledger is
+ * "already-succeeded" and never re-heard; a transcription row
+ * exists only after a fully successful merge (no partial rows —
+ * §23.4/F89-2), so a re-run with a newly attached audio merges
+ * `join([current raw, ...newTexts])` and the ledger grows. The
+ * ledger is a server-internal audit field — excluded from the DTO
+ * (§23.7, D21). Embedded child document, `_id: false`.
  */
 const sttSchema = new Schema(
   {
@@ -38,6 +48,10 @@ const sttSchema = new Schema(
     model: {
       type: String,
       default: null,
+    },
+    audios: {
+      type: [{ type: Schema.Types.ObjectId }],
+      default: [],
     },
   },
   { _id: false },
@@ -110,6 +124,12 @@ function deleteTransform(doc, ret) {
 
 transcriptionSchema.set('toJSON', { virtuals: true, transform: deleteTransform });
 transcriptionSchema.set('toObject', { virtuals: true, transform: deleteTransform });
+
+/**
+ * Pagination plugin (§27, D1) — list endpoints paginate at
+ * page 1 / limit 10 / max 100 (`PAGINATION_*`, §11.3).
+ */
+transcriptionSchema.plugin(mongoosePaginateV2);
 
 const Transcription = model('Transcription', transcriptionSchema);
 

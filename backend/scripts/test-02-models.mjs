@@ -378,8 +378,8 @@ addCheck('transcription', 20, 'transcription language enum = LANGUAGE_CODES (§2
     return [expect(JSON.stringify([...enums].sort()) === JSON.stringify([...expected].sort()), `enum ${JSON.stringify(enums)} vs ${JSON.stringify(expected)}`)];
   }));
 
-addCheck('transcription', 21, 'transcription stt subdoc { requestId, model } _id:false (§23.2)', () =>
-  modelCheck(21, 'transcription stt subdoc { requestId, model } _id:false (§23.2)', () => {
+addCheck('transcription', 21, 'transcription stt subdoc { requestId, model, audios } _id:false (§23.2, D8)', () =>
+  modelCheck(21, 'transcription stt subdoc { requestId, model, audios } _id:false (§23.2, D8)', () => {
     const sttPath = Transcription.schema.path('stt');
     const schema = sttPath?.schema;
     const checks = [];
@@ -389,8 +389,28 @@ addCheck('transcription', 21, 'transcription stt subdoc { requestId, model } _id
       const sp = schema.paths;
       checks.push(expect(sp.requestId?.instance === 'String' && sp.requestId.defaultValue === null, 'stt.requestId String null default'));
       checks.push(expect(sp.model?.instance === 'String' && sp.model.defaultValue === null, 'stt.model String null default'));
-      checks.push(expect(Object.keys(sp).length === 2, `stt fields exactly 2, got ${Object.keys(sp).join(',')}`));
+      checks.push(expect(sp.audios?.instance === 'Array', 'stt.audios Array'));
+      const doc = new Transcription({
+        user: new mongoose.Types.ObjectId(), report: new mongoose.Types.ObjectId(),
+        raw: 'raw', latest: 'latest',
+      });
+      doc.stt.audios.push('507f1f77bcf86cd799439011');
+      let castEnforced = false;
+      try {
+        doc.stt.audios.push('not-an-objectid');
+      } catch (err) {
+        castEnforced = err.name === 'CastError';
+      }
+      checks.push(expect(castEnforced, 'stt.audios item ObjectId cast enforced (Mongoose 9: no .caster — runtime probe)'));
+      checks.push(expect(Object.keys(sp).length === 3, `stt fields exactly 3, got ${Object.keys(sp).join(',')}`));
     }
+    const doc2 = new Transcription({
+      user: new mongoose.Types.ObjectId(), report: new mongoose.Types.ObjectId(),
+      raw: 'raw', latest: 'latest',
+      stt: { requestId: 'req-1', model: 'aleph-audio-am', audios: [new mongoose.Types.ObjectId()] },
+    });
+    const json = doc2.toJSON();
+    checks.push(expect(Array.isArray(json.stt?.audios) && json.stt.audios.length === 1, 'stt.audios serializes as an array'));
     return checks;
   }));
 

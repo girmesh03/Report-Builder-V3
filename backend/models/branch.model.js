@@ -15,6 +15,7 @@
  * business-logic hooks (§18.6, §20.6).
  */
 import mongoose from 'mongoose';
+import mongoosePaginateV2 from 'mongoose-paginate-v2';
 
 const { Schema, model } = mongoose;
 
@@ -73,6 +74,12 @@ function deleteTransform(doc, ret) {
 
 branchSchema.set('toJSON', { virtuals: true, transform: deleteTransform });
 branchSchema.set('toObject', { virtuals: true, transform: deleteTransform });
+
+/**
+ * Pagination plugin (§27, D1) — list endpoints paginate at
+ * page 1 / limit 10 / max 100 (`PAGINATION_*`, §11.3).
+ */
+branchSchema.plugin(mongoosePaginateV2);
 
 const Branch = model('Branch', branchSchema);
 

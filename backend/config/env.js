@@ -12,6 +12,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
+import AddisAI from 'addisai';
+import { AI_PROVIDER_RETRIES } from '../utils/constants.js';
 
 const configDir = dirname(fileURLToPath(import.meta.url));
 const backendEnvPath = join(configDir, '..', '.env');
@@ -41,6 +43,8 @@ const ENV_SPEC = {
   NVIDIA_API_KEY: { required: true },
   NVIDIA_API_URL: { required: true },
   AI_TIMEOUT_MS: { default: '30000' },
+  FFMPEG_PATH: { default: 'ffmpeg' },
+  FFPROBE_PATH: { default: 'ffprobe' },
 };
 
 /**
@@ -99,3 +103,18 @@ function buildEnv() {
  * @type {Object<string, string>}
  */
 export const env = Object.freeze(buildEnv());
+
+/**
+ * The single addisai SDK instance (§16.7, S12) — built exactly once
+ * here, the only module allowed to construct it (§16.3): `maxRetries`
+ * from `AI_PROVIDER_RETRIES` (§11.3), `timeout` from the
+ * env-overridable `AI_TIMEOUT_MS` (§10.4). Exported for injection
+ * into the §33 STT / §34–§36 provider adapters; no other module
+ * reads `ADDIS_API_KEY` or touches the SDK constructor (grep gate
+ * §16.8).
+ */
+export const addisai = new AddisAI({
+  apiKey: env.ADDIS_API_KEY,
+  maxRetries: AI_PROVIDER_RETRIES,
+  timeout: Number(env.AI_TIMEOUT_MS),
+});

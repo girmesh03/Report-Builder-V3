@@ -17,6 +17,7 @@
  * (§22.7), no business-logic hooks (§18.6, §22.6).
  */
 import mongoose from 'mongoose';
+import mongoosePaginateV2 from 'mongoose-paginate-v2';
 import { AUDIO_ALLOWED_MIME_TYPES } from '../utils/constants.js';
 
 const { Schema, model } = mongoose;
@@ -89,6 +90,12 @@ function deleteTransform(doc, ret) {
 
 audioSchema.set('toJSON', { virtuals: true, transform: deleteTransform });
 audioSchema.set('toObject', { virtuals: true, transform: deleteTransform });
+
+/**
+ * Pagination plugin (§27, D1) — the clip-list endpoint paginates at
+ * page 1 / limit 10 / max 100 (`PAGINATION_*`, §11.3).
+ */
+audioSchema.plugin(mongoosePaginateV2);
 
 const Audio = model('Audio', audioSchema);
 

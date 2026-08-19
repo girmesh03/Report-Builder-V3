@@ -15,6 +15,7 @@
  * business-logic hooks (§18.6, §21.8).
  */
 import mongoose from 'mongoose';
+import mongoosePaginateV2 from 'mongoose-paginate-v2';
 import { ARCHIVED_TTL_SECONDS, REPORT_STATUSES } from '../utils/constants.js';
 
 const { Schema, model } = mongoose;
@@ -157,6 +158,12 @@ function deleteTransform(doc, ret) {
 
 reportSchema.set('toJSON', { virtuals: true, transform: deleteTransform });
 reportSchema.set('toObject', { virtuals: true, transform: deleteTransform });
+
+/**
+ * Pagination plugin (§27, D1) — the reports list endpoint paginates
+ * at page 1 / limit 10 / max 100 (`PAGINATION_*`, §11.3).
+ */
+reportSchema.plugin(mongoosePaginateV2);
 
 const Report = model('Report', reportSchema);
 

@@ -18,6 +18,7 @@
  * business-logic hooks (§18.6, §24.6).
  */
 import mongoose from 'mongoose';
+import mongoosePaginateV2 from 'mongoose-paginate-v2';
 import {
   AI_PROVIDERS,
   AI_REASONING_DEFAULT,
@@ -137,6 +138,12 @@ function deleteTransform(doc, ret) {
 
 chatConversationSchema.set('toJSON', { virtuals: true, transform: deleteTransform });
 chatConversationSchema.set('toObject', { virtuals: true, transform: deleteTransform });
+
+/**
+ * Pagination plugin (§27, D1) — list endpoints paginate at
+ * page 1 / limit 10 / max 100 (`PAGINATION_*`, §11.3).
+ */
+chatConversationSchema.plugin(mongoosePaginateV2);
 
 const ChatConversation = model('ChatConversation', chatConversationSchema);
 

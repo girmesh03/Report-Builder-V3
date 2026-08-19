@@ -292,3 +292,8 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - **EADDRINUSE episode:** the owner's 23:03 `npm run dev` crashed — the session's leftover detached chain still held :4000. Both chains killed, port verified free; lifecycle rule recorded (F90): never hand off a busy port.
 - **Step 5:** accepted by owner (proceeded to documentation on the fully green ledger).
 - **NEXT:** step 6 = gated commit on `phase-6-backend-identity` (owner approval) → post-git merge to `main` + branch cleanup → sub-phase 4 (domain APIs §30–§36 + addisai install).
+
+## 2026-08-20 — Sub-phase 4 (domain APIs §30–§36) execution begins
+- Owner approved the complete sub-phase-4 plan ("Proceed, ensure to apply the implementation phases protocol, with deep logical reasoning … exhaustively"). Plan mode lifted; build mode.
+- Grounding complete (F91): spec §22/§23/§24/§24A/§11/§13/§38.5/§61/§62 + the whole existing backend codebase (7 models, env.js, rateLimit.js, routes, validators, errors, app.js, test-02) read and verified against the spec — zero drift; two real gaps confirmed (rateLimit PUT-transcription ai tier, env.js FFMPEG/FFPROBE + SDK instance). Working files updated (task_plan sub-phase-4 rows, findings F91).
+- NEXT: create `phase-6-backend-domains` from main 875b13d → install addisai@^0.2.0 → verify SDK surface + ffmpeg → implement per plan order.

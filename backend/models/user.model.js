@@ -15,6 +15,7 @@
  */
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import mongoosePaginateV2 from 'mongoose-paginate-v2';
 import { BCRYPT_SALT_ROUNDS } from '../utils/constants.js';
 
 const { Schema, model } = mongoose;
@@ -122,6 +123,13 @@ function deleteTransform(doc, ret) {
 
 userSchema.set('toJSON', { virtuals: true, transform: deleteTransform });
 userSchema.set('toObject', { virtuals: true, transform: deleteTransform });
+
+/**
+ * Pagination plugin (§27, D1) — `mongoose-paginate-v2` on every
+ * model: list endpoints paginate at page 1 / limit 10 / max 100
+ * (`PAGINATION_*`, §11.3) through the shared pagination helper.
+ */
+userSchema.plugin(mongoosePaginateV2);
 
 const User = model('User', userSchema);
 

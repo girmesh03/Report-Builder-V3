@@ -19,6 +19,7 @@
  * business-logic hooks (§18.6).
  */
 import mongoose from 'mongoose';
+import mongoosePaginateV2 from 'mongoose-paginate-v2';
 import { ITEM_STATUSES, ITEM_STATUSES_BY_TYPE, ITEM_TYPES } from '../utils/constants.js';
 
 const { Schema, model } = mongoose;
@@ -143,6 +144,12 @@ function deleteTransform(doc, ret) {
 
 itemSchema.set('toJSON', { virtuals: true, transform: deleteTransform });
 itemSchema.set('toObject', { virtuals: true, transform: deleteTransform });
+
+/**
+ * Pagination plugin (§27, D1) — the §38 items list endpoint
+ * paginates at page 1 / limit 10 / max 100 (`PAGINATION_*`, §11.3).
+ */
+itemSchema.plugin(mongoosePaginateV2);
 
 const Item = model('Item', itemSchema);
 

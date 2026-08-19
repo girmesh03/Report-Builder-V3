@@ -31,13 +31,18 @@ const TOO_MANY_REQUESTS_BODY = {
  * Tier-path selection (ADR-029): auth endpoints live under
  * `/api/v1/auth` (§28); AI-tier endpoints are the provider-calling
  * routes whose path carries a `/generations`, `/corrections`, or
- * `/chat` segment (§34–§36). The health endpoint is exempt (§26.6).
+ * `/chat` segment (§34–§36), plus the STT write
+ * `PUT /reports/:reportId/transcription` (§33.8 — the only path
+ * where the method matters: PUT with a `/transcription` segment).
+ * The health endpoint is exempt (§26.6).
  * @param {string} path - Request path.
+ * @param {string} method - Request method (needed for the §33.8 rule).
  * @returns {boolean} True when the path belongs to a non-global tier.
  */
-function isTieredPath(path) {
+function isTieredPath(path, method) {
   if (path === '/api/v1/health') return true;
   if (path.startsWith('/api/v1/auth')) return true;
+  if (method === 'PUT' && /\/transcription(\/|$)/.test(path)) return true;
   return /(\/generations|\/corrections|\/chat)(\/|$)/.test(path);
 }
 
@@ -49,7 +54,7 @@ export const globalLimiter = rateLimit({
   limit: RATE_LIMIT_GLOBAL_MAX,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  skip: (req) => isTieredPath(req.path),
+  skip: (req) => isTieredPath(req.path, req.method),
   handler: (req, res) => res.status(httpStatus.TOO_MANY_REQUESTS).json(TOO_MANY_REQUESTS_BODY),
 });
 
