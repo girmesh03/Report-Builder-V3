@@ -685,3 +685,20 @@ Owner approved the Stage 3 plan ("proceed") with two C2 dispositions: the §15.6
 **C6 — Sign-off.** Single run green ⇒ single-source-of-truth milestone; record appended as §69.3.3. `TODO(open)` reconciliation: the marker exists only at its 5 definitional sites — zero markers without a §69 row; every OPEN OQ (003/004/008/009/010/011/012/013/014) has its owning-section pointer + blocks column.
 
 **Verification:** C1 re-run after the edits = zero misses; diff scope = spec + 3 working files only. Register reconciled 51/51 zero partials (18 KERNEL untouched). NEXT → Stage-3 close-out report + commit request (gated) → §9.8 branch lifecycle → Stage 4 (backend-first re-implementation, §15.4).
+
+## F83 — 2026-08-19 — Effort reorientation: implementation & re-implementation (owner directives)
+
+The spec-correction effort closed with `7fb1580` (owner: "only commit" — no push, no branch lifecycle, no Stage 4). The owner then gave three directives that reorient the effort from correction to implementation and re-implementation:
+
+1. **Reorientation:** make AGENTS.md, findings.md, progress.md, prompt.md, task_plan.md state implementation & re-implementation instead of spec-correction.
+2. **Strict protocol chain (verbatim):** Phase protocol (§66) + specs (`.opencode/plan/*`) + skills (`.opencode/skills/*`) + AGENTS.md + findings.md + progress.md + task_plan.md → role agent = Supervisor + Software Architect/Engineer/UI-UX + Design Lead ⇒ implementation ⇒ Postman-like tests until all green (backend only) ⇒ phase-protocol step 5 (backend only: request to run the script to test and verify) ⇒ document ⇒ phase-protocol step 6 ⇒ ready for the next.
+3. **Hard gate (verbatim):** unless the backend is completed, the frontend is never re-implemented.
+
+**Consequences recorded:**
+- The role model gains **Design Lead** (owner directive): agent = Supervisor + Software Architect/Engineer/UI-UX + Design Lead; the owner remains the interaction partner only.
+- Per-phase flow for every backend phase: implement → Postman-like tests until all green (backend only) → step 5 (backend only: request to run the script to test and verify) → document → step 6 → ready for the next. At the step-5 gate of backend sub-phases the owner runs the test script to test and verify.
+- Stage 4 (backend implementation per §15.4) is NEXT; Stage 5 (frontend re-implementation) is strictly gated on backend completion — zero `client/*` edits during Stage 4.
+- Branch lifecycle stays gated: implementation moves to a new branch per §9.8 and `spec-correction` is deleted, only with explicit owner approval.
+- The §66.5 chain now reads: standing instructions → corrected spec as sole behavioral input → logical reasoning → implementation; the corrected spec (51/51, C1–C6 green, §69.3.3) is the complete behavioral contract — the codebase is implemented toward it, never cited as justification.
+
+**Change set (same change):** AGENTS.md (repository status + protocol section), prompt.md (full rewrite — correction content becomes the closed record, operative content is implementation & re-implementation), task_plan.md (title/goal/Next Step/stages/standing rules), findings.md (F83), progress.md (session log). Spec untouched (already committed at `7fb1580`). NEXT → Stage 4 (backend-first per §15.4; per-phase flow above).

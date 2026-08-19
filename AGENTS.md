@@ -6,6 +6,8 @@ Report Builder V3 — Amharic daily-supervision report builder. Two components: 
 
 The implementation runs on the §66 phases: **phases 1 (foundations) and 2 (design system) are complete and merged to `main`; phase 3 (frontend foundation & network) is complete and merged** (one close-out commit `chore: phase 3 close-out audit`, §9.8). **Phase 4 (frontend feature pages) is in progress on `phase-4-frontend-pages`**: the network endpoint layer (§42.6), the §49 dashboard, the §50 reports list (with the provisional OQ-009 filter dialog, the md+ List/Cards toggle, cards-only below md, per-`isArchived` actions, and the removed page-header eyebrow), and the owner R3-fix review (14 points) **plus its 5-point follow-up round** (eyebrow removal, one-line page header, the session `userId`/redirect-bounce fix — `startSessionForUser` now writes the merged session back to `activeSession` — the `expireSession` SPA redirect, mock TTLs mirroring §28, chart-value finite guards, and the MUI v9 `slots.transition` dialog fix) **plus its 7-point UX pass with the 3 re-opens closed** (search clear button hidden when empty via the unwrapped-adornment sibling rule, one-line header with the action group in the `actions` slot, the ReportCard two-row footer — caption line + right-aligned action row below, the explicit LineChart y-domain killing the `<path>` NaN, fullscreen dialogs radius 0, xs pagination compact, and the removed `slotProps` on `MuiPagination` — MUI v9.3 Pagination has no slots support and leaked it to the DOM root) are complete; the remaining rounds are the §52 wizard + editor install, §51 details, §54 correction, §55 chat, §56 branches, §57 profile, §58 exports, and the close-out audit. The backend holds the P1 foundation only (`config/env.js` frozen env, `utils/constants.js`, `utils/httpStatus.js` — no Express source yet; the `dev`/`start` scripts already point at `server.js`, a §15.4-listed P6 file, so backend `npm run dev` fails until P6). The client holds the P3 deliverables: entry & routing (ADR-025 lazy pages, static guards), the RTK Query network layer with reauth (`redux/features/apiSlice.js`, §42), the §48 auth pages and the round-9 landing composition (cardless ruled-desk hero with the persisting §43.2 waveform, branches strip, how-it-works, CTA band — provisional under OQ-008, §69), the §60 toast surface, and the dev-only mock adapter (`mock/`, §66.10 — deleted at P7). `App.jsx` is the composed root node (theme → baseline → toast → error boundary → Outlet, §41.4). The canonical target trees are §15.4 (backend) and §15.5 (client); follow them when creating files.
 
+**Spec-correction effort — CLOSED 2026-08-19.** The correct-the-spec-then-rebuild correction phase is complete: 51/51 DERIVED sections dispositioned, §63.9 audit C1–C6 green at a single run, sign-off record §69.3.3, close-out commit `7fb1580` on `spec-correction`. The effort now operates as **implementation & re-implementation**: Stage 4 (backend implementation per §15.4) is NEXT; Stage 5 (frontend re-implementation) is strictly gated on backend completion (owner directive, 2026-08-19).
+
 ## Single source of truth
 
 `.opencode/plan/project-specification.md` (≈12k lines) is the authoritative statement of behavior and design (PRD+PDS+SAD+HLD+LLD+SDD in one document). Package manifests are the version source of truth (§13). Nothing else decides behavior (§66.5: standing instructions → spec → logical reasoning → implementation; spec wins over habits).
@@ -21,18 +23,29 @@ The implementation runs on the §66 phases: **phases 1 (foundations) and 2 (desi
 - The `mock/` adapter (§66.10) is a dev-only phase artifact wired under `import.meta.env.DEV` in `apiSlice.js`; it never exists in a production build and is deleted at P7 (grep gate §66.10/§66.11) — not a runtime feature.
 - `.opencode/` tracks only `plan/` and `skills/`; its `node_modules`/`package.json`/`bun.lock` are gitignored.
 
-## Correct-the-Spec-Then-Rebuild protocol (standing effort, started 2026-08-18)
+## Implementation & Re-implementation protocol (standing effort, started 2026-08-18; reoriented 2026-08-19)
 
 The owner's standing instructions for this effort live in `prompt.md` (tracked, controlled document) and override habits and prior session behavior; they never override this file or the skills. The owner's live instructions in conversation override everything.
 
-- **Role model (owner's strict requirement, 2026-08-18):** the agent is the Supervisor AND the Software Architect/Engineer/UI-UX Designer, and makes the decisions. The owner is the interaction partner only — they review, add/remove what is presented, ask iterative questions, dig, and point out blind spots; they are not the Supervisor, not the Architect, and do not make decisions. Nothing waits on an owner decision; preferences/unknowns become §69 OQ rows.
-- **Supervisor user-story gate:** every user story the Supervisor identity enumerates is presented to the owner one by one for add/remove before the Architect answers it.
-- **Architect WH-battery transparency:** every WH question of the Architect's battery is presented to the owner before answers are derived.
-- **Coverage register (task_plan.md):** the 51 DERIVED sections are tracked with a per-section status — not-started / in progress / closed (re-derived | audited-no-change | escalated) — plus an explicit NEXT pointer. A pass closes only when its closed section list is closed, never when the stories run out. Stage 3 requires 51/51 dispositions, zero partials, zero `TODO(open)` without an §69 row.
-- **Freeze rule:** no `backend/*` and no `client/*` edits while `.opencode/plan/project-specification.md` is not fully corrected (prompt.md Stage 3 hard gate). After the spec is fully corrected, re-implementation starts backend-first.
-- **Branch lifecycle:** all spec-correction work happens on `spec-correction`; when the spec is fully corrected, a new branch is created for re-implementation and `spec-correction` is deleted. No commit/push/merge/delete without explicit owner approval (§9.8 step 6).
-- **Correction scope (5-file rule):** spec corrections are applied to `.opencode/plan/project-specification.md`; this file, `prompt.md`, and the §66.3 working files are corrected in the same change set **iff** something in them needs correcting (same-change discipline, §66.6).
-- Current state (2026-08-18): Stage 1 (kernel classification, 18 KERNEL / 51 DERIVED) closed; Stage 2 pass 1a (data model §17–§24A) closed; pass 1b (architecture: §11, §12, §14, §15, §16) is NEXT.
+The strict protocol chain of this effort (owner directive, 2026-08-19):
+
+```
+Phase protocol (§66) + specs (.opencode/plan/*) + skills (.opencode/skills/*) + AGENTS.md + findings.md + progress.md + task_plan.md
+  -> role agent = Supervisor + Software Architect/Engineer/UI-UX + Design Lead
+  => implementation
+  -> Postman-like tests until all green (backend only)
+  -> phase-protocol step 5 (backend only: request to run the script to test and verify)
+  -> document
+  -> phase-protocol step 6
+  -> ready for the next
+```
+
+- **Role model (owner's strict requirement, 2026-08-18):** the agent is the Supervisor AND the Software Architect/Engineer/UI-UX Designer AND the Design Lead, and makes the decisions. The owner is the interaction partner only — they review, add/remove what is presented, ask iterative questions, dig, and point out blind spots; they are not the Supervisor, not the Architect, and do not make decisions. Nothing waits on an owner decision; preferences/unknowns become §69 OQ rows.
+- **Hard gate (owner directive, 2026-08-19):** unless the backend is completed, the frontend is never re-implemented. No `client/*` edits while the backend implementation (Stage 4, §15.4) is incomplete; the frontend is re-implemented and linked only after backend completion.
+- **Per-phase flow (owner directive, 2026-08-19):** implement → Postman-like tests until all green (backend only) → phase-protocol step 5 (backend only: request to run the script to test and verify) → document → phase-protocol step 6 → ready for the next.
+- **Correction effort — closed record:** the correct-the-spec-then-rebuild correction phase is complete (51/51 DERIVED sections dispositioned, §63.9 audit C1–C6 green, sign-off §69.3.3, commit `7fb1580`); the coverage register in `task_plan.md` is the closed inventory. The Supervisor story gate and WH-battery transparency remain the practice whenever an implementation question needs derivation (§66.5).
+- **Branch lifecycle:** the correction set is committed on `spec-correction` (`7fb1580`); implementation work moves to a new branch per §9.8 and `spec-correction` is deleted — branch operations only with explicit owner approval (§9.8 step 6).
+- **No invented details:** unknown behavior is registered in §69 with `TODO(open)` — never silently invented, never argued in local prose. §66.5: standing instructions → corrected spec → logical reasoning → implementation; spec wins over habits.
 
 ## Git protocol (§9.8)
 
