@@ -12,6 +12,11 @@
 import { Router } from 'express';
 import { httpStatus } from '../utils/httpStatus.js';
 import authRoutes from './auth.routes.js';
+import branchRoutes from './branch.routes.js';
+import reportRoutes from './report.routes.js';
+import audioRoutes from './audio.routes.js';
+import transcriptionRoutes from './transcription.routes.js';
+import chatRoutes from './chat.routes.js';
 
 const routes = Router();
 
@@ -27,5 +32,10 @@ routes.get('/health', (req, res) => {
 // auth, branches, reports, audio, transcription, chat, export,
 // analytics, search, mock.
 routes.use('/auth', authRoutes);
+routes.use('/branches', branchRoutes);
+routes.use('/reports', reportRoutes);
+routes.use(audioRoutes);
+routes.use(transcriptionRoutes);
+routes.use(chatRoutes);
 
 export default routes;

@@ -2018,6 +2018,8 @@ values that vary by environment.
 | NVIDIA_API_KEY       | Yes      | —                            | NVIDIA API key (backend only)            |
 | NVIDIA_API_URL       | Yes      | —                            | NVIDIA NIM chat-completions base URL; official value per §16.4 (§16) |
 | AI_TIMEOUT_MS        | No       | 30000                        | AI provider request timeout in ms, env-overridable (§16) |
+| FFMPEG_PATH          | No       | ffmpeg                       | The §33.3 conversion/split binary (env-overridable; the `.env` may pin a full path) |
+| FFPROBE_PATH         | No       | ffprobe                      | The §32.2/§33.3 duration-probe binary (env-overridable; the `.env` may pin a full path) |
 
 Variables marked Required with no default have no fallback values;
 after the §10.3 lookup chain (pre-defined `.env`, `backend/.env`, and
@@ -2190,11 +2192,13 @@ are banned on both sides. Requirement-established codes:
 | `OK`                     | 200  | Successful reads and updates                     |
 | `CREATED`                | 201  | Resource creation                            |
 | `NO_CONTENT`             | 204  | Successful deletion                          |
+| `PARTIAL_CONTENT`        | 206  | HTTP range streaming responses (§32.3 audio playback) |
 | `BAD_REQUEST`            | 400  | Malformed requests                           |
 | `UNAUTHORIZED`           | 401  | Missing/invalid credentials                 |
 | `FORBIDDEN`              | 403  | State/lifecycle blockers (e.g. generate on archived) |
 | `NOT_FOUND`              | 404  | Missing resource (report/branch "not found") |
 | `CONFLICT`               | 409  | Duplicate key (11000), duplicate email, archive/restore lifecycle violations |
+| `REQUESTED_RANGE_NOT_SATISFIABLE` | 416 | HTTP range request outside the resource (§32.3 audio playback) |
 | `UNPROCESSABLE_ENTITY`   | 422  | Validation failures                          |
 | `TOO_MANY_REQUESTS`      | 429  | Rate-limit tiers (§11.3)                     |
 | `INTERNAL_SERVER_ERROR`  | 500  | Unexpected errors                            |
@@ -2754,8 +2758,13 @@ become manifest truth:
 
 | Package       | Purpose                                          | Manifest target | Entrance gate              |
 | ------------- | ------------------------------------------------ | --------------- | -------------------------- |
-| addisai       | The official Addis AI JS SDK (^0.2.0, MIT, zero runtime deps) — STT (`addis.speech.transcribe`) and text generation (`addis.chat.completions.create`) for provider `addis`; the SDK replaces any raw HTTP to Addis (ADR-008); the instance is built once in `config/env.js` (§16.7) | backend dependencies | P6 transport phase in §66; the §16.4 contracts stay in force |
+| ~~addisai~~ (INSTALLED) | ~~The official Addis AI JS SDK (^0.2.0, MIT, zero runtime deps) — STT (`addis.speech.transcribe`) and text generation (`addis.chat.completions.create`) for provider `addis`; the SDK replaces any raw HTTP to Addis (ADR-008); the instance is built once in `config/env.js` (§16.7)~~ | backend dependencies | P6 transport phase in §66; the §16.4 contracts stay in force |
 | NVIDIA multipart transport helper (named at install) | Conditional (§16.4): only if the installed runtime lacks reliable multipart forwarding to NVIDIA | backend dependencies | transport phase in §66; §16.4 rules stay in force |
+
+**Installed at the §66 P4 backend domain-APIs phase (2026-08-20):
+`addisai@^0.2.0` is now manifest truth in `backend/package.json`
+(§13.4) — the row above is historical; the §16.4 wire contracts and
+the §16.7 single-instance rule remain in force.**
 
 Installed at the §66 P4 editor phase (2026-08-15, wizard steps 1–3
 round): `@tiptap/react`, `@tiptap/starter-kit`,
@@ -3099,29 +3108,57 @@ backend/
 |   |                                               # (11000, CastError, MulterError — §27.5; added 2026-08-19)
 |   |-- constants.js                (implemented)  # backend constants inventory (§11.3)
 |   |-- httpStatus.js               (implemented)  # semantic HTTP status names (§11.6)
-|   `-- wavSplitter.js              # PCM-level WAV chunking for STT (§33)
+|   |-- wavSplitter.js              (implemented)  # PCM-level WAV chunking for STT (§33; added 2026-08-20)
+|   |-- transaction.js              (implemented)  # §27.7 withTransaction template (ADR-018; added 2026-08-20)
+|   |-- pagination.js               (implemented)  # §27.6 paginate wrapper over mongoose-paginate-v2 (added 2026-08-20)
+|   |-- sanitizer.js                (implemented)  # §61.3/§61.4 server write-gate — hand-rolled allowlist mirror (added 2026-08-20)
+|   `-- ethiopianDate.js            (implemented)  # Ethiopian↔Gregorian mirror of the client util (§6.3/§38.5; added 2026-08-20)
 |-- middleware/                     # fixed chain extras + auth + tiers (contents named by §26–§28)
 |   |-- mongoSanitize.js            (implemented)  # $/. operator-key stripper, Express-5 shim (§27.2)
 |   |-- rateLimit.js                (implemented)  # three-tier factory: global/auth/AI (§27.3)
 |   `-- auth.js                     (implemented)  # authenticate — access-cookie JWT gate (§28.4; added 2026-08-19)
 |-- routes/
-|   |-- index.js                    # the single route registry (§12.2, §26)
+|   |-- index.js                    (implemented)  # the single route registry (§12.2, §26)
 |   |-- auth.routes.js              (implemented)  # §28 surface incl. the §28.6 Google stub (added 2026-08-19)
-|   `-- <domain>.routes.js          # per-domain route modules, kebab-case (§30–§39)
+|   |-- branch.routes.js            (implemented)  # §30 surface (added 2026-08-20)
+|   |-- report.routes.js            (implemented)  # §31 surface incl. generations/corrections (§34/§35; added 2026-08-20)
+|   |-- audio.routes.js             (implemented)  # §32 surface (added 2026-08-20)
+|   |-- transcription.routes.js     (implemented)  # §33 surface incl. the STT-only transcripts endpoint (added 2026-08-20)
+|   `-- chat.routes.js              (implemented)  # §36 surface (added 2026-08-20)
 |-- controllers/
 |   |-- auth.controller.js          (implemented)  # register/login/refresh/logout/profile/avatar (§28; added 2026-08-19)
-|   `-- <domain>.controller.js      # one controller file per domain (§26, §30–§39)
+|   |-- branch.controller.js        (implemented)  # §30 (added 2026-08-20)
+|   |-- report.controller.js        (implemented)  # §31 incl. the §31.4 guard application (added 2026-08-20)
+|   |-- audio.controller.js         (implemented)  # §32 incl. multer/ffprobe/range streaming (added 2026-08-20)
+|   |-- transcription.controller.js (implemented)  # §33 (added 2026-08-20)
+|   `-- chat.controller.js          (implemented)  # §36 (added 2026-08-20)
 |-- validators/
 |   |-- validation.js               (implemented)  # validate() harness: validationResult + req.validated (§29)
 |   |-- user.validator.js           (implemented)  # register/login/profile chains (§28, §29; added 2026-08-19)
-|   `-- <domain>.validator.js       # express-validator rule chains, one per domain (§29, §30–§39)
+|   |-- branch.validator.js         (implemented)  # §30 chains (added 2026-08-20)
+|   |-- report.validator.js         (implemented)  # §31 chains incl. the C1 main-branch lock (added 2026-08-20)
+|   |-- audio.validator.js          (implemented)  # §32 chains (added 2026-08-20)
+|   |-- transcription.validator.js  (implemented)  # §33 chains (added 2026-08-20)
+|   `-- chat.validator.js           (implemented)  # §36 chains incl. the AI_MODELS registry check (added 2026-08-20)
 |-- models/
-|   `-- <entity>.model.js           # one schema file per entity, session-aware (§19–§24)
+|   `-- <entity>.model.js           # one schema file per entity, session-aware (§19–§24; all implemented)
 |-- services/                       # provider & pipeline work: STT, generation, correction,
 |                                   # chat, exports, analytics, search — contents §33–§39
+|   |-- addis-provider.js           (implemented)  # the SDK adapter — the only addis caller (added 2026-08-20)
+|   |-- gemini-provider.js          (implemented)  # axios adapter with Gemini schema normalization (added 2026-08-20)
+|   |-- nvidia-provider.js          (implemented)  # axios adapter — static-only (no live tests, owner directive; added 2026-08-20)
+|   |-- provider-chain.js           (implemented)  # §16.5/§16.6 retry+fallback engine (added 2026-08-20)
+|   |-- stt.service.js              (implemented)  # §33 pipeline — wavSplit + D8 ledger merge (added 2026-08-20)
+|   |-- generation.service.js       (implemented)  # §34 — prompt/schema/§6 renderer/session write (added 2026-08-20)
+|   |-- correction.service.js       (implemented)  # §35 — surgical partial-edit + SC-3 diff-verify (added 2026-08-20)
+|   `-- chat.service.js             (implemented)  # §36 — lazy row, projection, service-appended answer (added 2026-08-20)
 |-- jobs/
 |   `-- sweeper                     # single in-process timer, two passes (§12.5, §62)
 |-- scripts/                       # per-sub-phase Postman-like verification scripts (§63.10; added 2026-08-19)
+|   |-- test-01-foundation.mjs     (implemented)  # §63.10 sub-phase 1
+|   |-- test-02-models.mjs         (implemented)  # §63.10 sub-phase 2
+|   |-- test-03-identity.mjs       (implemented)  # §63.10 sub-phase 3
+|   `-- test-04-domains.mjs        (implemented)  # §63.10 sub-phase 4 — the domain APIs suite (added 2026-08-20)
 |-- mock/                           # seed and wipe scripts, session-safe (§40, ADR-037)
 `-- uploads/
     |-- audio/                      (runtime; gitignored; created by multer — §32)
@@ -3526,6 +3563,16 @@ knowledge, never a source literal, §16.8 SDK gate):
   with `target_language`, `prompt` (= the last `messages` entry),
   `conversation_history` (= the prior `role`/`content` entries), and
   `generation_config { temperature, maxOutputTokens, stream: false }`.
+- **SDK response-surface fact (verified 2026-08-20 at the P4
+  backend install):** the shipped addisai ^0.2.0 surfaces the
+  **OpenAI-style `ChatCompletion`** — `{ id, object, created, model,
+  choices: [{ message: { role, content }, finish_reason }], usage }`
+  — not the `{ text, model?, finish_reason, usage? }` normalization
+  this bullet originally described. The adapter (`services/addis-
+  provider.js`) maps `choices[0].message.content` → text and
+  `choices[0].finish_reason` at the boundary; the `model` echo is
+  real (`addis-1-alef`). The normalization language below is
+  historical — the mapping contract lives in the adapter.
 - **No `model`, no `persona`, no `topP`/`topK`.** The SDK does not
   forward a `model` field ("could leak the underlying model" — SDK
   source), so the §11.4 registry id for addis is display metadata
@@ -5254,6 +5301,7 @@ pre-generation, the generated report content from generation onward.
 | `language` | String | yes (default `am`) | the STT language of the transcription — member of `LANGUAGE_CODES` (§11.4); `am` active, `om`/`ti` reserved and not activated (§7.7); the §16.4 `request_data.language_code` echoed here |
 | `stt.requestId` | String | no (null if unknown) | the Addis AI request correlation id from `usage_metadata.requestId` (§16.4) — persisted per the §16.4 permission (ADR-019 audit); provider request ids may be logged (never secrets) |
 | `stt.model` | String | no (null if unknown) | the Addis voice model actually used (e.g. `አሌፍ-Audio-AM`) — a free provider-native string: the `AI_MODELS` registry (§11.4, §16.2) is the **text-generation** registry only; STT model choice is the §33 pipeline's own, stored here as audit metadata |
+| `stt.audios` | ObjectId[] | no (default `[]`) | the **D8 merge ledger** (added 2026-08-20) — the `_id`s of the Audio rows whose clips the current `raw` merge covers; the §33.6 cross-call skip source; server-internal — **excluded from the DTO** (§23.7, D21) |
 | `createdAt` / `updatedAt` | Date | auto | §18.2 timestamps |
 
 No `status` field exists, by design: transcription presence and the
@@ -6029,7 +6077,7 @@ belongs to exactly one tier; the health endpoint is exempt:
 |---|---|---|---|
 | global | `RATE_LIMIT_GLOBAL_WINDOW_MIN` (15 min) | `RATE_LIMIT_GLOBAL_MAX` (100) | all non-auth, non-AI endpoints — branches, reports read/write, audio metadata, exports, analytics, search, mock |
 | auth | `RATE_LIMIT_AUTH_WINDOW_MIN` (15 min) | `RATE_LIMIT_AUTH_MAX` (20) | `auth/*` endpoints (§28) |
-| ai | `RATE_LIMIT_AI_WINDOW_MIN` (1 min) | `RATE_LIMIT_AI_MAX` (10) | generation (§34), correction (§35), chat (§36) — the provider-calling endpoints |
+| ai | `RATE_LIMIT_AI_WINDOW_MIN` (1 min) | `RATE_LIMIT_AI_MAX` (10) | generation (§34), correction (§35), chat append (§36), the STT write `PUT …/transcription` (§33.8) — the provider-calling endpoints; **method-aware**: the conversation READ `GET /reports/:reportId/chat` is global (§36.3), and only `POST …/chat/messages` is ai — the `isTieredPath` rule (middleware/rateLimit.js) keys the §33.8 PUT and the §36.7 POST on their methods |
 
 Violation → 429 `TOO_MANY_REQUESTS` through the standard error
 envelope (ADR-016 shape, §27.5). The AI tier caps provider
@@ -6066,11 +6114,14 @@ tier).
   `statusCode`, semantic `status` name from `httpStatus.js`
   (§11.6), `message` (user-facing, plain language), optional
   `details` (validation field errors only). Status codes come
-  strictly from the `httpStatus` constants: 400 `BAD_REQUEST`, 401
+  strictly from the `httpStatus` constants: 200 `OK`, 201 `CREATED`,
+  204 `NO_CONTENT`, 206 `PARTIAL_CONTENT` (HTTP range streaming,
+  §32.3), 400 `BAD_REQUEST`, 401
   `UNAUTHORIZED`, 403 `FORBIDDEN` (state/lifecycle blockers, e.g.
   a capture edit or audio mutation denied at `generated` — §31), 404
   `NOT_FOUND`, 409 `CONFLICT` (dup-key 11000, dup email,
-  archive/restore violations), 422 `UNPROCESSABLE_ENTITY`
+  archive/restore violations), 416 `REQUESTED_RANGE_NOT_SATISFIABLE`
+  (§32.3), 422 `UNPROCESSABLE_ENTITY`
   (validation, §29), 429 `TOO_MANY_REQUESTS` (§27.3), 502
   `BAD_GATEWAY` (AI provider failures mapped by §16.5).
 - **Global handler:** single `(err, req, res, next)` at the end
@@ -7369,12 +7420,14 @@ transcription completes with the chunks that succeeded and the
 
 On success the service writes the report's Transcription row in
 the §27.7 session: `{ user, report, raw, latest, language, stt:
-{ requestId, model } }` — `raw` = the **merged** STT result of
-all the report's clips (single-space-joined per-audio texts),
+{ requestId, model, audios } }` — `raw` = the **merged** STT result
+of all the report's clips (single-space-joined per-audio texts),
 `latest` initialized equal (BR-11), the
 `stt` subdoc from `usage_metadata.requestId` + the provider's
 model echo when the response carries one (`stt.model`, else
-`null` — §16.4/§23.2); ADR-019-permitted audit fields only;
+`null` — §16.4/§23.2); `stt.audios` = the D8 merge ledger (the
+audios whose clips this `raw` covers — the cross-call skip source
+of §33.6); ADR-019-permitted audit fields only;
 confidence not persisted (§16.4/§23.7). The report's `transcription` ref is
 set in the same session (§21.8/§23 — the circular pair is
 created atomically); the report moves
@@ -7388,10 +7441,20 @@ repeated `PUT /reports/:reportId/transcription` is idempotent:
 already-contributed audios are skipped, only failed/pending
 audios re-run, and a new take attached at `transcribed` is
 transcribed and merged — the step becomes not-ready until heard
-(§52.7, BR-10). When the merged result changes, the service
+(§52.7, BR-10). **The skip source is the D8 merge ledger
+(`stt.audios` — the `_id`s of the Audio rows the current `raw`
+merge covers, §23.2): an audio in the ledger is already-succeeded
+and never re-heard; the ledger grows on every successful re-run.
+The row exists only after a fully successful merge (no partial
+rows — §33.7), so a re-run with a newly attached audio merges
+`join([current raw, ...newTexts])` with ascending `createdAt`/`_id`
+order and empty segments contributing nothing (all-empty → `''` is
+a valid result).** When the merged result changes, the service
 **rewrites the row in place** — `raw` = `latest` = the merged STT
 result, `stt` metadata refreshed — atomically in one session
-(§23.4); the `report` ref never moves.
+(§23.4); the `report` ref never moves. The ledger is a
+server-internal audit field — excluded from the TranscriptionDto
+(§23.7, D21).
 Availability per §31.4: at every status **except**
 `generated` (BR-12 window — re-transcription is frozen at
 `generated`; corrections are the editing path, §35). Response:
@@ -8282,7 +8345,9 @@ fold, owner directive 2026-08-19.)
 - **statusDistribution** — one `$group` per `REPORT_STATUSES`
   member over non-archived reports; the four members always
   appear (zero-count statuses are emitted with 0 — the donut
-  never drops a slice, §49.4).
+  never drops a slice, §49.4). The §30.2.1 branch-detail
+  aggregate implements the same four-member zero-filled rule
+  (D13/§38.7 gate amendment, 2026-08-20).
 - **activityByBranch** — reports grouped by their `branch` ref
   with a `$lookup` to the branches collection for the display
   name; top 8 by count. A referenced branch always exists
@@ -14143,6 +14208,54 @@ content rules: no prose invention outside this registry).
 | OQ-012 | **OPEN** | The addisai SDK's `SttLanguage` enum accepts am \| om \| en \| ha \| sw while the docs list am \| om — provider self-conflict; moot for the app (am-only, §7.7 reserves om/ti); whichever language activates later follows the SDK enum | §16.4, §33 | None |
 | OQ-013 | **OPEN** | The SDK's `chat_audio_input` + `transcription.clean` single-call option — a future Mode-3 one-call alternative to STT-then-TTT; not adopted (the current two-step path is the §35.2 contract) | §16.4, §35 | None — future option only |
 | OQ-014 | **OPEN** | The Register page's name-reveal line (§48.4) mirrors the §19.2 auto-extraction rule client-side — display-only, the server decides at creation; the preview is marked approximate so a later §19.2 rule change never misleads | §48.4, §19.2, §43.2 | The §48.4 name-reveal line (pass-3 UI/UX amendment) |
+| OQ-020 | **OPEN** | The §31.6 content-write cap (422 "over cap") has no §11 constant — the implementation bound is 1 000 000 chars at the call site (D10, registered 2026-08-20); closes with a §11.3 constant if the owner mandates one | §31.6, §11.3 | None — the bound is a safety net, not a product rule |
+| OQ-021 | **OPEN** | Mongoose (9.x) partial-update validators cannot see the row's other fields: the Item model's per-type status validator (`ITEM_STATUSES_BY_TYPE[this.type]`) fails on `findOneAndUpdate` + `runValidators` (no `this.type` in the update context) — the §31.6 "fetch row, validate manually" controller path is the enforced gate (no `runValidators` on the item PATCH); registered 2026-08-20 | §24A, §31.6 | None — the manual gate is the contract |
+
+**Sub-phase-4 implementation record (backend domain APIs, §30–§36 —
+closed 2026-08-20, suite `scripts/test-04-domains.mjs` all green):**
+
+- **D-series resolutions adopted in the implementation (registered
+  here per §4.5; each survives "why?")**: D9 the reports-list
+  `search` filter is accepted and inert until §39 (OQ-009);
+  D10 the content-write cap has no §11 constant — the implemented
+  bound is 1 000 000 chars, documented at the call site (OQ-020);
+  D13 `openIssues` = issue Item rows with status `reported` or
+  `in_progress` (§30.2.1's "status: open" prose has no `open`
+  member in `ITEM_STATUSES` — resolved by the per-type vocabulary,
+  §6.10); D19 concurrency: report-level writes use conditional
+  `findOneAndUpdate({_id, user, status})` guards — a zero match is
+  a 409 "The report changed — please retry"; D22 the transcription
+  row's `language` is `am` at creation (the only activated code,
+  §7.7) and stays the row's language on rewrites; D23 the
+  DELETE endpoints are §30.6/§31.7 prose: archive-as-step-1 + 200
+  `{ archived: true }` + the retention copy (idempotent on an
+  already-archived row — the matrix "409" attaches to POST
+  archive/restore state-mismatch only); D24 a branch deletion leaves
+  its reports archived (the sweeper's reference-check refuses the
+  hard removal, §62); D25 the generation response is the C8 single
+  round-trip `data: { report, transcription: { latest, items } }`
+  (§34.6/§31.6 — the client never refetches); D26 two clips may not
+  share a basename — the upload filename is server-generated
+  `{reportId}-{timestamp}{ext}` (§32.2), never user input.
+- **SDK surface fact (recorded in §16.4, 2026-08-20):** the shipped
+  addisai ^0.2.0 returns the OpenAI-style `ChatCompletion` for
+  `chat.completions.create` (the adapter maps `choices[0].message.
+  content`); the STT surface (`speech.transcribe` → `{ text,
+  confidence, usage }`) matches the §16.4 normalization — the
+  `requestId` rides `usage_metadata.requestId` (verified live in the
+  suite).
+- **Verification gate (2026-08-20, §63.10):** every group green —
+  unit 9, branches 17, reports 35, audio 11, transcription 7,
+  realpipeline 22 (the owner-provided 187.7 s webm → ffmpeg
+  conversion → 4 real addis STT chunks → real addis generation →
+  §6 render with ± labels → Item rows → gemini surgical correction
+  with the SC-3 token-preservation gate → gemini chat), ratelimit 12
+  (11 PUTs → 429 at #11, zero AI cost), sourcegates 10; the
+  regressions test-01 (12), test-02 (39), test-03 (37) stay green.
+  Live AI policy: addis + gemini only (owner directive 2026-08-20);
+  the nvidia adapter is implemented to §16.4 but never called live
+  (the registered id `deepseek flash 4` is a §16.8 deployment-time
+  catalog-validation item).
 
 Records (closed):
 

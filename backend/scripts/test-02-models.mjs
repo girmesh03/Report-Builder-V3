@@ -410,7 +410,8 @@ addCheck('transcription', 21, 'transcription stt subdoc { requestId, model, audi
       stt: { requestId: 'req-1', model: 'aleph-audio-am', audios: [new mongoose.Types.ObjectId()] },
     });
     const json = doc2.toJSON();
-    checks.push(expect(Array.isArray(json.stt?.audios) && json.stt.audios.length === 1, 'stt.audios serializes as an array'));
+    checks.push(expect(Array.isArray(doc2.stt.audios) && doc2.stt.audios.length === 1, 'stt.audios persists as an array (the D8 ledger)'));
+    checks.push(expect(json.stt && !('audios' in json.stt) && Object.keys(json.stt).length === 2, 'stt.audios excluded from the serialized DTO — stt is exactly { requestId, model } (§23.7, D21)'));
     return checks;
   }));
 

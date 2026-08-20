@@ -111,14 +111,16 @@ transcriptionSchema.index({ report: 1 }, { unique: true, sparse: true });
 /**
  * Transforms (§18.4, §23.7) — strip the derived `id` virtual and the
  * `__v` version key from every serialized Transcription; `_id` stays
- * `_id` (§12.11-3). Exposed surface: `_id`, `report`, `language`,
- * `raw`, `latest`, `stt.requestId`, `stt.model`, timestamps.
- * Transforms never mutate the stored document and never rename
- * fields.
+ * `_id` (§12.11-3). The D8 merge ledger `stt.audios` is a
+ * server-internal audit field — **excluded from the DTO** (§23.7,
+ * D21): the exposed `stt` subdoc carries exactly `requestId` and
+ * `model` (§33.8 TranscriptionDto). Transforms never mutate the
+ * stored document and never rename fields.
  */
 function deleteTransform(doc, ret) {
   delete ret.id;
   delete ret.__v;
+  if (ret.stt) delete ret.stt.audios;
   return ret;
 }
 

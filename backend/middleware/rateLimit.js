@@ -30,20 +30,26 @@ const TOO_MANY_REQUESTS_BODY = {
 /**
  * Tier-path selection (ADR-029): auth endpoints live under
  * `/api/v1/auth` (§28); AI-tier endpoints are the provider-calling
- * routes whose path carries a `/generations`, `/corrections`, or
- * `/chat` segment (§34–§36), plus the STT write
- * `PUT /reports/:reportId/transcription` (§33.8 — the only path
- * where the method matters: PUT with a `/transcription` segment).
- * The health endpoint is exempt (§26.6).
+ * routes — the STT write `PUT /reports/:reportId/transcription`
+ * (§33.8 — the only path where the method matters: PUT with a
+ * `/transcription` segment), the `POST …/chat/messages` append
+ * (§36.7 — **method-aware**: the conversation READ `GET
+ * /reports/:reportId/chat` is global tier, §36.3, and must never
+ * hit the 10/min AI limiter), and the provider-calling routes
+ * whose path carries a `/generations` or `/corrections` segment
+ * (§34–§36; no GET endpoints exist on those paths). The health
+ * endpoint is exempt (§26.6).
  * @param {string} path - Request path.
- * @param {string} method - Request method (needed for the §33.8 rule).
+ * @param {string} method - Request method (the §33.8 PUT and the
+ *   §36.7 POST rules are method-bound).
  * @returns {boolean} True when the path belongs to a non-global tier.
  */
 function isTieredPath(path, method) {
   if (path === '/api/v1/health') return true;
   if (path.startsWith('/api/v1/auth')) return true;
   if (method === 'PUT' && /\/transcription(\/|$)/.test(path)) return true;
-  return /(\/generations|\/corrections|\/chat)(\/|$)/.test(path);
+  if (method === 'POST' && /\/chat\/messages(\/|$)/.test(path)) return true;
+  return /(\/generations|\/corrections)(\/|$)/.test(path);
 }
 
 /**
