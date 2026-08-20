@@ -320,3 +320,7 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - **test-05 46/46 ALL GREEN** (unit 4, dashboard 3, items 13, search 14, export 6, sourcegates 6 — the text-index-count-1 gate verified LIVE) + regressions test-01 12/12, test-02 39/39, test-03 37/37, test-04 124/124 (incl. the real-AI realpipeline 22/22). Zero AI calls in the test-05 suite. Syntax sweep clean (F95).
 - Spec mirrors applied: §15.4 tree (+9 rows), §20.3 text-index row, §38.2 example amendment, §38.7 two-homes gate, §69 D27–D40 + OQ-009 status note + the sub-phase-5 record; AGENTS.md status; findings F95; this row.
 - NEXT: step 5 — the owner runs the suite live (commands in the suite header; restart per group) → step 6 gated commit → post-git merge/clean → sub-phase 6 (seeding & sweepers §40/§62).
+
+## 2026-08-20 — Sub-phase 5 step 6 executed (commit `9a82c1c` merged to main; branch cleanup)
+- Owner approved the full sequence: committed (the §37/§38/§39 implementation + mirrors + working files), pushed, fast-forward merged to `main`, pushed; `.opencode/opencode.json` (the session's own config rewrite) committed per "commit all changes"; branch deleted local + remote.
+- READY FOR THE NEXT: sub-phase 6 (seeding & sweepers §40/§61/§62) — `mock/` seed/wipe endpoints (session-safe, env-gated, ADR-037), `jobs/sweeper` (single timer, two passes — Report archivedAt TTL + orphan-audio sweep with reference checks, §62), the sub-phase-6 suite, mirrors.

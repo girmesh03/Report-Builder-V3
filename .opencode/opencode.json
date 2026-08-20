@@ -3,7 +3,7 @@
   "lsp": true,
   "model": "opencode-zen/deepseek-v4-flash-free",
   "compaction": {
-    "auto": false,
-    "prune": true
+    "auto": true,
+    "prune": false
   }
 }
