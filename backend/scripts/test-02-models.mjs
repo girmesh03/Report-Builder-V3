@@ -185,14 +185,18 @@ addCheck('branch', 7, 'branch paths match §20.2 registry', () =>
     return checks;
   }));
 
-addCheck('branch', 8, 'branch index { user, isArchived, name } and no TTL (§20.3)', () =>
-  modelCheck(8, 'branch index { user, isArchived, name } and no TTL (§20.3)', () => {
+addCheck('branch', 8, 'branch indexes: { user, isArchived, name } + the ONE text index, no TTL (§20.3/§39.2)', () =>
+  modelCheck(8, 'branch indexes: { user, isArchived, name } + the ONE text index, no TTL (§20.3/§39.2)', () => {
     const idx = Branch.schema.indexes().map(([spec, opts]) => ({ spec, opts }));
     const checks = [];
-    checks.push(expect(idx.length === 1, `exactly 1 index, got ${idx.length}`));
-    const main = idx[0];
-    checks.push(expect(JSON.stringify(main.spec) === JSON.stringify({ user: 1, isArchived: 1, name: 1 }), `spec, got ${JSON.stringify(main.spec)}`));
-    checks.push(expect(main.opts.expireAfterSeconds === undefined, 'no TTL index'));
+    checks.push(expect(idx.length === 2, `exactly 2 indexes, got ${idx.length}`));
+    const main = idx.find((i) => JSON.stringify(i.spec) === JSON.stringify({ user: 1, isArchived: 1, name: 1 }));
+    const text = idx.find((i) => i.spec.user === 1 && i.spec.name === 'text' && i.spec.location === 'text');
+    checks.push(expect(!!main, 'owner-scoped list index { user, isArchived, name }'));
+    checks.push(expect(!!text, 'the §39.2 text index { user, name: text, location: text } — the backend\'s ONE text index'));
+    checks.push(expect(idx.every((i) => i.opts.expireAfterSeconds === undefined), 'no TTL index'));
+    const textCount = idx.filter((i) => Object.values(i.spec).includes('text')).length;
+    checks.push(expect(textCount === 1, `exactly one text index, got ${textCount}`));
     return checks;
   }));
 

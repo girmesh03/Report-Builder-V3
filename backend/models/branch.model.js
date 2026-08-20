@@ -61,6 +61,18 @@ const branchSchema = new Schema(
 branchSchema.index({ user: 1, isArchived: 1, name: 1 });
 
 /**
+ * The §39.2 text index — the **only** text index in the backend
+ * (exit gate: text-index count = 1, §39.6; initialSchema target
+ * §18.3): `{ name, location }` owner-scoped via the leading `user`
+ * field. The §39 global search text-searches branches first and
+ * resolves reports through their live branch refs (§21.2 — reports
+ * carry no storable name strings and are never text-indexed; Date
+ * fields and content are never text-indexed, §39.2). No wildcard
+ * `'$**'` — the fields are explicit.
+ */
+branchSchema.index({ user: 1, name: 'text', location: 'text' });
+
+/**
  * Transforms (§18.4, §20.7) — strip the derived `id` virtual and the
  * `__v` version key from every serialized Branch; `_id` stays `_id`
  * (§12.11-3). Transforms never mutate the stored document and never

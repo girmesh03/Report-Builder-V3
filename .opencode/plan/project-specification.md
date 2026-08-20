@@ -3124,14 +3124,20 @@ backend/
 |   |-- report.routes.js            (implemented)  # §31 surface incl. generations/corrections (§34/§35; added 2026-08-20)
 |   |-- audio.routes.js             (implemented)  # §32 surface (added 2026-08-20)
 |   |-- transcription.routes.js     (implemented)  # §33 surface incl. the STT-only transcripts endpoint (added 2026-08-20)
-|   `-- chat.routes.js              (implemented)  # §36 surface (added 2026-08-20)
+|   |-- chat.routes.js              (implemented)  # §36 surface (added 2026-08-20)
+|   |-- export.routes.js            (implemented)  # §37 — content surface; the docs route unmounted behind EXPORT_DOCS_ENABLED (added 2026-08-20)
+|   |-- analytics.routes.js         (implemented)  # §38 — dashboard + items (added 2026-08-20)
+|   `-- search.routes.js            (implemented)  # §39 — global search (added 2026-08-20)
 |-- controllers/
 |   |-- auth.controller.js          (implemented)  # register/login/refresh/logout/profile/avatar (§28; added 2026-08-19)
 |   |-- branch.controller.js        (implemented)  # §30 (added 2026-08-20)
 |   |-- report.controller.js        (implemented)  # §31 incl. the §31.4 guard application (added 2026-08-20)
 |   |-- audio.controller.js         (implemented)  # §32 incl. multer/ffprobe/range streaming (added 2026-08-20)
 |   |-- transcription.controller.js (implemented)  # §33 (added 2026-08-20)
-|   `-- chat.controller.js          (implemented)  # §36 (added 2026-08-20)
+|   |-- chat.controller.js          (implemented)  # §36 (added 2026-08-20)
+|   |-- analytics.controller.js    (implemented)  # §38 — the dashboard/items aggregation home (added 2026-08-20)
+|   |-- search.controller.js       (implemented)  # §39 — thin delegate to search.service (added 2026-08-20)
+|   `-- export.controller.js       (implemented)  # §37.5 content surface (added 2026-08-20)
 |-- validators/
 |   |-- validation.js               (implemented)  # validate() harness: validationResult + req.validated (§29)
 |   |-- user.validator.js           (implemented)  # register/login/profile chains (§28, §29; added 2026-08-19)
@@ -3139,7 +3145,10 @@ backend/
 |   |-- report.validator.js         (implemented)  # §31 chains incl. the C1 main-branch lock (added 2026-08-20)
 |   |-- audio.validator.js          (implemented)  # §32 chains (added 2026-08-20)
 |   |-- transcription.validator.js  (implemented)  # §33 chains (added 2026-08-20)
-|   `-- chat.validator.js           (implemented)  # §36 chains incl. the AI_MODELS registry check (added 2026-08-20)
+|   |-- chat.validator.js           (implemented)  # §36 chains incl. the AI_MODELS registry check (added 2026-08-20)
+|   |-- analytics.validator.js     (implemented)  # §38 items-filter chains (added 2026-08-20)
+|   |-- search.validator.js        (implemented)  # §39 chains — q trim/quote-strip/length (added 2026-08-20)
+|   `-- export.validator.js        (implemented)  # §37 param chain (added 2026-08-20)
 |-- models/
 |   `-- <entity>.model.js           # one schema file per entity, session-aware (§19–§24; all implemented)
 |-- services/                       # provider & pipeline work: STT, generation, correction,
@@ -3151,14 +3160,17 @@ backend/
 |   |-- stt.service.js              (implemented)  # §33 pipeline — wavSplit + D8 ledger merge (added 2026-08-20)
 |   |-- generation.service.js       (implemented)  # §34 — prompt/schema/§6 renderer/session write (added 2026-08-20)
 |   |-- correction.service.js       (implemented)  # §35 — surgical partial-edit + SC-3 diff-verify (added 2026-08-20)
-|   `-- chat.service.js             (implemented)  # §36 — lazy row, projection, service-appended answer (added 2026-08-20)
+|   |-- chat.service.js             (implemented)  # §36 — lazy row, projection, service-appended answer (added 2026-08-20)
+|   |-- search.service.js          (implemented)  # §39 — the only $text caller; branch→report resolution (added 2026-08-20)
+|   `-- drive.service.js           (implemented)  # §37 — the dormant Google boundary + the §64 export-time ± resolver (added 2026-08-20)
 |-- jobs/
 |   `-- sweeper                     # single in-process timer, two passes (§12.5, §62)
 |-- scripts/                       # per-sub-phase Postman-like verification scripts (§63.10; added 2026-08-19)
 |   |-- test-01-foundation.mjs     (implemented)  # §63.10 sub-phase 1
 |   |-- test-02-models.mjs         (implemented)  # §63.10 sub-phase 2
 |   |-- test-03-identity.mjs       (implemented)  # §63.10 sub-phase 3
-|   `-- test-04-domains.mjs        (implemented)  # §63.10 sub-phase 4 — the domain APIs suite (added 2026-08-20)
+|   |-- test-04-domains.mjs        (implemented)  # §63.10 sub-phase 4 — the domain APIs suite (added 2026-08-20)
+|   `-- test-05-aggregations.mjs   (implemented)  # §63.10 sub-phase 5 — §37/§38/§39 suite, zero AI (added 2026-08-20)
 |-- mock/                           # seed and wipe scripts, session-safe (§40, ADR-037)
 `-- uploads/
     |-- audio/                      (runtime; gitignored; created by multer — §32)
@@ -4617,6 +4629,14 @@ outside this table is persisted.
   (§18.3): TTL deletion is unconditional and would dangle
   report/visit/item references; branch removal is reference-checked
   sweeper logic only (§62).
+- **The §39 text index (added 2026-08-20 — the §39.2 proof, exit
+  gate "search index count = 1"):** `schema.index({ user: 1, name:
+  'text', location: 'text' })` — the backend's **one and only**
+  text index (initialSchema target §18.3; no wildcard `'$**'`): the
+  §39 global search text-searches branches first and resolves
+  reports through their live branch refs (§39.2). The list index
+  above and this text index coexist (Mongo allows one text index
+  plus ordinary indexes on overlapping fields).
 - **No further indexes.** The join direction lives on the Report and
   Item sides (`report.branch`, `visits[].branch`, `items[].branch`,
   §21/§24A); Branch lookups are owner-scoped (§30)
@@ -8317,8 +8337,11 @@ fold, owner directive 2026-08-19.)
 ```
 
 `GET /analytics/items` — request
-`?branch=…&type=issue&status=open&dateFrom=…&dateTo=…&q=pump&page=1&limit=10`;
+`?branch=…&type=issue&status=reported&dateFrom=…&dateTo=…&q=pump&page=1&limit=10`;
 200: §27.4 paginated shape with `docs` = ItemDto rows (§38.2).
+(The example's original `status=open` was amended 2026-08-20 —
+`open` is not an `ITEM_STATUSES` member; the per-type vocabulary
+`reported | in_progress | completed` governs, D13/D32.)
 
 ### 38.3 KPI computation rules
 
@@ -8388,10 +8411,12 @@ fold, owner directive 2026-08-19.)
 
 ### 38.7 Verification usage
 
-- Grep gates: the analytics controller contains the only
-  aggregation pipelines in the backend (no `$group` elsewhere
-  for UI data); no client-side reduction over list responses
-  for KPIs (ADR-034); the payload keys match §49.3's table
+- Grep gates: the aggregation pipelines live in **two** named homes
+  only — the analytics controller (this section's dashboard + items
+  surfaces) and the §30.2.1 branch-detail aggregate in the branch
+  controller (the D13/§38.7 gate amendment, 2026-08-20) — no
+  `$group` elsewhere for UI data; no client-side reduction over list
+  responses for KPIs (ADR-034); the payload keys match §49.3's table
   exactly; `REPORT_STATUSES` order preserved; no literal
   `200`-style special-casing.
 - Cross-section checks: mirrors §49 (UI), §20/§21/§24A (fields
@@ -14202,7 +14227,7 @@ content rules: no prose invention outside this registry).
 | OQ-006 | **CLOSED** (2026-08-11) | Export file naming convention | §58 | — |
 | OQ-007 | **CLOSED** (2026-08-15) | `raw`/`latest` storage format: plain text vs rich-text HTML | §21.2, §46.16, §53, §61 | — |
 | OQ-008 | **OPEN** | Landing page: further work wanted by the owner — the round-9 review is not final; polish/concept revision deferred until after all eight phases | §48.2, §66 | Post-P8 owner window (§66.9 P8 / §2.6); non-blocking |
-| OQ-009 | **OPEN** | The Reports filter feature is provisional: the dialog renders a TBD surface — what to filter (status/branch/archived were working guesses), branch single vs multi-select, server pagination of filtered results, and date vs date-range (or both) are unresolved; until closure the page holds no filter state and lists what `GET /reports` returns | §50.3, §66 | The §50 filter dialog (full implementation; the mock list-all convenience persists until then) |
+| OQ-009 | **OPEN** | The Reports filter feature is provisional: the dialog renders a TBD surface — what to filter (status/branch/archived were working guesses), branch single vs multi-select, server pagination of filtered results, and date vs date-range (or both) are unresolved; until closure the page holds no filter state and lists what `GET /reports` returns. **2026-08-20 status note:** §39's global search is LIVE (the §59 dialog's backend — test-05 search group green); the reports-LIST filter dialog and its `search` param remain deferred here | §50.3, §66 | The §50 filter dialog (full implementation; the mock list-all convenience persists until then) |
 | OQ-010 | **OPEN** | The font-size selector in the MuiEditor toolbar does not apply a size — reported through rounds 8.2, 8.3, 8.4, and 8.5 (hard-reload confirmed each time). Three mechanisms were found and fixed statically (nested-chain stored-mark wipe §46.16 r8.3, paragraph-selection UX r8.4, churning seed-sync re-seed §53.3 r8.5), yet the user repro still fails; the remaining cause is UNKNOWN and the fix is NOT fixed — deferred to round-8.6 | §46.16, §53.3, §53.5 | The §46.16 toolbar font-size contract (round-8.6 investigation must start from the live flow: a `[MuiEditor] fontSize dispatch`-style diagnostic + the served-module check, not static analysis alone) |
 | OQ-011 | **OPEN** | Addis AI free-tier limits (60 RPM / 1000 RPD / 3 concurrent requests) — provider-published at research time (2026-08-18); policy-only today, calibrated against the live account at implementation | §16.2, §16.5, §27 | None — the app AI tier (RATE_LIMIT_AI_*) is the primary guard; provider 429s are second-layer |
 | OQ-012 | **OPEN** | The addisai SDK's `SttLanguage` enum accepts am \| om \| en \| ha \| sw while the docs list am \| om — provider self-conflict; moot for the app (am-only, §7.7 reserves om/ti); whichever language activates later follows the SDK enum | §16.4, §33 | None |
@@ -14256,6 +14281,61 @@ closed 2026-08-20, suite `scripts/test-04-domains.mjs` all green):**
   the nvidia adapter is implemented to §16.4 but never called live
   (the registered id `deepseek flash 4` is a §16.8 deployment-time
   catalog-validation item).
+
+**Sub-phase-5 implementation record (aggregations §37–§39 — closed
+2026-08-20, suite `scripts/test-05-aggregations.mjs` all green, 46
+checks, zero AI calls):**
+
+- **D27–D40 derivations (each survives "why?"; registered per §4.5)**
+  D27 the §38.2 items `q` filter is a **literal-escaped** `$regex`
+  over `text` within the filtered window (user metacharacters are
+  never interpreted — the suite proves `q=pump.` matches nothing;
+  the §39.6 `RegExp`-absent gate applies to `search.service.js`
+  verbatim, which uses `$text` only); D28 `$text` runs with
+  `$language: 'none'` (no stemming — proper-noun names/locations);
+  D29 items default sort `date desc, createdAt desc`; D30 quotes are
+  stripped by the §29 search chain before the length check (a
+  quotes-only `q` → 422 "Provide a search term"); D31 the dashboard
+  `trends` are emitted — `reportsThisMonthDelta` and
+  `generatedDelta` vs the previous Ethiopian month (real data,
+  month-bucketed — the "may be present or absent" contract is
+  satisfied by presence); D32 the §38.2 example's `status=open` was
+  amended to `status=reported` (`open` is not an `ITEM_STATUSES`
+  member — the per-type vocabulary governs, D13); D33 export content
+  is returned as stored (the §61 write gate already sanitized it);
+  D34 `services/drive.service.js` exists dormant — the
+  `EXPORT_DOCS_ENABLED`-guarded boundary + `resolveOfficialTokens`
+  (the §64.6 export-time resolution — pure, unit-tested); the docs
+  route stays unmounted (404 "Route not found" proven live); D35
+  report search results carry `status`, branch results do not; D36
+  `includeArchived` (default false) widens both search sources; D37
+  search pagination is the manual §27.4 slicing over the merged
+  two-source list (branches group first — score desc, name asc —
+  then reports — score desc, date desc); D38 the items date window
+  is `$gte`/`$lte` on `date` (null dates never match — 404-free);
+  D39 null-date reports stay in search results with `title: ''`
+  (BR-19); D40 `matchedFields` is derived post-query — the matched
+  branch's `name`/`location` fields containing the `q` literal
+  (`$text` returns the score, never the matched field); the report
+  `subtitle` is the report's OWN branch name per §39.3 ("…or the
+  report's own branch when the match came from a visit" — the
+  matchedFields/score come from the resolving branch).
+- **Verification gate (2026-08-20, §63.10):** test-05 groups green —
+  unit 4, dashboard 3 (the full §38 inventory incl. the
+  Ethiopian-month boundary dates and the 30-day zero-filled
+  issuesTrend), items 13 (every §38.2 filter + the D27 literal
+  escape), search 14 (branch-name/location matches, visit-resolution
+  with the own-branch subtitle, type filter, includeArchived, the
+  §39.5 edge cases, the Ethiopian DD-MM-YY titles), export 6 (the
+  §37.5 payload with live visit names + ± as-is, 422 no-latest,
+  archived 200, docs 404 unmounted, BR-13), sourcegates 6 (the §39.2
+  exit gate verified LIVE — exactly one text index on branches over
+  {name, location}; no RegExp/$regex in search.service; `$group`
+  confined to the two named homes; no exportedAt). Regressions stay
+  green: test-01 12, test-02 39, test-03 37, test-04 124. **OQ-009
+  status note:** §39's global search is LIVE (the §59 dialog's
+  backend); the §50 reports-LIST filter dialog remains deferred under
+  OQ-009 (the list's `search` param stays inert, D9).
 
 Records (closed):
 

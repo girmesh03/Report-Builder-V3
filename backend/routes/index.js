@@ -17,6 +17,9 @@ import reportRoutes from './report.routes.js';
 import audioRoutes from './audio.routes.js';
 import transcriptionRoutes from './transcription.routes.js';
 import chatRoutes from './chat.routes.js';
+import exportRoutes from './export.routes.js';
+import analyticsRoutes from './analytics.routes.js';
+import searchRoutes from './search.routes.js';
 
 const routes = Router();
 
@@ -37,5 +40,8 @@ routes.use('/reports', reportRoutes);
 routes.use(audioRoutes);
 routes.use(transcriptionRoutes);
 routes.use(chatRoutes);
+routes.use(exportRoutes);
+routes.use('/analytics', analyticsRoutes);
+routes.use('/search', searchRoutes);
 
 export default routes;
