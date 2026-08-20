@@ -310,3 +310,7 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - Owner-requested exhaustive pre-commit validation performed (role: Supervisor + Architect/Design Lead). Five defects found and fixed (F93): the §38.5 month-range noon bound (excluded first-day-of-month reports from reportsThisMonth — real data-accuracy bug), the audio.validator literal 100, the playClip suffix-range parse, the multipart chain ordering (validators ran pre-multer), and sanitizer cosmetics (dead code + exact allowlist mirror). U3b unit added for the month boundaries.
 - Final suite state: unit 10, branches 17, reports 35, audio 11, transcription 7, realpipeline 22, ratelimit 12, sourcegates 10 = 124 checks green + regressions test-01 12/12, test-02 39/39. Port free, dev chain killed.
 - NEXT: step 6 — gated commit on owner approval (push/merge/delete with explicit approval) → sub-phase 5 (aggregations §37–§39).
+
+## 2026-08-20 — Sub-phase 4 step 6 executed (commit `93dd8ad` merged to main, branch cleaned)
+- Owner approved the commit and the full post-git sequence: amended to include `.opencode/opencode.json` (opencode config: lsp/model/compaction — owner-instructed), pushed, fast-forward merged to `main`, pushed, branch deleted local + remote. Only `main` remains.
+- READY FOR THE NEXT: sub-phase 5 (aggregations §37–§39) — §38 dashboard rollups, §37 reports-detail analytics, §39 search (resolves OQ-009's inert `search` filter), `analytics`/`search` route mounts, `test-05-aggregations.mjs`, mirrors.
