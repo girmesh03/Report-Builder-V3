@@ -15,10 +15,7 @@ import { env } from './config/env.js';
 import { logger, dbLogger } from './utils/logger.js';
 import { MONGO_CONNECT_TIMEOUT_MS } from './utils/constants.js';
 import { app } from './app.js';
-
-// The sweeper interval handle — started after listening at sub-phase 6
-// (§62); cleared on shutdown (§26.6).
-let sweeperTimer = null;
+import { startSweeper, stopSweeper } from './jobs/sweeper.js';
 
 const SHUTDOWN_FORCE_TIMEOUT_MS = 10000; // §26.6 "default 10 s"
 
@@ -35,7 +32,8 @@ async function main() {
 
   const server = app.listen(env.PORT, () => {
     logger.info(`Server listening on port ${env.PORT}`);
-    // The sweeper timer starts here at sub-phase 6 (§12.5/§62).
+    // The sweeper timer starts after listening (§26.6/§62).
+    startSweeper();
   });
 
   server.on('error', (error) => {
@@ -51,7 +49,7 @@ async function main() {
     logger.info(`Received ${signal} — shutting down`);
 
     server.close(() => {
-      if (sweeperTimer) clearInterval(sweeperTimer);
+      stopSweeper();
       mongoose.connection.close(() => {
         logger.close();
         process.exit(0);

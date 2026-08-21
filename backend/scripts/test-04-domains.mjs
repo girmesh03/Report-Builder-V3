@@ -27,10 +27,15 @@
  * NVIDIA call exists anywhere** — the nvidia adapter is exercised
  * only statically (sourcegates).
  *
- * The realpipeline group uses the owner-provided real recording
- * `backend/uploads/audio/audio-8c1b3670-80cc-4990-88d4-4afde9eb8975.webm`
- * (≈187.7 s — exercises ffmpeg conversion + the 60 s chunk splitter +
- * 4 real addis STT chunks + a real generation/correction/chat pass).
+ * The realpipeline group uses the owner-provided real recording at
+ * `backend/scripts/fixtures/amharic-sample-recording.webm` (≈187.7 s
+ * — exercises ffmpeg conversion + the 60 s chunk splitter + 4 real
+ * addis STT chunks + a real generation/correction/chat pass). The
+ * asset lives OUTSIDE `uploads/` on purpose: the §62.4 pass-2 sweep
+ * unlinks any unreferenced file in the §32 temp areas, so a test
+ * asset parked there is destroyed on the next sweeper run (verified
+ * 2026-08-20 — the original uploads/audio copy was swept). Place the
+ * owner-provided file at that path before running this group.
  * Real-AI budget ≈ 8–9 calls per run (inside the ai tier's 10/min).
  */
 import process from "node:process";
@@ -67,9 +72,9 @@ const PASSWORD = "secret123";
 
 const REAL_CLIP = join(
   process.cwd(),
-  "uploads",
-  "audio",
-  "audio-8c1b3670-80cc-4990-88d4-4afde9eb8975.webm",
+  "scripts",
+  "fixtures",
+  "amharic-sample-recording.webm",
 );
 const TMP_DIR = join(process.cwd(), "uploads", "tmp");
 
