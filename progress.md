@@ -324,3 +324,20 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 ## 2026-08-20 — Sub-phase 5 step 6 executed (commit `9a82c1c` merged to main; branch cleanup)
 - Owner approved the full sequence: committed (the §37/§38/§39 implementation + mirrors + working files), pushed, fast-forward merged to `main`, pushed; `.opencode/opencode.json` (the session's own config rewrite) committed per "commit all changes"; branch deleted local + remote.
 - READY FOR THE NEXT: sub-phase 6 (seeding & sweepers §40/§61/§62) — `mock/` seed/wipe endpoints (session-safe, env-gated, ADR-037), `jobs/sweeper` (single timer, two passes — Report archivedAt TTL + orphan-audio sweep with reference checks, §62), the sub-phase-6 suite, mirrors.
+
+## 2026-08-20 — Sub-phase 6 (seeding & sweepers §40/§25/§62): implemented, suite green — step 5 pending
+- Branch `phase-6-backend-seeding` from main 9fc928c. Implemented per the approved plan: mock/fixtures.js + mock/seed.js (self-replacing, one session, the §21.8 refs, the BR-13 probe) + mock/wipe.js (the D41 signature + D44 guard), routes/mock.routes.js + the §40.5 conditional mount, jobs/sweeper.js (two passes, run guard, log-only) + server.js wiring, test-06 suite.
+- **test-06 34/34 ALL GREEN** (unit 5, seed 9, wipe 6, sweeper 5 — SW0–SW4, sourcegates 9). Integration fixes (F98): the Report transcription index corrected from unique+sparse to **unique+partial $type objectId** (sparse can never build over null defaults — a sub-phase-2 latent hazard the seed's index sync surfaced; mirrors §17.3/§21.2/§21.3 + test-02), Atlas serverless parallel-cursor-in-transaction avoidance, Mongoose 9 `ordered: true` multi-doc creates, the users-count fixture semantics, the sweeper log signature, suite guards.
+- Spec mirrors applied: §17.3 ERD row, §21.2 registry row, §21.3 index row, §69 D41–D52 (+ the sub-phase-6 record pending), AGENTS.md pending, task_plan pending, findings F98, this row.
+- NEXT: regressions test-01..05 + syntax sweep → step 5 (owner live run) → step 6 gated commit → post-git merge/clean → **Stage 4 COMPLETE** (the Stage-5 frontend gate lifts).
+
+## 2026-08-20 — Sub-phase 6 close-out audit executed (F99); regressions complete — step 5 pending
+- F99 audit: every §40/§25/§62/§26.6 normative requirement verified against the code — conforming. Fixes applied: dead `sweeperTimer` code removed from server.js; tallies corrected (test-06 = 34, sweeper group = 5 SW0–SW4) in task_plan/findings/progress/§69; REAL_CLIP relocated to `backend/scripts/fixtures/amharic-sample-recording.webm` (+ §15.4 row, + F98 incident note — the sweeper's §62.4 pass-2 correctly swept the old uploads/audio copy); ጎላጉል fixture vestigial `archivedAt: null` removed.
+- Post-fix verification: syntax sweep clean; test-06 unit 5/5 + sourcegates 9/9 re-run green after the edits.
+- Regression completion this session: test-01 12/12, test-02 39/39, test-03 all 8 groups FAIL=0 (unit 1, register 8, login 6, refresh 4, profile 6, avatar 5, misc 7, ratelimit 1), test-05 46/46, test-06 34/34 across groups. **test-04 transcription + realpipeline PENDING the owner-provided recording at `backend/scripts/fixtures/amharic-sample-recording.webm`** (the original uploads/audio copy was swept by the §62.4 pass-2 — spec-correct; see F98).
+- Dev chain killed (:4000 free). NEXT: owner places the recording → test-04 transcription+realpipeline → step 5 live run → step 6 gated commit (withheld until owner approval).
+
+## 2026-08-21 — Sub-phase-6 work committed+pushed (no merge); boot DB retry added
+- `df99691` on `phase-6-backend-seeding`: the full sub-phase-6 set (mock/, jobs/sweeper, mock.routes + mount, test-06, partial-index fix, mirrors, F98/F99 audit fixes). Pushed; **merge withheld** per owner instruction.
+- Boot DB connection retry implemented per owner directive (F100/D53): constants + `connectWithRetry()` in server.js + §26.6/§11.3/§69 mirrors. Verified live (health 200; dead-port escalation 1s→2s→4s→8s). Uncommitted.
+- Still pending: owner recording at `backend/scripts/fixtures/amharic-sample-recording.webm` → test-04 transcription+realpipeline; step-5 live run of test-06; step-6 merge (withheld).

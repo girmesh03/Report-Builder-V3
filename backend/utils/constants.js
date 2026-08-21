@@ -156,6 +156,25 @@ export const MONGO_DUPLICATE_KEY_ERROR_CODE = 11000;
 export const MONGO_CONNECT_TIMEOUT_MS = 10000;
 
 /**
+ * Boot retry backoff (§26.6, D53) — the initial connection is
+ * retried with exponential delay before the fail-fast exit:
+ * first wait, doubling per attempt, capped; after
+ * `DB_RETRY_MAX_ATTEMPTS` consecutive failures boot exits 1.
+ * Rides out transient Atlas/DNS blips (~18–20 s recovery observed)
+ * while keeping a broken deploy visibly crashed (≈4–5 min worst
+ * case including each attempt's own selection-timeout cost). Initial-connect scope only — post-connect drops stay on
+ * the driver's auto-reconnect.
+ * @type {number}
+ */
+export const DB_RETRY_INITIAL_MS = 1000;
+
+/** Backoff ceiling — §26.6/D53. @type {number} */
+export const DB_RETRY_MAX_MS = 30000;
+
+/** Consecutive failed attempts before the fail-fast exit — §26.6/D53. @type {number} */
+export const DB_RETRY_MAX_ATTEMPTS = 10;
+
+/**
  * Provider base URL — §16 (gemini/nvidia only; the addisai SDK is
  * SDK-internal — no `ADDIS_AI_BASE_URL` constant exists, §16.7).
  * @type {string}

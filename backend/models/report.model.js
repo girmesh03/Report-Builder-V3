@@ -130,10 +130,21 @@ reportSchema.index({ user: 1, date: 1 });
 reportSchema.index({ user: 1, status: 1 });
 
 /**
- * Transcription 1:1 index (§21.3) — unique + sparse, the
- * one-transcription-per-report invariant (§17.3, §23).
+ * Transcription 1:1 index (§21.3) — unique over the reports that
+ * actually carry the ref, enforced via a **partial** filter (the
+ * §24A comment-unique precedent, corrected 2026-08-20): MongoDB's
+ * `sparse` indexes still index a present-but-null field, so a
+ * `unique + sparse` declaration can never build once a second
+ * pre-transcription report exists (E11000 on `transcription: null`
+ * — surfaced by the §40 seed's index sync). The partial filter
+ * `$type: 'objectId'` keeps the one-transcription-per-report
+ * invariant (§17.3, §23) while excluding every null ref; the DTO
+ * surface stays `transcription: null` (§31.3).
  */
-reportSchema.index({ transcription: 1 }, { unique: true, sparse: true });
+reportSchema.index(
+  { transcription: 1 },
+  { unique: true, partialFilterExpression: { transcription: { $type: 'objectId' } } },
+);
 
 /**
  * TTL declaration (§18.3, §21.3) — the single TTL index in the spec:

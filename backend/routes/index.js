@@ -11,6 +11,7 @@
  */
 import { Router } from 'express';
 import { httpStatus } from '../utils/httpStatus.js';
+import { env } from '../config/env.js';
 import authRoutes from './auth.routes.js';
 import branchRoutes from './branch.routes.js';
 import reportRoutes from './report.routes.js';
@@ -20,6 +21,7 @@ import chatRoutes from './chat.routes.js';
 import exportRoutes from './export.routes.js';
 import analyticsRoutes from './analytics.routes.js';
 import searchRoutes from './search.routes.js';
+import mockRoutes from './mock.routes.js';
 
 const routes = Router();
 
@@ -43,5 +45,13 @@ routes.use(chatRoutes);
 routes.use(exportRoutes);
 routes.use('/analytics', analyticsRoutes);
 routes.use('/search', searchRoutes);
+
+// The §40.5 conditional mount — the ONE development check in the
+// codebase (the frozen config, §26.2): outside development the mock
+// routes do not exist and any call falls through to the §27.5 404
+// handler (no guard middleware, no mock-specific copy).
+if (env.NODE_ENV === 'development') {
+  routes.use('/mock', mockRoutes);
+}
 
 export default routes;

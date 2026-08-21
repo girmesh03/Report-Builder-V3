@@ -2121,6 +2121,9 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `AI_PROVIDER_BACKOFF_BASE_MS`     | 1000                                         | §16                         |
 | `MONGO_DUPLICATE_KEY_ERROR_CODE`  | 11000                                        | §27 (error envelope mapping; added 2026-08-19) |
 | `MONGO_CONNECT_TIMEOUT_MS`        | 10000                                        | §26 (boot fail-fast; added 2026-08-19) |
+| `DB_RETRY_INITIAL_MS`             | 1000                                         | §26 (boot retry backoff start, D53; added 2026-08-21) |
+| `DB_RETRY_MAX_MS`                 | 30000                                        | §26 (boot retry backoff ceiling, D53; added 2026-08-21) |
+| `DB_RETRY_MAX_ATTEMPTS`           | 10                                           | §26 (consecutive boot retries before fail-fast exit, D53; added 2026-08-21) |
 | `GEMINI_BASE_URL`                 | `https://generativelanguage.googleapis.com/v1beta` | §16                |
 | `RATE_LIMIT_GLOBAL_WINDOW_MIN`    | 15                                           | §27                         |
 | `RATE_LIMIT_GLOBAL_MAX`           | 100                                          | §27                         |
@@ -3127,7 +3130,8 @@ backend/
 |   |-- chat.routes.js              (implemented)  # §36 surface (added 2026-08-20)
 |   |-- export.routes.js            (implemented)  # §37 — content surface; the docs route unmounted behind EXPORT_DOCS_ENABLED (added 2026-08-20)
 |   |-- analytics.routes.js         (implemented)  # §38 — dashboard + items (added 2026-08-20)
-|   `-- search.routes.js            (implemented)  # §39 — global search (added 2026-08-20)
+|   |-- search.routes.js            (implemented)  # §39 — global search (added 2026-08-20)
+|   `-- mock.routes.js             (implemented)  # §40 — seed/wipe; conditionally mounted in dev only (§40.5; added 2026-08-20)
 |-- controllers/
 |   |-- auth.controller.js          (implemented)  # register/login/refresh/logout/profile/avatar (§28; added 2026-08-19)
 |   |-- branch.controller.js        (implemented)  # §30 (added 2026-08-20)
@@ -3164,14 +3168,19 @@ backend/
 |   |-- search.service.js          (implemented)  # §39 — the only $text caller; branch→report resolution (added 2026-08-20)
 |   `-- drive.service.js           (implemented)  # §37 — the dormant Google boundary + the §64 export-time ± resolver (added 2026-08-20)
 |-- jobs/
-|   `-- sweeper                     # single in-process timer, two passes (§12.5, §62)
+|   `-- sweeper                     (implemented)  # single in-process timer, two passes (§12.5, §62; added 2026-08-20)
 |-- scripts/                       # per-sub-phase Postman-like verification scripts (§63.10; added 2026-08-19)
+|   |-- fixtures/                              # suite assets OUTSIDE the §32 sweep areas (added 2026-08-20) — the owner-provided real recording for the test-04 real-AI groups (amharic-sample-recording.webm; never a §25 fixture — the mock set stays metadata-only, §25.2 rule 6)
 |   |-- test-01-foundation.mjs     (implemented)  # §63.10 sub-phase 1
 |   |-- test-02-models.mjs         (implemented)  # §63.10 sub-phase 2
 |   |-- test-03-identity.mjs       (implemented)  # §63.10 sub-phase 3
 |   |-- test-04-domains.mjs        (implemented)  # §63.10 sub-phase 4 — the domain APIs suite (added 2026-08-20)
 |   `-- test-05-aggregations.mjs   (implemented)  # §63.10 sub-phase 5 — §37/§38/§39 suite, zero AI (added 2026-08-20)
-|-- mock/                           # seed and wipe scripts, session-safe (§40, ADR-037)
+|   `-- test-06-seeding.mjs        (implemented)  # §63.10 sub-phase 6 — §40/§25/§62 suite, zero AI (added 2026-08-20)
+|-- mock/                           (implemented)  # seed and wipe scripts, session-safe (§40, ADR-037; added 2026-08-20)
+|   |-- fixtures.js                             # the canonical §25.3 fixture set (§6.8 verbatim bodies, mock paths)
+|   |-- seed.js                                 # self-replacing injection (one §27.7 session, D46)
+|   `-- wipe.js                                 # the D41-signature removal (one §27.7 session, D44 guard)
 `-- uploads/
     |-- audio/                      (runtime; gitignored; created by multer — §32)
     `-- avatar/                     (runtime; gitignored; profile pictures — §19.2, §57)
@@ -4019,7 +4028,7 @@ the authoritative edge list):
 | Branch — Report | 1 — N | `report.branch` (plain `ObjectId` join) | §20, §21, BR-14 |
 | Branch — Visit | 1 — N | `visits[].branch` (plain `ObjectId` join) | §20, §21, BR-14 |
 | Report — Audio | 1 — N clips | `report` on Audio | BR-01/BR-02, §22 |
-| Report — Transcription | 1 — 1 | `report` on Transcription (unique, sparse) | §23, §33 |
+| Report — Transcription | 1 — 1 | `report` on Transcription (unique, sparse — a required ref, the sparse option is the null-safe choice there) + the report's `transcription` ref (**unique, partial `$type: objectId`** — corrected 2026-08-20, §21.3) | §23, §33, §21.3 |
 | Report — Item | 1 — N | `report` on Item | §24A, §34 |
 | Report — ChatConversation | 1 — 1 | `report` on ChatConversation (unique, sparse) | §24, §36 |
 
@@ -4132,7 +4141,7 @@ audio addition, removal, or content edit (BR-10).
 |---|---|
 | `draft` | report row only (no audio required) |
 | `audio_attached` | report + at least one `Audio` row |
-| `transcribed` | report + audio rows + the 1:1 Transcription row with `raw` (and `latest`, both initialized equal), connected via the report's `transcription` ref (unique sparse, §23) — the presence check is the ref/query, never a materialized field |
+| `transcribed` | report + audio rows + the 1:1 Transcription row with `raw` (and `latest`, both initialized equal), connected via the report's `transcription` ref (unique partial `$type: objectId`, §21.3 — corrected 2026-08-20) — the presence check is the ref/query, never a materialized field |
 | `generated` | the report's Transcription `latest` holds the generated content; the report's Item rows (activities, issues, comment — §24A) exist; report exported (§37) — the export is a deliverable, never a persisted artifact on any row (§58, §37) |
 
 An invariant across every status: the report's `user` equals the
@@ -4796,7 +4805,7 @@ the §18 conventions exactly like §19 and §20.
 | `clockIn` / `clockOut` | String | yes | the day pair of the main visit — `HH:mm` zero-padded (§6.5); on a Type-1 day this pair is the whole working-time line; on a Type-2 day it renders as the main visit's time-range line like every `visits[]` entry (§6.4); times are display-only — no `out > in` enforcement (§6.1, owner-approval 2026-08-18); validated by the §29 validators, never composed in the schema |
 | `visits` | Array | yes (≥ 1 — the main visit is always the first entry) | the capture block — each entry is `{ branch: ObjectId (ref Branch, required), clockIn: String (required — `HH:mm`, §6.5), clockOut: String (required — `HH:mm`) }` with `_id: false`; entries are addressed **positionally by array index** (no `visitNo` key, §9.3) and stored in capture order; **`visits[0].branch === branch` — the report's own branch is always the first visit and is locked** (owner's visits model 2026-08-19, C1/C3 — the API enforces it: `visits` ≥ 1, `visits[0]` matches, index 0 undeletable, §31); `visits[]` may include the report's own `branch` as RETURN visits at later indexes (§6.4); the type derives from the count — **Type = visits.length** (§6.4); a branch visited twice appears as two entries (§6.4, Sample 4) |
 | `status` | String | yes (default `draft`) | member of `REPORT_STATUSES` (§11.4, BR-06, §17.2); the value always comes from the constants file, never a literal (§17.7 gates); reports enter the machine at `draft` because the wizard is the only creation path (BR-05) |
-| `transcription` | ObjectId (ref Transcription) | no (null until transcribed) | the **1:1** Transcription row reference — unique, sparse (§21.3, §23); written in the same session as the Transcription row (§23.2); null until the first transcription completes |
+| `transcription` | ObjectId (ref Transcription) | no (null until transcribed) | the **1:1** Transcription row reference — unique, **partial** (`partialFilterExpression { transcription: { $type: 'objectId' } }` — corrected 2026-08-20: MongoDB `sparse` still indexes a present-but-null field, so `unique + sparse` can never build once a second pre-transcription report exists; the partial filter keeps the invariant while excluding every null ref, §21.3, §23, §17.3); written in the same session as the Transcription row (§23.2); null until the first transcription completes |
 | `isArchived` | Boolean | yes (default `false`) | lifecycle flag (BR-16, F4); archived rows are hidden from default reads and appear only under explicit filters (§17.4) |
 | `archivedAt` | Date | no (null while active) | set when the report is archived; cleared on restore; the retention-window anchor and the TTL index target (§21.3, §21.6) |
 | `createdAt` / `updatedAt` | Date | auto | §18.2 timestamps |
@@ -4858,8 +4867,16 @@ exists: nothing outside this table is persisted.
   filters (UTC-midnight buckets, §29); `schema.index({ user: 1,
   status: 1 })` serves the §50 status filters and §49/§56 rolls.
 - **Transcription 1:1 index.** `schema.index({ transcription: 1 },
-  { unique: true, sparse: true })` enforces the one-transcription-per-
-  report invariant (§17.3, §23).
+  { unique: true, partialFilterExpression: { transcription:
+  { $type: 'objectId' } } })` enforces the one-transcription-per-
+  report invariant (§17.3, §23) — **partial, not sparse (corrected
+  2026-08-20):** MongoDB's `sparse` option still indexes a present-
+  but-null field, so a `unique + sparse` declaration can never build
+  once a second pre-transcription report exists (E11000 on
+  `transcription: null` — surfaced by the §40 seed's index sync);
+  the partial filter excludes every null ref (the DTO surface stays
+  `transcription: null`, §31.3) while keeping the uniqueness over
+  the actual refs.
 - **TTL declaration.** Exactly the §18.3 declaration applies: an
   index on `archivedAt` with `expireAfterSeconds` =
   `ARCHIVED_TTL_SECONDS` (§11.3) as the MongoDB-internal safety net —
@@ -6004,7 +6021,12 @@ else violates the registry (grep gate: one `/api/v1` mount in
 ### 26.6 Boot, health & graceful shutdown
 
 `backend/server.js`: connect to MongoDB (log via the `DB`
-logger; fail-fast on connection failure after the §26.2 check),
+logger; the initial connection retries with bounded exponential
+backoff — D53: `DB_RETRY_INITIAL_MS` doubling per attempt capped
+at `DB_RETRY_MAX_MS`, `DB_RETRY_MAX_ATTEMPTS` consecutive
+failures then the fail-fast exit 1; post-connect drops stay on
+the driver's auto-reconnect — amended 2026-08-21 from plain
+fail-fast), after the §26.2 check,
 then `app.listen(PORT)` (4000 in development), log `Server`
 listening. Health endpoint (mounted under `/api/v1`, defined in
 `routes/index.js`): `GET /api/v1/health` → 200
@@ -14336,6 +14358,82 @@ checks, zero AI calls):**
   status note:** §39's global search is LIVE (the §59 dialog's
   backend); the §50 reports-LIST filter dialog remains deferred under
   OQ-009 (the list's `search` param stays inert, D9).
+
+**Sub-phase-6 implementation record (seeding & sweepers §40/§25/§62
+— closed 2026-08-20, suite `scripts/test-06-seeding.mjs` all green,
+33 checks, zero AI calls):**
+
+- **D41–D52 derivations (each survives "why?"; registered per §4.5)**
+  D41 the §25 wipe "fixture signature" = the deterministic fixture
+  vocabulary (audio `filePath` under the `mock/` path prefix;
+  branches with the seeded §6.8 names; reports on those branches
+  with the fixture date set; dependents scoped by the report ids —
+  real rows untouched, the shared-date boundary documented); D42 the
+  §40.2 prose over the contract example (`seeded.branches = 4`;
+  the wipe response reports all seven families actually affected);
+  D43 conversation fixtures = 1 (on the generated report — §25.3's
+  "one per mock report" is loose prose); D44 the user-fixture wipe
+  guard — never the caller's own account (the skip-when-referenced
+  clause is vacuous today — no cross-user references exist); D45/
+  D52 the second account's BR-13 probe scope (1 branch + 1 draft
+  report on the Sample-4 day; the probe's idempotency is the seed's
+  self-replacing wipe); D46/D47 the **self-replacing seed** — the
+  seed removes the existing mock scopes and injects inside one
+  session, so re-seed always yields exactly one canonical set
+  (§25.4's result-state anchor; the §40.6 "seed after wipe →
+  zeros" clause is recorded as ambiguous prose — its deterministic-
+  200s core is honored); D48 the sweeper run guard (no overlapping
+  runs); D49 the pass-2 file scope (`uploads/audio/` +
+  `uploads/tmp/` — the §32 temp convention); D50 branch removal =
+  archived + unreferenced with no extra window (§62.2's
+  reference-checked-not-TTL-windowed rule; §20.4's "window end"
+  framing is the older wording); D51 the sample→fixture mapping
+  (Sample 2 → generated, Sample 3 → transcribed, Sample 1 → the
+  audio_attached day; Sample 4's day has no representable slot —
+  its branch ጎላጉል is archived in the fixture set, and the §31.2
+  create path refuses archived visit branches).
+- **Index correction (recorded 2026-08-20, §21.3):** the Report
+  `transcription` index is **unique + partial
+  `{ transcription: { $type: 'objectId' } }`**, not unique+sparse —
+  MongoDB's `sparse` still indexes a present-but-null field, so the
+  old declaration could never build once a second pre-transcription
+  report existed (E11000 — surfaced by the §40 seed's index sync;
+  the index had been silently failing to auto-build). Mirrors:
+  §17.3 ERD row, §21.2 registry row, test-02. The Transcription/
+  Conversation `report` refs keep sparse (required fields — the
+  null-safe choice there).
+- **Verification gate (2026-08-20, §63.10):** test-06 34/34 —
+  unit 5, seed 9 (the exact §40.2 counts, the §17.6-presence-valid
+  set, re-seed self-replacement, the BR-13 probe invisibility),
+  wipe 6 (zeros without seed, the wiped counts, the D41 real-rows
+  boundary), sweeper 5 (SW0 fixture register/login; SW1 the
+  removed-counts shape; SW2 the expired-report cascade + unlink-
+  after-commit + the TTL-race orphans; SW3 the referenced/
+  unreferenced branch rules; SW4 the clean-store no-op),
+  sourcegates 9 (the §40.7/§62.9 gates). Integration facts
+  recorded (F98): Atlas serverless rejects parallel cursors inside
+  a transaction (in-session reads sequentialized); Mongoose 9
+  multi-doc `create` with sessions requires `ordered: true`; the
+  seeded `users` count is the fixture size (2), never the
+  newly-created count.
+
+- **D53 — boot connection retry (2026-08-21, owner directive):**
+  the §26.6 initial MongoDB connect retries with bounded
+  exponential backoff before the fail-fast exit —
+  `DB_RETRY_INITIAL_MS` (1000) doubling per attempt, capped at
+  `DB_RETRY_MAX_MS` (30000),   `DB_RETRY_MAX_ATTEMPTS` (10)
+  consecutive failures then exit 1 (worst case ≈4–5 min including
+  each attempt's own selection-timeout cost; verified live
+  2026-08-21 — the 1000/2000/4000/8000 ms escalation).
+  Rationale: rides out the observed transient Atlas/DNS blips
+  (~18–20 s recovery) during the dev loop and cold starts, while a
+  genuinely broken deploy still crashes visibly inside ~4 minutes —
+  the fail-fast contract survives at the boundary. Deterministic
+  doubling, no jitter (a single-client dev/deploy boot needs no
+  thundering-herd protection). Scope: **initial connection only** —
+  post-connect drops remain the driver's auto-reconnect + Mongoose
+  buffering (§61.6 unchanged). Mirrors: §26.6 wording, §11.3 rows,
+  `server.js`.
 
 Records (closed):
 

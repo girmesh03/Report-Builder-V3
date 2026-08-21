@@ -275,7 +275,7 @@ addCheck('report', 13, 'report indexes match §21.3 (6 + TTL)', () =>
     checks.push(expect(idx.length === 7, `7 indexes, got ${idx.length}`));
     checks.push(expect(JSON.stringify(specs) === JSON.stringify(expectedSpecs), `specs ${specs.join(' | ')}`));
     const trans = idx.find((i) => JSON.stringify(i.spec) === JSON.stringify({ transcription: 1 }));
-    checks.push(expect(trans?.opts.unique === true && trans?.opts.sparse === true, 'transcription unique sparse'));
+    checks.push(expect(trans?.opts.unique === true && JSON.stringify(trans?.opts?.partialFilterExpression) === JSON.stringify({ transcription: { $type: 'objectId' } }), 'transcription unique partial $type objectId (null-safe — §21.3, corrected 2026-08-20)'));
     const ttl = idx.find((i) => JSON.stringify(i.spec) === JSON.stringify({ archivedAt: 1 }));
     checks.push(expect(ttl?.opts.expireAfterSeconds === ARCHIVED_TTL_SECONDS, `TTL expireAfterSeconds=${ttl?.opts.expireAfterSeconds} vs ${ARCHIVED_TTL_SECONDS}`));
     return checks;
@@ -725,7 +725,7 @@ addCheck('cross', 39, 'unique/sparse declarations match §17.3 edges', () =>
     }
     const expected = [
       'user:{"email":1}:sparse=false:partial=null',
-      'report:{"transcription":1}:sparse=true:partial=null',
+      'report:{"transcription":1}:sparse=false:partial={"transcription":{"$type":"objectId"}}',
       'transcription:{"report":1}:sparse=true:partial=null',
       'conversation:{"report":1}:sparse=true:partial=null',
       'item:{"report":1}:sparse=false:partial={"type":"comment"}',
