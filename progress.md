@@ -341,3 +341,10 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - `df99691` on `phase-6-backend-seeding`: the full sub-phase-6 set (mock/, jobs/sweeper, mock.routes + mount, test-06, partial-index fix, mirrors, F98/F99 audit fixes). Pushed; **merge withheld** per owner instruction.
 - Boot DB connection retry implemented per owner directive (F100/D53): constants + `connectWithRetry()` in server.js + §26.6/§11.3/§69 mirrors. Verified live (health 200; dead-port escalation 1s→2s→4s→8s). Uncommitted.
 - Still pending: owner recording at `backend/scripts/fixtures/amharic-sample-recording.webm` → test-04 transcription+realpipeline; step-5 live run of test-06; step-6 merge (withheld).
+
+## 2026-08-21 — Sub-phase 6 CLOSED: committed, merged, synced, cleaned — STAGE 4 COMPLETE
+- Pre-merge sanity: syntax sweep clean; test-06 unit 5/5 + sourcegates 9/9 re-run green against the retry-edited server.js.
+- `afc04e9` (branch): boot DB connection retry (D53). Merged to `main` at **`39c10f8`** (`merge --no-ff`, owner directive "commit, merge, sync, clean"); main pushed to origin.
+- **The step-5 owner live run of test-06 was waived by owner directive at the merge** — recorded here per the transparency rule; the suites stand green from the agent runs (test-01 12, test-02 39, test-03 all groups FAIL=0, test-04 all but transcription+realpipeline pending the owner recording, test-05 46, test-06 34).
+- Branch `phase-6-backend-seeding` deleted local + remote. AGENTS.md: Stage 4 CLOSED, Stage-5 frontend hard gate LIFTED. task_plan sub-phase-6 block → CLOSED.
+- NEXT: frontend P4 remainder on a fresh branch from main — §52 wizard + editor install first.
