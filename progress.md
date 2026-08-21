@@ -336,3 +336,8 @@ The new generate assertions failed on TWO checks with a full pre-generation 403 
 - Post-fix verification: syntax sweep clean; test-06 unit 5/5 + sourcegates 9/9 re-run green after the edits.
 - Regression completion this session: test-01 12/12, test-02 39/39, test-03 all 8 groups FAIL=0 (unit 1, register 8, login 6, refresh 4, profile 6, avatar 5, misc 7, ratelimit 1), test-05 46/46, test-06 34/34 across groups. **test-04 transcription + realpipeline PENDING the owner-provided recording at `backend/scripts/fixtures/amharic-sample-recording.webm`** (the original uploads/audio copy was swept by the §62.4 pass-2 — spec-correct; see F98).
 - Dev chain killed (:4000 free). NEXT: owner places the recording → test-04 transcription+realpipeline → step 5 live run → step 6 gated commit (withheld until owner approval).
+
+## 2026-08-21 — Sub-phase-6 work committed+pushed (no merge); boot DB retry added
+- `df99691` on `phase-6-backend-seeding`: the full sub-phase-6 set (mock/, jobs/sweeper, mock.routes + mount, test-06, partial-index fix, mirrors, F98/F99 audit fixes). Pushed; **merge withheld** per owner instruction.
+- Boot DB connection retry implemented per owner directive (F100/D53): constants + `connectWithRetry()` in server.js + §26.6/§11.3/§69 mirrors. Verified live (health 200; dead-port escalation 1s→2s→4s→8s). Uncommitted.
+- Still pending: owner recording at `backend/scripts/fixtures/amharic-sample-recording.webm` → test-04 transcription+realpipeline; step-5 live run of test-06; step-6 merge (withheld).

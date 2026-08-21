@@ -2121,6 +2121,9 @@ Client reads only VITE_ variables. No API keys are ever exposed there
 | `AI_PROVIDER_BACKOFF_BASE_MS`     | 1000                                         | §16                         |
 | `MONGO_DUPLICATE_KEY_ERROR_CODE`  | 11000                                        | §27 (error envelope mapping; added 2026-08-19) |
 | `MONGO_CONNECT_TIMEOUT_MS`        | 10000                                        | §26 (boot fail-fast; added 2026-08-19) |
+| `DB_RETRY_INITIAL_MS`             | 1000                                         | §26 (boot retry backoff start, D53; added 2026-08-21) |
+| `DB_RETRY_MAX_MS`                 | 30000                                        | §26 (boot retry backoff ceiling, D53; added 2026-08-21) |
+| `DB_RETRY_MAX_ATTEMPTS`           | 10                                           | §26 (consecutive boot retries before fail-fast exit, D53; added 2026-08-21) |
 | `GEMINI_BASE_URL`                 | `https://generativelanguage.googleapis.com/v1beta` | §16                |
 | `RATE_LIMIT_GLOBAL_WINDOW_MIN`    | 15                                           | §27                         |
 | `RATE_LIMIT_GLOBAL_MAX`           | 100                                          | §27                         |
@@ -6018,7 +6021,12 @@ else violates the registry (grep gate: one `/api/v1` mount in
 ### 26.6 Boot, health & graceful shutdown
 
 `backend/server.js`: connect to MongoDB (log via the `DB`
-logger; fail-fast on connection failure after the §26.2 check),
+logger; the initial connection retries with bounded exponential
+backoff — D53: `DB_RETRY_INITIAL_MS` doubling per attempt capped
+at `DB_RETRY_MAX_MS`, `DB_RETRY_MAX_ATTEMPTS` consecutive
+failures then the fail-fast exit 1; post-connect drops stay on
+the driver's auto-reconnect — amended 2026-08-21 from plain
+fail-fast), after the §26.2 check,
 then `app.listen(PORT)` (4000 in development), log `Server`
 listening. Health endpoint (mounted under `/api/v1`, defined in
 `routes/index.js`): `GET /api/v1/health` → 200
@@ -14408,6 +14416,24 @@ checks, zero AI calls):**
   multi-doc `create` with sessions requires `ordered: true`; the
   seeded `users` count is the fixture size (2), never the
   newly-created count.
+
+- **D53 — boot connection retry (2026-08-21, owner directive):**
+  the §26.6 initial MongoDB connect retries with bounded
+  exponential backoff before the fail-fast exit —
+  `DB_RETRY_INITIAL_MS` (1000) doubling per attempt, capped at
+  `DB_RETRY_MAX_MS` (30000),   `DB_RETRY_MAX_ATTEMPTS` (10)
+  consecutive failures then exit 1 (worst case ≈4–5 min including
+  each attempt's own selection-timeout cost; verified live
+  2026-08-21 — the 1000/2000/4000/8000 ms escalation).
+  Rationale: rides out the observed transient Atlas/DNS blips
+  (~18–20 s recovery) during the dev loop and cold starts, while a
+  genuinely broken deploy still crashes visibly inside ~4 minutes —
+  the fail-fast contract survives at the boundary. Deterministic
+  doubling, no jitter (a single-client dev/deploy boot needs no
+  thundering-herd protection). Scope: **initial connection only** —
+  post-connect drops remain the driver's auto-reconnect + Mongoose
+  buffering (§61.6 unchanged). Mirrors: §26.6 wording, §11.3 rows,
+  `server.js`.
 
 Records (closed):
 

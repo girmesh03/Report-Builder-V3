@@ -2,28 +2,62 @@
  * @module server
  *
  * Process entry (§26.6, §15.4). Connects to MongoDB (log via the DB
- * logger; fail-fast on connection failure after the §26.2 env check),
- * then `app.listen(PORT)` (4000 in development), logging `Server`
- * listening. Graceful shutdown (ADR-013): on SIGINT/SIGTERM — stop
- * accepting connections (`server.close()`), clear the sweeper timer
- * (§12.5/§62 — started at sub-phase 6), close the MongoDB client,
- * flush the logger, exit 0; forced exit after a timeout (10 s default,
- * §26.6 — dev-only log).
+ * logger; bounded exponential retry — D53 — then fail-fast exit 1,
+ * after the §26.2 env check), then `app.listen(PORT)` (4000 in
+ * development), logging `Server` listening. Graceful shutdown
+ * (ADR-013): on SIGINT/SIGTERM — stop accepting connections
+ * (`server.close()`), clear the sweeper timer (§12.5/§62 — started
+ * at sub-phase 6), close the MongoDB client, flush the logger,
+ * exit 0; forced exit after a timeout (10 s default, §26.6 —
+ * dev-only log).
  */
 import mongoose from 'mongoose';
 import { env } from './config/env.js';
 import { logger, dbLogger } from './utils/logger.js';
-import { MONGO_CONNECT_TIMEOUT_MS } from './utils/constants.js';
+import {
+  MONGO_CONNECT_TIMEOUT_MS,
+  DB_RETRY_INITIAL_MS,
+  DB_RETRY_MAX_MS,
+  DB_RETRY_MAX_ATTEMPTS,
+} from './utils/constants.js';
 import { app } from './app.js';
 import { startSweeper, stopSweeper } from './jobs/sweeper.js';
 
 const SHUTDOWN_FORCE_TIMEOUT_MS = 10000; // §26.6 "default 10 s"
 
+/**
+ * The §26.6 boot connection — bounded exponential retry (D53):
+ * attempt 1 immediately, then `min(INITIAL × 2^(n−1), MAX)` waits
+ * between attempts; after MAX_ATTEMPTS consecutive failures the
+ * fail-fast exit fires (exit 1). Initial-connect scope only.
+ * @returns {Promise<void>} Resolves once connected; never rejects.
+ */
+async function connectWithRetry() {
+  for (let attempt = 1; attempt <= DB_RETRY_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await mongoose.connect(env.MONGO_URI, {
+        serverSelectionTimeoutMS: MONGO_CONNECT_TIMEOUT_MS,
+      });
+      return;
+    } catch (error) {
+      if (attempt === DB_RETRY_MAX_ATTEMPTS) {
+        dbLogger.error(
+          `MongoDB connection failed after ${DB_RETRY_MAX_ATTEMPTS} attempts: ${error.message}`,
+        );
+        process.exit(1);
+      }
+      const delay = Math.min(DB_RETRY_INITIAL_MS * 2 ** (attempt - 1), DB_RETRY_MAX_MS);
+      dbLogger.warn(
+        `MongoDB connection attempt ${attempt}/${DB_RETRY_MAX_ATTEMPTS} failed (${error.message}) — retrying in ${delay} ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 async function main() {
   try {
-    await mongoose.connect(env.MONGO_URI, {
-      serverSelectionTimeoutMS: MONGO_CONNECT_TIMEOUT_MS,
-    });
+    await connectWithRetry();
     dbLogger.info('MongoDB connected');
   } catch (error) {
     dbLogger.error(`MongoDB connection failed: ${error.message}`);
